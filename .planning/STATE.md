@@ -48,6 +48,9 @@ Decisions are logged in PROJECT.md Key Decisions table.
 Recent decisions affecting current work:
 
 - [Initialization]: Project structure defined with Go, Windows-only, YAML config
+- [01-01]: Use slog.TextHandler with ReplaceAttr for custom format instead of custom handler
+- [01-01]: Use io.MultiWriter for simultaneous file and stdout output
+- [01-01]: Millisecond precision timestamps and bracketed level markers
 - [01-02]: Use viper.New() for clean instance instead of global viper
 - [01-02]: Config file not found is OK - use defaults (non-fatal)
 - [01-02]: Always validate config after loading - catches invalid cron early

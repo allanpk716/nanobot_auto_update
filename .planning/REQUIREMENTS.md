@@ -9,8 +9,8 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Infrastructure
 
-- [ ] **INFR-01**: Program supports custom log format output (2024-01-01 12:00:00.123 - [INFO]: message)
-- [ ] **INFR-02**: Logs stored in ./logs/ directory with 24-hour rotation, keeping 7 days
+- [x] **INFR-01**: Program supports custom log format output (2024-01-01 12:00:00.123 - [INFO]: message)
+- [x] **INFR-02**: Logs stored in ./logs/ directory with 24-hour rotation, keeping 7 days
 - [x] **INFR-03**: Load configuration from ./config.yaml
 - [x] **INFR-04**: Configuration file supports cron field (default "0 3 * * *")
 - [ ] **INFR-05**: Support -config flag to specify config file path
@@ -86,8 +86,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| INFR-01 | Phase 1 | Pending |
-| INFR-02 | Phase 1 | Pending |
+| INFR-01 | Phase 1 | Complete |
+| INFR-02 | Phase 1 | Complete |
 | INFR-03 | Phase 1 | Complete |
 | INFR-04 | Phase 1 | Complete |
 | INFR-05 | Phase 1 | Pending |
