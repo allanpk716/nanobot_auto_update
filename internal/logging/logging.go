@@ -1,14 +1,52 @@
 package logging
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"log/slog"
 	"os"
-	"time"
 
 	"gopkg.in/natefinch/lumberjack.v2"
 )
+
+// simpleHandler implements slog.Handler with a simple format output:
+// "2006-01-02 15:04:05.000 - [LEVEL]: message"
+type simpleHandler struct {
+	w     io.Writer
+	attrs []slog.Attr
+}
+
+// Enabled always returns true - we log all levels
+func (h *simpleHandler) Enabled(ctx context.Context, level slog.Level) bool {
+	return true
+}
+
+// Handle writes the log record in simple format
+func (h *simpleHandler) Handle(ctx context.Context, record slog.Record) error {
+	// Format timestamp: "2006-01-02 15:04:05.000"
+	timestamp := record.Time.Format("2006-01-02 15:04:05.000")
+
+	// Format level: "[INFO]", "[WARN]", "[ERROR]", "[DEBUG]"
+	level := fmt.Sprintf("[%s]", record.Level.String())
+
+	// Build the output: "timestamp - [LEVEL]: message\n"
+	_, err := fmt.Fprintf(h.w, "%s - %s: %s\n", timestamp, level, record.Message)
+	return err
+}
+
+// WithAttrs returns a new handler with additional attributes
+func (h *simpleHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
+	return &simpleHandler{
+		w:     h.w,
+		attrs: append(h.attrs, attrs...),
+	}
+}
+
+// WithGroup returns self - groups not needed for simple format
+func (h *simpleHandler) WithGroup(name string) slog.Handler {
+	return h
+}
 
 // NewLogger creates a new slog.Logger with custom format and file rotation.
 // The logger writes to both a rotating log file and stdout simultaneously.
@@ -20,9 +58,7 @@ func NewLogger(logDir string) *slog.Logger {
 	if err := os.MkdirAll(logDir, 0755); err != nil {
 		// If we can't create the log directory, fall back to stdout only
 		fmt.Fprintf(os.Stderr, "Warning: failed to create log directory %s: %v\n", logDir, err)
-		return slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
-			ReplaceAttr: customReplaceAttr,
-		}))
+		return slog.New(&simpleHandler{w: os.Stdout})
 	}
 
 	// Configure lumberjack for log rotation
@@ -38,33 +74,8 @@ func NewLogger(logDir string) *slog.Logger {
 	// Use MultiWriter to output to both file and stdout
 	multiWriter := io.MultiWriter(fileLogger, os.Stdout)
 
-	// Create TextHandler with custom format
-	handler := slog.NewTextHandler(multiWriter, &slog.HandlerOptions{
-		ReplaceAttr: customReplaceAttr,
-	})
+	// Create custom handler with simple format
+	handler := &simpleHandler{w: multiWriter}
 
 	return slog.New(handler)
-}
-
-// customReplaceAttr customizes the log format:
-// - Time format: "2006-01-02 15:04:05.000" (millisecond precision)
-// - Level format: "[INFO]", "[WARN]", "[ERROR]" (bracketed, uppercase)
-// - Removes the "level=" and "time=" prefixes, formats as "timestamp - [LEVEL]: msg"
-func customReplaceAttr(groups []string, a slog.Attr) slog.Attr {
-	// Handle time formatting with millisecond precision
-	if a.Key == slog.TimeKey {
-		if t, ok := a.Value.Any().(time.Time); ok {
-			// Format: "2006-01-02 15:04:05.000"
-			a.Value = slog.StringValue(t.Format("2006-01-02 15:04:05.000"))
-		}
-	}
-
-	// Handle level formatting as bracketed uppercase
-	if a.Key == slog.LevelKey {
-		if level, ok := a.Value.Any().(slog.Level); ok {
-			a.Value = slog.StringValue(fmt.Sprintf("[%s]", level.String()))
-		}
-	}
-
-	return a
 }
