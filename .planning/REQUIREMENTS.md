@@ -123,4 +123,4 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 ---
 *Requirements defined: 2025-02-18*
-*Last updated: 2026-02-18 after plan 01.1-02 completion*
+*Last updated: 2026-02-18 after plan 01.1-03 completion*
