@@ -105,9 +105,9 @@ Which phases cover which requirements. Updated during roadmap creation.
 | UPDT-03 | Phase 2 | Complete |
 | UPDT-04 | Phase 2 | Complete |
 | UPDT-05 | Phase 2 | Complete |
-| SCHD-01 | Phase 3 | Complete |
+| SCHD-01 | Phase 3 | Pending |
 | SCHD-02 | Phase 3 | Pending |
-| SCHD-03 | Phase 3 | Complete |
+| SCHD-03 | Phase 3 | Pending |
 | NOTF-01 | Phase 3 | Complete |
 | NOTF-02 | Phase 3 | Complete |
 | NOTF-03 | Phase 3 | Complete |
