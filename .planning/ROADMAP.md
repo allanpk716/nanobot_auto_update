@@ -70,7 +70,11 @@ Plans:
   4. All update attempts are logged with detailed success/failure information
   5. Update result (success/fallback/failure) is visible in logs
   6. Executed uv commands do not flash a command prompt window (INFR-10)
-**Plans**: TBD
+**Plans:** 2 plans
+
+Plans:
+- [ ] 02-01-PLAN.md - UV installation checker (UPDT-01, UPDT-02)
+- [ ] 02-02-PLAN.md - Core update logic with GitHub primary and PyPI fallback (UPDT-03, UPDT-04, UPDT-05, INFR-10)
 
 ### Phase 3: Scheduling and Notifications
 **Goal**: Updates run automatically on schedule and user is notified of failures
@@ -103,6 +107,6 @@ Phases execute in numeric order: 1 -> 01.1 -> 2 -> 3 -> 4
 |-------|----------------|--------|-----------|
 | 1. Infrastructure | 4/4 | Complete | 2026-02-18 |
 | 01.1. Nanobot Lifecycle | 3/3 | Complete | 2026-02-18 |
-| 2. Core Update Logic | 0/TBD | Not started | - |
+| 2. Core Update Logic | 0/2 | Not started | - |
 | 3. Scheduling and Notifications | 0/TBD | Not started | - |
 | 4. Runtime Integration | 0/TBD | Not started | - |
