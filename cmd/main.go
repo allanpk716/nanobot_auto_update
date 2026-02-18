@@ -5,11 +5,15 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"os/signal"
+	"syscall"
 
 	flag "github.com/spf13/pflag"
 
 	"github.com/HQGroup/nanobot-auto-updater/internal/config"
 	"github.com/HQGroup/nanobot-auto-updater/internal/logging"
+	"github.com/HQGroup/nanobot-auto-updater/internal/notifier"
+	"github.com/HQGroup/nanobot-auto-updater/internal/scheduler"
 	"github.com/HQGroup/nanobot-auto-updater/internal/updater"
 )
 
@@ -94,8 +98,54 @@ func main() {
 		os.Exit(0)
 	}
 
-	// TODO: Phase 3 - Implement scheduling
-	logger.Info("Scheduled mode not yet implemented")
+	// Initialize notifier (logs warning if Pushover not configured)
+	notif := notifier.New(logger)
+
+	// Initialize scheduler with overlap prevention
+	sched := scheduler.New(logger)
+
+	// Create updater instance
+	u := updater.NewUpdater(logger)
+
+	// Register the update job
+	err = sched.AddJob(cfg.Cron, func() {
+		logger.Info("Starting scheduled update job")
+
+		result, err := u.Update(context.Background())
+		if err != nil {
+			logger.Error("Scheduled update failed",
+				"result", result,
+				"error", err.Error())
+
+			// Send failure notification
+			if notifyErr := notif.NotifyFailure("Scheduled Update", err); notifyErr != nil {
+				logger.Error("Failed to send failure notification", "error", notifyErr.Error())
+			}
+			return
+		}
+
+		logger.Info("Scheduled update completed successfully", "result", result)
+	})
+	if err != nil {
+		logger.Error("Failed to register scheduled job", "error", err.Error())
+		os.Exit(1)
+	}
+
+	// Set up signal handling for graceful shutdown
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+
+	// Start the scheduler
+	sched.Start()
+	logger.Info("Scheduler started", "cron", cfg.Cron, "pid", os.Getpid())
+
+	// Wait for shutdown signal
+	sig := <-sigChan
+	logger.Info("Shutdown signal received", "signal", sig.String())
+
+	// Gracefully stop scheduler
+	sched.Stop()
+	logger.Info("Application shutdown complete")
 }
 
 // Manual Test Cases:
