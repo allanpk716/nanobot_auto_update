@@ -13,11 +13,11 @@ Requirements for initial release. Each maps to roadmap phases.
 - [x] **INFR-02**: Logs stored in ./logs/ directory with 24-hour rotation, keeping 7 days
 - [x] **INFR-03**: Load configuration from ./config.yaml
 - [x] **INFR-04**: Configuration file supports cron field (default "0 3 * * *")
-- [ ] **INFR-05**: Support -config flag to specify config file path
-- [ ] **INFR-06**: Support -cron flag to override cron expression in config
-- [ ] **INFR-07**: Support -run-once flag to execute one update and exit
-- [ ] **INFR-08**: Support -version flag to display version info
-- [ ] **INFR-09**: Support help flag to display usage information
+- [x] **INFR-05**: Support -config flag to specify config file path
+- [x] **INFR-06**: Support -cron flag to override cron expression in config
+- [x] **INFR-07**: Support -run-once flag to execute one update and exit
+- [x] **INFR-08**: Support -version flag to display version info
+- [x] **INFR-09**: Support help flag to display usage information
 - [ ] **INFR-10**: Hide command window when executing uv commands (use SysProcAttr.HideWindow)
 
 ### Nanobot Lifecycle
@@ -90,11 +90,11 @@ Which phases cover which requirements. Updated during roadmap creation.
 | INFR-02 | Phase 1 | Complete |
 | INFR-03 | Phase 1 | Complete |
 | INFR-04 | Phase 1 | Complete |
-| INFR-05 | Phase 1 | Pending |
-| INFR-06 | Phase 1 | Pending |
-| INFR-07 | Phase 1 | Pending |
-| INFR-08 | Phase 1 | Pending |
-| INFR-09 | Phase 1 | Pending |
+| INFR-05 | Phase 1 | Complete |
+| INFR-06 | Phase 1 | Complete |
+| INFR-07 | Phase 1 | Complete |
+| INFR-08 | Phase 1 | Complete |
+| INFR-09 | Phase 1 | Complete |
 | INFR-10 | Phase 1 | Pending |
 | IMPL-01 | Phase 01.1 | Complete |
 | IMPL-02 | Phase 01.1 | Complete |
@@ -118,9 +118,9 @@ Which phases cover which requirements. Updated during roadmap creation.
 **Coverage:**
 - v1 requirements: 28 total
 - Mapped to phases: 28
-- Complete: 4
+- Complete: 9
 - Unmapped: 0
 
 ---
 *Requirements defined: 2025-02-18*
-*Last updated: 2026-02-18 after plan 01.1-03 completion*
+*Last updated: 2026-02-18 after plan 01-03 completion*
