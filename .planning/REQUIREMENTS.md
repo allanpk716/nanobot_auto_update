@@ -20,6 +20,13 @@ Requirements for initial release. Each maps to roadmap phases.
 - [ ] **INFR-09**: Support help flag to display usage information
 - [ ] **INFR-10**: Hide command window when executing uv commands (use SysProcAttr.HideWindow)
 
+### Nanobot Lifecycle
+
+- [x] **IMPL-01**: Detect nanobot running by port 18790
+- [x] **IMPL-02**: Gracefully stop nanobot with 5-second timeout, force-kill if needed
+- [x] **IMPL-03**: Start nanobot gateway with hidden window, verify port becomes available
+- [x] **IMPL-04**: Stop failure cancels update; start failure logs warning only
+
 ### Core Update
 
 - [ ] **UPDT-01**: Check if uv is installed on startup
@@ -89,6 +96,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | INFR-08 | Phase 1 | Pending |
 | INFR-09 | Phase 1 | Pending |
 | INFR-10 | Phase 1 | Pending |
+| IMPL-01 | Phase 01.1 | Complete |
+| IMPL-02 | Phase 01.1 | Complete |
+| IMPL-03 | Phase 01.1 | Complete |
+| IMPL-04 | Phase 01.1 | Complete |
 | UPDT-01 | Phase 2 | Pending |
 | UPDT-02 | Phase 2 | Pending |
 | UPDT-03 | Phase 2 | Pending |
@@ -105,10 +116,11 @@ Which phases cover which requirements. Updated during roadmap creation.
 | RUN-02 | Phase 4 | Pending |
 
 **Coverage:**
-- v1 requirements: 24 total
-- Mapped to phases: 24
+- v1 requirements: 28 total
+- Mapped to phases: 28
+- Complete: 4
 - Unmapped: 0
 
 ---
 *Requirements defined: 2025-02-18*
-*Last updated: 2025-02-18 after roadmap creation*
+*Last updated: 2026-02-18 after plan 01.1-02 completion*
