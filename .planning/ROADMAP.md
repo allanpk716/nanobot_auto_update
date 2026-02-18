@@ -12,7 +12,7 @@ Build a Windows background service in Go that automatically keeps the nanobot AI
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [x] **Phase 1: Infrastructure** - Logging, configuration, CLI, and uv command executor (completed 2026-02-18)
+- [ ] **Phase 1: Infrastructure** - Logging, configuration, CLI (in verification - gap closure needed)
 - [x] **Phase 01.1: Nanobot lifecycle management** - Stop before update, start after update (INSERTED) (completed 2026-02-18)
 - [ ] **Phase 2: Core Update Logic** - Dependency checking, update execution, and rollback mechanism
 - [ ] **Phase 3: Scheduling and Notifications** - Cron-based scheduling and Pushover failure alerts
@@ -21,9 +21,9 @@ Decimal phases appear between their surrounding integers in numeric order.
 ## Phase Details
 
 ### Phase 1: Infrastructure
-**Goal**: Application foundation with logging, configuration, CLI, and safe subprocess execution
+**Goal**: Application foundation with logging, configuration, and CLI
 **Depends on**: Nothing (first phase)
-**Requirements**: INFR-01, INFR-02, INFR-03, INFR-04, INFR-05, INFR-06, INFR-07, INFR-08, INFR-09, INFR-10
+**Requirements**: INFR-01, INFR-02, INFR-03, INFR-04, INFR-05, INFR-06, INFR-07, INFR-08, INFR-09
 **Success Criteria** (what must be TRUE):
   1. User can run the program with `-help` flag and see usage information
   2. User can run the program with `-version` flag and see version information
@@ -31,13 +31,15 @@ Decimal phases appear between their surrounding integers in numeric order.
   4. Configuration is loaded from ./config.yaml with cron field defaulting to "0 3 * * *"
   5. User can override config file path via `-config` flag and cron expression via `-cron` flag
   6. User can run a one-time update via `-run-once` flag
-  7. Executed uv commands do not flash a command prompt window
-**Plans:** 3 plans in 2 waves
+**Plans:** 4 plans (3 original + 1 gap closure)
 
 Plans:
 - [x] 01-01-PLAN.md - Logging module with custom format and rotation (INFR-01, INFR-02)
 - [x] 01-02-PLAN.md - Config enhancement with cron field and viper integration (INFR-03, INFR-04)
-- [x] 01-03-PLAN.md - CLI entry point with pflag and integration (INFR-05, INFR-06, INFR-07, INFR-08, INFR-09, INFR-10)
+- [x] 01-03-PLAN.md - CLI entry point with pflag and integration (INFR-05, INFR-06, INFR-07, INFR-08, INFR-09)
+- [ ] 01-04-PLAN.md - Fix log format to exact specification (INFR-01 gap closure)
+
+**Note**: INFR-10 (hide window for uv commands) moved to Phase 2 - uv commands are only executed in Phase 2 update logic.
 
 ### Phase 01.1: Nanobot lifecycle management - stop before update, start after update (INSERTED)
 
@@ -50,23 +52,24 @@ Plans:
   3. Start command launches "nanobot gateway" with hidden window (no console flash)
   4. Startup is verified by checking port becomes available within configurable timeout
   5. Stop failure cancels the update; start failure logs warning but does not fail update
-**Plans:** 2/3 plans executed
+**Plans:** 3 plans
 
 Plans:
 - [x] 01.1-01-PLAN.md - Config and process detection (NanobotConfig, FindPIDByPort)
 - [x] 01.1-02-PLAN.md - Stopper and starter (graceful stop, hidden start, port verification)
-- [ ] 01.1-03-PLAN.md - Lifecycle manager and integration (orchestrator, config validation)
+- [x] 01.1-03-PLAN.md - Lifecycle manager and integration (orchestrator, config validation)
 
 ### Phase 2: Core Update Logic
 **Goal**: Nanobot can be updated from GitHub main branch with automatic fallback to stable version
 **Depends on**: Phase 1
-**Requirements**: UPDT-01, UPDT-02, UPDT-03, UPDT-04, UPDT-05
+**Requirements**: UPDT-01, UPDT-02, UPDT-03, UPDT-04, UPDT-05, INFR-10
 **Success Criteria** (what must be TRUE):
   1. Program exits with clear error message if uv is not installed on the system
   2. User can trigger an update that installs nanobot from GitHub main branch using uv
   3. If GitHub update fails, program automatically falls back to installing nanobot-ai stable version from PyPI
   4. All update attempts are logged with detailed success/failure information
   5. Update result (success/fallback/failure) is visible in logs
+  6. Executed uv commands do not flash a command prompt window (INFR-10)
 **Plans**: TBD
 
 ### Phase 3: Scheduling and Notifications
@@ -98,8 +101,8 @@ Phases execute in numeric order: 1 -> 01.1 -> 2 -> 3 -> 4
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Infrastructure | 3/3 | Complete | 2026-02-18 |
-| 01.1. Nanobot Lifecycle | 3/3 | Complete    | 2026-02-18 |
+| 1. Infrastructure | 3/4 | Gap closure needed | - |
+| 01.1. Nanobot Lifecycle | 3/3 | Complete | 2026-02-18 |
 | 2. Core Update Logic | 0/TBD | Not started | - |
 | 3. Scheduling and Notifications | 0/TBD | Not started | - |
 | 4. Runtime Integration | 0/TBD | Not started | - |
