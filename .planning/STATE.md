@@ -37,6 +37,10 @@ Progress: [0000000000] 0%
 
 ## Accumulated Context
 
+### Roadmap Evolution
+
+- Phase 1.1 inserted after Phase 1: Nanobot lifecycle management - stop before update, start after update (URGENT)
+
 ### Decisions
 
 Decisions are logged in PROJECT.md Key Decisions table.
@@ -59,5 +63,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2025-02-18
-Stopped at: Roadmap created, ready for Phase 1 planning
-Resume file: None
+Stopped at: Phase 01.1 context gathered
+Resume file: .planning/phases/01.1-nanobot-lifecycle-management-stop-before-update-start-after-update/01.1-CONTEXT.md
