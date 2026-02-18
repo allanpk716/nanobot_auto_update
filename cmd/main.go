@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"os"
@@ -81,15 +82,20 @@ func main() {
 		"run_once", *runOnce,
 	)
 
-	// TODO: Phase 2 - Implement update logic (in progress - UV checker complete)
-	// TODO: Phase 3 - Implement scheduling
-	// For now, just log and exit
-	logger.Info("Infrastructure phase complete - no update logic yet")
-
 	if *runOnce {
-		logger.Info("Run-once mode - would execute update here")
-		// Future: execute update and exit
+		logger.Info("Executing one-time update")
+		u := updater.NewUpdater(logger)
+		result, err := u.Update(context.Background())
+		if err != nil {
+			logger.Error("Update failed", "result", result, "error", err.Error())
+			os.Exit(1)
+		}
+		logger.Info("Update completed", "result", result)
+		os.Exit(0)
 	}
+
+	// TODO: Phase 3 - Implement scheduling
+	logger.Info("Scheduled mode not yet implemented")
 }
 
 // Manual Test Cases:
