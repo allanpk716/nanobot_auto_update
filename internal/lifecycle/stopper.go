@@ -7,8 +7,8 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"syscall"
 	"time"
+
 	"golang.org/x/sys/windows"
 )
 
@@ -27,7 +27,7 @@ func StopNanobot(ctx context.Context, pid int32, timeout time.Duration) error {
 	// Step 1: Try graceful termination (taskkill without /f)
 	// This sends WM_CLOSE message to the process
 	gracefulCmd := exec.CommandContext(stopCtx, "taskkill", "/PID", fmt.Sprintf("%d", pid))
-	gracefulCmd.SysProcAttr = &syscall.SysProcAttr{
+	gracefulCmd.SysProcAttr = &windows.SysProcAttr{
 		HideWindow:    true,
 		CreationFlags: windows.CREATE_NO_WINDOW,
 	}
@@ -42,7 +42,7 @@ func StopNanobot(ctx context.Context, pid int32, timeout time.Duration) error {
 
 	// Step 2: Force kill (taskkill /f)
 	forceCmd := exec.CommandContext(stopCtx, "taskkill", "/F", "/PID", fmt.Sprintf("%d", pid))
-	forceCmd.SysProcAttr = &syscall.SysProcAttr{
+	forceCmd.SysProcAttr = &windows.SysProcAttr{
 		HideWindow:    true,
 		CreationFlags: windows.CREATE_NO_WINDOW,
 	}
@@ -75,7 +75,7 @@ func waitForProcessExit(ctx context.Context, pid int32, pollInterval time.Durati
 				return true // Process doesn't exist
 			}
 			// On Windows, FindProcess always succeeds, so we try to signal
-			err = process.Signal(syscall.Signal(0))
+			err = process.Signal(windows.Signal(0))
 			if err != nil {
 				return true // Process has exited
 			}
