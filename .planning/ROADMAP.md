@@ -119,13 +119,21 @@ Phases execute in numeric order: 1 -> 01.1 -> 2 -> 3 -> 4
 | 2. Core Update Logic | 2/2 | Complete | 2026-02-18 |
 | 3. Scheduling and Notifications | 3/3 | Complete | 2026-02-18 |
 | 4. Runtime Integration | 1/1 | Complete | 2026-02-18 |
-| 5. CLI Immediate Update | 0/0 | Not started | - |
+| 5. CLI Immediate Update | 0/1 | Not started | - |
 
-### Phase 5: CLI Immediate Update - 支持启动参数立即更新
+### Phase 5: CLI Immediate Update
 
-**Goal:** Support command-line flag to trigger immediate update on startup
+**Goal:** Add --update-now flag for immediate update execution with JSON output for third-party programmatic invocation
 **Depends on:** Phase 4
-**Plans:** 0 plans
+**Requirements:** CLI-01, CLI-02, CLI-03, CLI-04, CLI-05
+**Success Criteria** (what must be TRUE):
+  1. User can run with --update-now flag to trigger immediate update and exit
+  2. User can specify --timeout flag to configure update timeout (default 5 minutes)
+  3. JSON output is emitted to stdout as the last line for programmatic consumption
+  4. Exit code is 0 on success, non-zero on failure
+  5. Help output documents new flags and JSON output format
+  6. Old --run-once flag is completely removed
+**Plans:** 1 plan
 
 Plans:
-- [ ] TBD (run /gsd:plan-phase 5 to break down)
+- [ ] 05-01-PLAN.md - Add --update-now flag with JSON output, --timeout flag, remove --run-once (CLI-01, CLI-02, CLI-03, CLI-04, CLI-05)
