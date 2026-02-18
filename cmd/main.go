@@ -2,15 +2,18 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	flag "github.com/spf13/pflag"
 
 	"github.com/HQGroup/nanobot-auto-updater/internal/config"
+	"github.com/HQGroup/nanobot-auto-updater/internal/lifecycle"
 	"github.com/HQGroup/nanobot-auto-updater/internal/logging"
 	"github.com/HQGroup/nanobot-auto-updater/internal/notifier"
 	"github.com/HQGroup/nanobot-auto-updater/internal/scheduler"
@@ -20,11 +23,32 @@ import (
 // Version is set via ldflags at build time.
 var Version = "dev"
 
+// UpdateNowResult represents the JSON output for --update-now mode
+type UpdateNowResult struct {
+	Success  bool   `json:"success"`
+	Version  string `json:"version,omitempty"`
+	Source   string `json:"source,omitempty"`
+	Message  string `json:"message,omitempty"`
+	Error    string `json:"error,omitempty"`
+	ExitCode int    `json:"exit_code,omitempty"`
+}
+
+// outputJSON writes the result as JSON to stdout (last line)
+func outputJSON(result UpdateNowResult) {
+	output, err := json.Marshal(result)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to encode JSON: %v\n", err)
+		return
+	}
+	fmt.Println(string(output))
+}
+
 func main() {
 	// Define CLI flags using pflag
 	configFile := flag.String("config", "./config.yaml", "Path to config file")
 	cronExpr := flag.String("cron", "", "Cron expression (overrides config file)")
-	runOnce := flag.Bool("run-once", false, "Run update once and exit")
+	updateNow := flag.Bool("update-now", false, "Execute immediate update and exit with JSON output")
+	timeout := flag.Duration("timeout", 5*time.Minute, "Update timeout duration (e.g., '5m', '300s')")
 	showVersion := flag.Bool("version", false, "Show version information")
 	flag.BoolP("help", "h", false, "Show help")
 
@@ -41,6 +65,9 @@ func main() {
 		fmt.Println("Usage: nanobot-auto-updater [options]")
 		fmt.Println("\nOptions:")
 		flag.PrintDefaults()
+		fmt.Println("\nJSON Output Format (--update-now):")
+		fmt.Println("  Success: {\"success\": true, \"version\": \"X.Y.Z\", \"source\": \"github|pypi\", \"message\": \"Update completed\"}")
+		fmt.Println("  Failure: {\"success\": false, \"error\": \"description\", \"exit_code\": 1}")
 		os.Exit(0)
 	}
 
@@ -83,18 +110,65 @@ func main() {
 		"version", Version,
 		"config", *configFile,
 		"cron", cfg.Cron,
-		"run_once", *runOnce,
+		"update_now", *updateNow,
+		"timeout", timeout.String(),
 	)
 
-	if *runOnce {
-		logger.Info("Executing one-time update")
-		u := updater.NewUpdater(logger)
-		result, err := u.Update(context.Background())
-		if err != nil {
-			logger.Error("Update failed", "result", result, "error", err.Error())
+	if *updateNow {
+		logger.Info("Executing immediate update", "timeout", timeout.String())
+
+		// Create context with configurable timeout
+		ctx, cancel := context.WithTimeout(context.Background(), *timeout)
+		defer cancel()
+
+		// Initialize lifecycle manager
+		lifecycleCfg := lifecycle.Config{
+			Port:           cfg.Nanobot.Port,
+			StartupTimeout: cfg.Nanobot.StartupTimeout,
+		}
+		lifecycleMgr := lifecycle.NewManager(lifecycleCfg)
+
+		result := UpdateNowResult{}
+
+		// Stop nanobot before update
+		if err := lifecycleMgr.StopForUpdate(ctx); err != nil {
+			logger.Error("Failed to stop nanobot", "error", err.Error())
+			result = UpdateNowResult{
+				Success:  false,
+				Error:    fmt.Sprintf("Failed to stop nanobot: %s", err.Error()),
+				ExitCode: 1,
+			}
+			outputJSON(result)
 			os.Exit(1)
 		}
-		logger.Info("Update completed", "result", result)
+
+		// Execute update
+		u := updater.NewUpdater(logger)
+		updateResult, err := u.Update(ctx)
+		if err != nil {
+			logger.Error("Update failed", "result", updateResult, "error", err.Error())
+			result = UpdateNowResult{
+				Success:  false,
+				Error:    err.Error(),
+				ExitCode: 1,
+			}
+			outputJSON(result)
+			os.Exit(1)
+		}
+
+		// Start nanobot after successful update
+		if err := lifecycleMgr.StartAfterUpdate(ctx); err != nil {
+			// Log warning but don't fail - update was successful
+			logger.Warn("Failed to start nanobot after update", "error", err.Error())
+		}
+
+		result = UpdateNowResult{
+			Success: true,
+			Source:  string(updateResult),
+			Message: "Update completed",
+		}
+		logger.Info("Update completed", "result", updateResult)
+		outputJSON(result)
 		os.Exit(0)
 	}
 
@@ -163,19 +237,24 @@ func main() {
 //    go run ./cmd/main.go -config test-config.yaml
 //    Should log: cron="0 5 * * *" (from test config)
 //
-// 4. Test --run-once flag:
-//    go run ./cmd/main.go -run-once
-//    Should log: run_once=true
+// 4. Test --update-now flag:
+//    go run ./cmd/main.go --update-now
+//    Should execute update and output JSON to stdout
 //
-// 5. Test invalid cron:
+// 5. Test --timeout flag:
+//    go run ./cmd/main.go --update-now --timeout 2m
+//    Should use 2 minute timeout for update
+//
+// 6. Test invalid cron:
 //    go run ./cmd/main.go -cron "invalid" 2>&1
 //    Should exit with error about invalid cron expression
 //
-// 6. Test -h/--help:
+// 7. Test -h/--help:
 //    go run ./cmd/main.go -h
 //    go run ./cmd/main.go --help
-//    Both should show usage information
+//    Both should show usage information including JSON output format
 //
-// 7. Test --version:
+// 8. Test --version:
 //    go run ./cmd/main.go --version
 //    Should show version and exit immediately
+//

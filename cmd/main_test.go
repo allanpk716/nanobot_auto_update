@@ -5,6 +5,7 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 )
 
 // TestVersionFlag verifies --version exits immediately with version string
@@ -32,7 +33,7 @@ func TestVersionFlag(t *testing.T) {
 	}
 }
 
-// TestHelpFlag verifies -h/--help shows usage information
+// TestHelpFlag verifies -h/--help shows usage information including JSON format
 func TestHelpFlag(t *testing.T) {
 	if testing.Short() {
 		t.Skip("Skipping integration test in short mode")
@@ -59,6 +60,11 @@ func TestHelpFlag(t *testing.T) {
 			if !strings.Contains(outputStr, "Usage:") && !strings.Contains(outputStr, "Options:") {
 				t.Errorf("Expected help output to contain 'Usage:' or 'Options:', got: %s", outputStr)
 			}
+
+			// Verify JSON output format documentation is present
+			if !strings.Contains(outputStr, "JSON Output Format") {
+				t.Errorf("Expected help output to contain 'JSON Output Format', got: %s", outputStr)
+			}
 		})
 	}
 }
@@ -84,15 +90,15 @@ func TestInvalidCronFlag(t *testing.T) {
 	}
 }
 
-// TestRunOnceFlag verifies -run-once flag is parsed correctly
-func TestRunOnceFlag(t *testing.T) {
+// TestUpdateNowFlag verifies --update-now flag is parsed correctly
+func TestUpdateNowFlag(t *testing.T) {
 	if testing.Short() {
 		t.Skip("Skipping integration test in short mode")
 	}
 
 	// Note: This test will actually try to run the updater, so we can't verify full execution
 	// But we can verify the flag is accepted without immediate error
-	cmd := exec.Command("go", "run", "./cmd/main.go", "-run-once", "-config", "nonexistent.yaml")
+	cmd := exec.Command("go", "run", "./cmd/main.go", "--update-now", "-config", "nonexistent.yaml")
 
 	// We expect it to fail due to missing config or uv check, but not flag parsing
 	output, _ := cmd.CombinedOutput()
@@ -102,6 +108,68 @@ func TestRunOnceFlag(t *testing.T) {
 	if strings.Contains(outputStr, "unknown flag") || strings.Contains(outputStr, "unknown shorthand") {
 		t.Errorf("Flag parsing failed: %s", outputStr)
 	}
+}
+
+// TestTimeoutFlag verifies --timeout flag is parsed correctly
+func TestTimeoutFlag(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping integration test in short mode")
+	}
+
+	tests := []struct {
+		name    string
+		timeout string
+		valid   bool
+	}{
+		{"valid minutes", "5m", true},
+		{"valid seconds", "300s", true},
+		{"valid combined", "2m30s", true},
+		{"invalid format", "invalid", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cmd := exec.Command("go", "run", "./cmd/main.go", "--timeout", tt.timeout, "--help")
+			output, err := cmd.CombinedOutput()
+
+			if tt.valid {
+				// Valid timeout should work with --help
+				if err != nil {
+					t.Errorf("Expected valid timeout to work, got error: %v, output: %s", err, string(output))
+				}
+			} else {
+				// Invalid timeout should fail
+				if err == nil {
+					t.Errorf("Expected invalid timeout to fail, but it succeeded")
+				}
+			}
+		})
+	}
+}
+
+// TestTimeoutDefault verifies default timeout is 5 minutes
+func TestTimeoutDefault(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping integration test in short mode")
+	}
+
+	// This test verifies the default value is set correctly in the flag definition
+	// The actual behavior is tested through integration tests
+	expectedDefault := 5 * time.Minute
+
+	// We verify this by checking that the help output shows the default
+	cmd := exec.Command("go", "run", "./cmd/main.go", "--help")
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("Failed to run help: %v", err)
+	}
+
+	// Check that default is shown as 5m0s (Go's time.Duration string representation)
+	if !strings.Contains(string(output), "5m0s") {
+		t.Errorf("Expected default timeout '5m0s' in help output, got: %s", string(output))
+	}
+
+	_ = expectedDefault // Use the variable to avoid compiler warning
 }
 
 func init() {
