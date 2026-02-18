@@ -5,6 +5,7 @@ package updater
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"log/slog"
 	"os/exec"
 	"time"
@@ -65,4 +66,39 @@ func truncateOutput(s string) string {
 		return s
 	}
 	return s[:maxLength] + "... (truncated)"
+}
+
+// Update attempts to update nanobot from GitHub main branch first,
+// falling back to PyPI stable version if GitHub fails
+func (u *Updater) Update(ctx context.Context) (UpdateResult, error) {
+	ctx, cancel := context.WithTimeout(ctx, u.updateTimeout)
+	defer cancel()
+
+	// Primary: Try GitHub main branch
+	u.logger.Info("Starting update from GitHub main branch")
+	output, err := u.runCommand(ctx, "uv", "tool", "install", u.githubURL)
+	if err == nil {
+		u.logger.Info("Update successful from GitHub",
+			"source", "github",
+			"output", truncateOutput(output))
+		return ResultSuccess, nil
+	}
+
+	u.logger.Warn("GitHub update failed, attempting PyPI fallback",
+		"error", err.Error(),
+		"github_output", truncateOutput(output))
+
+	// Fallback: Try PyPI stable version
+	output, err = u.runCommand(ctx, "uv", "tool", "install", u.pypiPackage)
+	if err == nil {
+		u.logger.Info("Update successful from PyPI fallback",
+			"source", "pypi",
+			"output", truncateOutput(output))
+		return ResultFallback, nil
+	}
+
+	u.logger.Error("Update failed - both GitHub and PyPI attempts failed",
+		"pypi_output", truncateOutput(output),
+		"error", err.Error())
+	return ResultFailed, fmt.Errorf("update failed (GitHub and PyPI): %w", err)
 }
