@@ -1,3 +1,8 @@
+# Nanobot Auto Updater Configuration
+
+# Cron schedule for automatic updates (default: daily at 3 AM)
+cron: "0 3 * * *"
+
 nanobot:
   port: 18790
   startup_timeout: 30s
