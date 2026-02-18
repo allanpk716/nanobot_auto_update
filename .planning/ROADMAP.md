@@ -86,7 +86,12 @@ Plans:
   3. Overlapping update jobs are skipped if previous job is still running
   4. User receives Pushover notification when update fails, including the failure reason
   5. Program runs without Pushover configuration (logs warning instead of failing)
-**Plans**: TBD
+**Plans:** 3 plans
+
+Plans:
+- [ ] 03-01-PLAN.md - Scheduler package with SkipIfStillRunning mode (SCHD-01, SCHD-03)
+- [ ] 03-02-PLAN.md - Notifier package with Pushover and graceful missing config (NOTF-01, NOTF-02, NOTF-03, NOTF-04)
+- [ ] 03-03-PLAN.md - Main.go scheduled mode integration (SCHD-01, SCHD-02, SCHD-03, NOTF-02, NOTF-03)
 
 ### Phase 4: Runtime Integration
 **Goal**: Program runs as a Windows background service without visible console window
@@ -108,5 +113,5 @@ Phases execute in numeric order: 1 -> 01.1 -> 2 -> 3 -> 4
 | 1. Infrastructure | 4/4 | Complete | 2026-02-18 |
 | 01.1. Nanobot Lifecycle | 3/3 | Complete | 2026-02-18 |
 | 2. Core Update Logic | 2/2 | Complete | 2026-02-18 |
-| 3. Scheduling and Notifications | 0/TBD | Not started | - |
+| 3. Scheduling and Notifications | 0/3 | Not started | - |
 | 4. Runtime Integration | 0/TBD | Not started | - |
