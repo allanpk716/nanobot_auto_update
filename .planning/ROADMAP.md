@@ -13,6 +13,7 @@ Build a Windows background service in Go that automatically keeps the nanobot AI
 Decimal phases appear between their surrounding integers in numeric order.
 
 - [ ] **Phase 1: Infrastructure** - Logging, configuration, CLI, and uv command executor
+- [ ] **Phase 01.1: Nanobot lifecycle management** - Stop before update, start after update (INSERTED)
 - [ ] **Phase 2: Core Update Logic** - Dependency checking, update execution, and rollback mechanism
 - [ ] **Phase 3: Scheduling and Notifications** - Cron-based scheduling and Pushover failure alerts
 - [ ] **Phase 4: Runtime Integration** - Windows background execution and final integration
@@ -32,6 +33,24 @@ Decimal phases appear between their surrounding integers in numeric order.
   6. User can run a one-time update via `-run-once` flag
   7. Executed uv commands do not flash a command prompt window
 **Plans**: TBD
+
+### Phase 01.1: Nanobot lifecycle management - stop before update, start after update (INSERTED)
+
+**Goal:** Stop nanobot before update, restart after update with graceful shutdown and hidden startup
+**Depends on:** Phase 1
+**Requirements:** IMPL-01, IMPL-02, IMPL-03, IMPL-04
+**Success Criteria** (what must be TRUE):
+  1. Nanobot running status can be detected by checking if port 18790 is listening
+  2. Stop command gracefully terminates nanobot with 5-second timeout, force-killing if needed
+  3. Start command launches "nanobot gateway" with hidden window (no console flash)
+  4. Startup is verified by checking port becomes available within configurable timeout
+  5. Stop failure cancels the update; start failure logs warning but does not fail update
+**Plans:** 3 plans
+
+Plans:
+- [ ] 01.1-01-PLAN.md - Config and process detection (NanobotConfig, FindPIDByPort)
+- [ ] 01.1-02-PLAN.md - Stopper and starter (graceful stop, hidden start, port verification)
+- [ ] 01.1-03-PLAN.md - Lifecycle manager and integration (orchestrator, config validation)
 
 ### Phase 2: Core Update Logic
 **Goal**: Nanobot can be updated from GitHub main branch with automatic fallback to stable version
@@ -70,11 +89,12 @@ Decimal phases appear between their surrounding integers in numeric order.
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 -> 2 -> 3 -> 4
+Phases execute in numeric order: 1 -> 01.1 -> 2 -> 3 -> 4
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Infrastructure | 0/TBD | Not started | - |
+| 01.1. Nanobot Lifecycle | 0/3 | Ready to execute | - |
 | 2. Core Update Logic | 0/TBD | Not started | - |
 | 3. Scheduling and Notifications | 0/TBD | Not started | - |
 | 4. Runtime Integration | 0/TBD | Not started | - |
