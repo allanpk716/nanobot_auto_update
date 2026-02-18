@@ -50,8 +50,8 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Runtime
 
-- [ ] **RUN-01**: Support Windows background execution, hide console window
-- [ ] **RUN-02**: Program starts manually, not auto-start on boot
+- [x] **RUN-01**: Support Windows background execution, hide console window
+- [x] **RUN-02**: Program starts manually, not auto-start on boot
 
 ## v2 Requirements
 
@@ -112,15 +112,15 @@ Which phases cover which requirements. Updated during roadmap creation.
 | NOTF-02 | Phase 3 | Complete |
 | NOTF-03 | Phase 3 | Complete |
 | NOTF-04 | Phase 3 | Complete |
-| RUN-01 | Phase 4 | Pending |
-| RUN-02 | Phase 4 | Pending |
+| RUN-01 | Phase 4 | Complete |
+| RUN-02 | Phase 4 | Complete |
 
 **Coverage:**
 - v1 requirements: 28 total
 - Mapped to phases: 28
-- Complete: 23
+- Complete: 25
 - Unmapped: 0
 
 ---
 *Requirements defined: 2025-02-18*
-*Last updated: 2026-02-18 after plan 03-03 completion (Phase 3 complete)*
+*Last updated: 2026-02-18 after plan 04-01 completion (ALL PHASES COMPLETE)*
