@@ -9,6 +9,7 @@ import (
 
 	"github.com/HQGroup/nanobot-auto-updater/internal/config"
 	"github.com/HQGroup/nanobot-auto-updater/internal/logging"
+	"github.com/HQGroup/nanobot-auto-updater/internal/updater"
 )
 
 // Version is set via ldflags at build time.
@@ -64,6 +65,15 @@ func main() {
 	logger := logging.NewLogger("./logs")
 	slog.SetDefault(logger) // Set as default logger
 
+	// Check UV installation
+	logger.Info("Checking uv installation")
+	if err := updater.CheckUvInstalled(); err != nil {
+		logger.Error("uv installation check failed", "error", err.Error())
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+	logger.Info("uv is installed and available")
+
 	logger.Info("Application starting",
 		"version", Version,
 		"config", *configFile,
@@ -71,7 +81,7 @@ func main() {
 		"run_once", *runOnce,
 	)
 
-	// TODO: Phase 2 - Implement update logic
+	// TODO: Phase 2 - Implement update logic (in progress - UV checker complete)
 	// TODO: Phase 3 - Implement scheduling
 	// For now, just log and exit
 	logger.Info("Infrastructure phase complete - no update logic yet")
