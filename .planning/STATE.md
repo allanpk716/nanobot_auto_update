@@ -5,23 +5,23 @@
 See: .planning/PROJECT.md (updated 2025-02-18)
 
 **Core value:** Automatically keep nanobot at the latest version without user manual intervention
-**Current focus:** Phase 1: Infrastructure
+**Current focus:** Phase 2: Core Update Logic
 
 ## Current Position
 
-Phase: 01 of 4 (Infrastructure)
-Plan: 4 of 4 in current phase
-Status: Complete
-Last activity: 2026-02-18 - Plan 01-04 completed (log format gap closure)
+Phase: 02 of 4 (Core Update Logic)
+Plan: 1 of 2 in current phase
+Status: In Progress
+Last activity: 2026-02-18 - Plan 02-01 completed (UV installation checker)
 
-Progress: [===================] 100% (4/4 plans in phase 01)
+Progress: [==========] 50% (1/2 plans in phase 02)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 7
+- Total plans completed: 8
 - Average duration: 4 min
-- Total execution time: 0.52 hours
+- Total execution time: 0.55 hours
 
 **By Phase:**
 
@@ -29,9 +29,10 @@ Progress: [===================] 100% (4/4 plans in phase 01)
 |-------|-------|-------|----------|
 | 01    | 4     | 4     | 4 min    |
 | 01.1  | 3     | 3     | 5 min    |
+| 02    | 1     | 2     | 2 min    |
 
 **Recent Trend:**
-- Last 5 plans: 4 min, 8 min, 2 min, 9 min, 3 min
+- Last 5 plans: 8 min, 2 min, 9 min, 3 min, 2 min
 - Trend: Accelerating
 
 *Updated after each plan completion*
@@ -67,6 +68,8 @@ Recent decisions affecting current work:
 - [01-03]: CLI flags override config file values (precedence: flags > config > defaults)
 - [01-03]: Exit immediately for --help and --version without loading config
 - [Phase 01]: Use custom slog.Handler instead of TextHandler with ReplaceAttr - TextHandler cannot remove key= prefixes
+- [02-01]: Use exec.LookPath for UV verification (not exec.Command probe)
+- [02-01]: Include installation URL in error message when uv not found
 
 ### Pending Todos
 
@@ -83,5 +86,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-02-18
-Stopped at: Completed 01-04-PLAN.md (log format gap closure)
-Resume file: .planning/phases/01-infrastructure/01-04-SUMMARY.md
+Stopped at: Completed 02-01-PLAN.md (UV installation checker)
+Resume file: .planning/phases/02-core-update-logic/02-01-SUMMARY.md

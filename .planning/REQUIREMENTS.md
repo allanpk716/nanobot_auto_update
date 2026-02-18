@@ -29,8 +29,8 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Core Update
 
-- [ ] **UPDT-01**: Check if uv is installed on startup
-- [ ] **UPDT-02**: Log error and exit if uv is not installed
+- [x] **UPDT-01**: Check if uv is installed on startup
+- [x] **UPDT-02**: Log error and exit if uv is not installed
 - [ ] **UPDT-03**: Install nanobot from GitHub main branch using uv
 - [ ] **UPDT-04**: Fallback to uv tool install nanobot-ai stable version if update fails
 - [ ] **UPDT-05**: Log detailed update process information
@@ -100,8 +100,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | IMPL-02 | Phase 01.1 | Complete |
 | IMPL-03 | Phase 01.1 | Complete |
 | IMPL-04 | Phase 01.1 | Complete |
-| UPDT-01 | Phase 2 | Pending |
-| UPDT-02 | Phase 2 | Pending |
+| UPDT-01 | Phase 2 | Complete |
+| UPDT-02 | Phase 2 | Complete |
 | UPDT-03 | Phase 2 | Pending |
 | UPDT-04 | Phase 2 | Pending |
 | UPDT-05 | Phase 2 | Pending |
