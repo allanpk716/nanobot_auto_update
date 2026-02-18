@@ -9,29 +9,30 @@ See: .planning/PROJECT.md (updated 2025-02-18)
 
 ## Current Position
 
-Phase: 01.1 of 4 (Nanobot lifecycle management)
-Plan: 3 of 3 in current phase
-Status: Complete
-Last activity: 2026-02-18 - Plan 01.1-03 completed
+Phase: 01 of 4 (Infrastructure)
+Plan: 2 of 3 in current phase
+Status: In Progress
+Last activity: 2026-02-18 - Plan 01-02 completed
 
-Progress: [====================] 100% (3/3 plans in phase 01.1)
+Progress: [=============-------] 67% (2/3 plans in phase 01)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 3
-- Average duration: 5 min
-- Total execution time: 0.25 hours
+- Total plans completed: 5
+- Average duration: 4 min
+- Total execution time: 0.36 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
+| 01    | 2     | 3     | 4 min    |
 | 01.1  | 3     | 3     | 5 min    |
 
 **Recent Trend:**
-- Last 5 plans: 4 min, 8 min, 2 min
-- Trend: New project
+- Last 5 plans: 5 min, 2 min, 4 min, 8 min, 2 min
+- Trend: Accelerating
 
 *Updated after each plan completion*
 
@@ -47,6 +48,10 @@ Decisions are logged in PROJECT.md Key Decisions table.
 Recent decisions affecting current work:
 
 - [Initialization]: Project structure defined with Go, Windows-only, YAML config
+- [01-02]: Use viper.New() for clean instance instead of global viper
+- [01-02]: Config file not found is OK - use defaults (non-fatal)
+- [01-02]: Always validate config after loading - catches invalid cron early
+- [01-02]: Set defaults BEFORE reading config file - ensures fallback values
 - [01.1-01]: Used gopsutil/v3/net for port detection instead of parsing netstat output
 - [01.1-01]: Added go:build windows constraint to ensure Windows-specific code only compiles on Windows
 - [01.1-02]: Use windows.SysProcAttr (golang.org/x/sys/windows) for CREATE_NO_WINDOW support
@@ -71,5 +76,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-02-18
-Stopped at: Completed 01.1-03-PLAN.md (lifecycle manager orchestration)
-Resume file: .planning/phases/01.1-nanobot-lifecycle-management-stop-before-update-start-after-update/01.1-03-SUMMARY.md
+Stopped at: Completed 01-02-PLAN.md (configuration system extension)
+Resume file: .planning/phases/01-infrastructure/01-02-SUMMARY.md

@@ -50,7 +50,7 @@ Plans:
   3. Start command launches "nanobot gateway" with hidden window (no console flash)
   4. Startup is verified by checking port becomes available within configurable timeout
   5. Stop failure cancels the update; start failure logs warning but does not fail update
-**Plans:** 3/3 plans complete
+**Plans:** 2/3 plans executed
 
 Plans:
 - [x] 01.1-01-PLAN.md - Config and process detection (NanobotConfig, FindPIDByPort)
