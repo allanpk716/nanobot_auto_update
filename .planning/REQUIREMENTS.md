@@ -18,7 +18,7 @@ Requirements for initial release. Each maps to roadmap phases.
 - [x] **INFR-07**: Support -run-once flag to execute one update and exit
 - [x] **INFR-08**: Support -version flag to display version info
 - [x] **INFR-09**: Support help flag to display usage information
-- [ ] **INFR-10**: Hide command window when executing uv commands (use SysProcAttr.HideWindow)
+- [x] **INFR-10**: Hide command window when executing uv commands (use SysProcAttr.HideWindow)
 
 ### Nanobot Lifecycle
 
@@ -31,9 +31,9 @@ Requirements for initial release. Each maps to roadmap phases.
 
 - [x] **UPDT-01**: Check if uv is installed on startup
 - [x] **UPDT-02**: Log error and exit if uv is not installed
-- [ ] **UPDT-03**: Install nanobot from GitHub main branch using uv
-- [ ] **UPDT-04**: Fallback to uv tool install nanobot-ai stable version if update fails
-- [ ] **UPDT-05**: Log detailed update process information
+- [x] **UPDT-03**: Install nanobot from GitHub main branch using uv
+- [x] **UPDT-04**: Fallback to uv tool install nanobot-ai stable version if update fails
+- [x] **UPDT-05**: Log detailed update process information
 
 ### Scheduling
 
@@ -95,16 +95,16 @@ Which phases cover which requirements. Updated during roadmap creation.
 | INFR-07 | Phase 1 | Complete |
 | INFR-08 | Phase 1 | Complete |
 | INFR-09 | Phase 1 | Complete |
-| INFR-10 | Phase 1 | Pending |
+| INFR-10 | Phase 1 | Complete |
 | IMPL-01 | Phase 01.1 | Complete |
 | IMPL-02 | Phase 01.1 | Complete |
 | IMPL-03 | Phase 01.1 | Complete |
 | IMPL-04 | Phase 01.1 | Complete |
 | UPDT-01 | Phase 2 | Complete |
 | UPDT-02 | Phase 2 | Complete |
-| UPDT-03 | Phase 2 | Pending |
-| UPDT-04 | Phase 2 | Pending |
-| UPDT-05 | Phase 2 | Pending |
+| UPDT-03 | Phase 2 | Complete |
+| UPDT-04 | Phase 2 | Complete |
+| UPDT-05 | Phase 2 | Complete |
 | SCHD-01 | Phase 3 | Pending |
 | SCHD-02 | Phase 3 | Pending |
 | SCHD-03 | Phase 3 | Pending |

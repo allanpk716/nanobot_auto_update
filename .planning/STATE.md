@@ -10,18 +10,18 @@ See: .planning/PROJECT.md (updated 2025-02-18)
 ## Current Position
 
 Phase: 02 of 4 (Core Update Logic)
-Plan: 1 of 2 in current phase
+Plan: 2 of 2 in current phase
 Status: In Progress
-Last activity: 2026-02-18 - Plan 02-01 completed (UV installation checker)
+Last activity: 2026-02-18 - Plan 02-02 completed (Core update logic with GitHub/PyPI fallback)
 
-Progress: [==========] 50% (1/2 plans in phase 02)
+Progress: [====================] 100% (2/2 plans in phase 02)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 8
+- Total plans completed: 9
 - Average duration: 4 min
-- Total execution time: 0.55 hours
+- Total execution time: 0.62 hours
 
 **By Phase:**
 
@@ -29,11 +29,11 @@ Progress: [==========] 50% (1/2 plans in phase 02)
 |-------|-------|-------|----------|
 | 01    | 4     | 4     | 4 min    |
 | 01.1  | 3     | 3     | 5 min    |
-| 02    | 1     | 2     | 2 min    |
+| 02    | 2     | 10    | 5 min    |
 
 **Recent Trend:**
-- Last 5 plans: 8 min, 2 min, 9 min, 3 min, 2 min
-- Trend: Accelerating
+- Last 5 plans: 2 min, 9 min, 3 min, 2 min, 8 min
+- Trend: Stable
 
 *Updated after each plan completion*
 
@@ -70,6 +70,10 @@ Recent decisions affecting current work:
 - [Phase 01]: Use custom slog.Handler instead of TextHandler with ReplaceAttr - TextHandler cannot remove key= prefixes
 - [02-01]: Use exec.LookPath for UV verification (not exec.Command probe)
 - [02-01]: Include installation URL in error message when uv not found
+- [02-02]: Use git+https:// format for GitHub URL to enable uv tool install from main branch
+- [02-02]: 5 minute timeout for update operations (covers network delays)
+- [02-02]: 500 character truncation limit for command output in logs
+- [02-02]: Log GitHub attempt at INFO, failure at WARN, PyPI success at INFO, total failure at ERROR
 
 ### Pending Todos
 
@@ -86,5 +90,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-02-18
-Stopped at: Completed 02-01-PLAN.md (UV installation checker)
-Resume file: .planning/phases/02-core-update-logic/02-01-SUMMARY.md
+Stopped at: Completed 02-02-PLAN.md (Core update logic with GitHub/PyPI fallback)
+Resume file: .planning/phases/02-core-update-logic/02-02-SUMMARY.md
