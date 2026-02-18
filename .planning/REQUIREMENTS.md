@@ -43,10 +43,10 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Notifications
 
-- [ ] **NOTF-01**: Read Pushover config from environment variables (PUSHOVER_TOKEN, PUSHOVER_USER)
-- [ ] **NOTF-02**: Send notification via Pushover when update fails
-- [ ] **NOTF-03**: Notification includes failure reason
-- [ ] **NOTF-04**: Log warning only if Pushover config missing, don't block program
+- [x] **NOTF-01**: Read Pushover config from environment variables (PUSHOVER_TOKEN, PUSHOVER_USER)
+- [x] **NOTF-02**: Send notification via Pushover when update fails
+- [x] **NOTF-03**: Notification includes failure reason
+- [x] **NOTF-04**: Log warning only if Pushover config missing, don't block program
 
 ### Runtime
 
@@ -105,22 +105,22 @@ Which phases cover which requirements. Updated during roadmap creation.
 | UPDT-03 | Phase 2 | Complete |
 | UPDT-04 | Phase 2 | Complete |
 | UPDT-05 | Phase 2 | Complete |
-| SCHD-01 | Phase 3 | Pending |
+| SCHD-01 | Phase 3 | Complete |
 | SCHD-02 | Phase 3 | Pending |
-| SCHD-03 | Phase 3 | Pending |
-| NOTF-01 | Phase 3 | Pending |
-| NOTF-02 | Phase 3 | Pending |
-| NOTF-03 | Phase 3 | Pending |
-| NOTF-04 | Phase 3 | Pending |
+| SCHD-03 | Phase 3 | Complete |
+| NOTF-01 | Phase 3 | Complete |
+| NOTF-02 | Phase 3 | Complete |
+| NOTF-03 | Phase 3 | Complete |
+| NOTF-04 | Phase 3 | Complete |
 | RUN-01 | Phase 4 | Pending |
 | RUN-02 | Phase 4 | Pending |
 
 **Coverage:**
 - v1 requirements: 28 total
 - Mapped to phases: 28
-- Complete: 9
+- Complete: 13
 - Unmapped: 0
 
 ---
 *Requirements defined: 2025-02-18*
-*Last updated: 2026-02-18 after plan 01-03 completion*
+*Last updated: 2026-02-18 after plan 03-02 completion*
