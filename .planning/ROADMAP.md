@@ -14,7 +14,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Infrastructure** - Logging, configuration, CLI (completed 2026-02-18)
 - [x] **Phase 01.1: Nanobot lifecycle management** - Stop before update, start after update (INSERTED) (completed 2026-02-18)
-- [ ] **Phase 2: Core Update Logic** - Dependency checking, update execution, and rollback mechanism
+- [x] **Phase 2: Core Update Logic** - Dependency checking, update execution, and rollback mechanism (completed 2026-02-18)
 - [ ] **Phase 3: Scheduling and Notifications** - Cron-based scheduling and Pushover failure alerts
 - [ ] **Phase 4: Runtime Integration** - Windows background execution and final integration
 
@@ -73,8 +73,8 @@ Plans:
 **Plans:** 2 plans
 
 Plans:
-- [ ] 02-01-PLAN.md - UV installation checker (UPDT-01, UPDT-02)
-- [ ] 02-02-PLAN.md - Core update logic with GitHub primary and PyPI fallback (UPDT-03, UPDT-04, UPDT-05, INFR-10)
+- [x] 02-01-PLAN.md - UV installation checker (UPDT-01, UPDT-02)
+- [x] 02-02-PLAN.md - Core update logic with GitHub primary and PyPI fallback (UPDT-03, UPDT-04, UPDT-05, INFR-10)
 
 ### Phase 3: Scheduling and Notifications
 **Goal**: Updates run automatically on schedule and user is notified of failures
@@ -107,6 +107,6 @@ Phases execute in numeric order: 1 -> 01.1 -> 2 -> 3 -> 4
 |-------|----------------|--------|-----------|
 | 1. Infrastructure | 4/4 | Complete | 2026-02-18 |
 | 01.1. Nanobot Lifecycle | 3/3 | Complete | 2026-02-18 |
-| 2. Core Update Logic | 0/2 | Not started | - |
+| 2. Core Update Logic | 2/2 | Complete | 2026-02-18 |
 | 3. Scheduling and Notifications | 0/TBD | Not started | - |
 | 4. Runtime Integration | 0/TBD | Not started | - |
