@@ -89,7 +89,7 @@ Plans:
 **Plans:** 3 plans
 
 Plans:
-- [ ] 03-01-PLAN.md - Scheduler package with SkipIfStillRunning mode (SCHD-01, SCHD-03)
+- [x] 03-01-PLAN.md - Scheduler package with SkipIfStillRunning mode (SCHD-01, SCHD-03)
 - [x] 03-02-PLAN.md - Notifier package with Pushover and graceful missing config (NOTF-01, NOTF-02, NOTF-03, NOTF-04)
 - [ ] 03-03-PLAN.md - Main.go scheduled mode integration (SCHD-01, SCHD-02, SCHD-03, NOTF-02, NOTF-03)
 

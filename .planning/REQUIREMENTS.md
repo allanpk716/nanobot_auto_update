@@ -37,9 +37,9 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Scheduling
 
-- [ ] **SCHD-01**: Support cron expression scheduled update triggering
+- [x] **SCHD-01**: Support cron expression scheduled update triggering
 - [ ] **SCHD-02**: Default cron is "0 3 * * *" (daily at 3 AM)
-- [ ] **SCHD-03**: Prevent job overlap execution (SkipIfStillRunning mode)
+- [x] **SCHD-03**: Prevent job overlap execution (SkipIfStillRunning mode)
 
 ### Notifications
 
@@ -105,9 +105,9 @@ Which phases cover which requirements. Updated during roadmap creation.
 | UPDT-03 | Phase 2 | Complete |
 | UPDT-04 | Phase 2 | Complete |
 | UPDT-05 | Phase 2 | Complete |
-| SCHD-01 | Phase 3 | Pending |
+| SCHD-01 | Phase 3 | Complete |
 | SCHD-02 | Phase 3 | Pending |
-| SCHD-03 | Phase 3 | Pending |
+| SCHD-03 | Phase 3 | Complete |
 | NOTF-01 | Phase 3 | Complete |
 | NOTF-02 | Phase 3 | Complete |
 | NOTF-03 | Phase 3 | Complete |
@@ -118,7 +118,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 **Coverage:**
 - v1 requirements: 28 total
 - Mapped to phases: 28
-- Complete: 13
+- Complete: 15
 - Unmapped: 0
 
 ---
