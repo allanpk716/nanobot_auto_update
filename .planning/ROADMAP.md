@@ -101,7 +101,10 @@ Plans:
   1. Program runs on Windows without displaying a console window
   2. User can start the program manually (not auto-started on boot)
   3. All features from previous phases work correctly in background mode
-**Plans**: TBD
+**Plans:** 1 plan
+
+Plans:
+- [ ] 04-01-PLAN.md - Makefile with build and build-release targets (RUN-01, RUN-02)
 
 ## Progress
 
@@ -114,4 +117,4 @@ Phases execute in numeric order: 1 -> 01.1 -> 2 -> 3 -> 4
 | 01.1. Nanobot Lifecycle | 3/3 | Complete | 2026-02-18 |
 | 2. Core Update Logic | 2/2 | Complete | 2026-02-18 |
 | 3. Scheduling and Notifications | 3/3 | Complete | 2026-02-18 |
-| 4. Runtime Integration | 0/TBD | Not started | - |
+| 4. Runtime Integration | 0/1 | Not started | - |
