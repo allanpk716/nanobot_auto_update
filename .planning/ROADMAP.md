@@ -17,6 +17,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 2: Core Update Logic** - Dependency checking, update execution, and rollback mechanism (completed 2026-02-18)
 - [x] **Phase 3: Scheduling and Notifications** - Cron-based scheduling and Pushover failure alerts (completed 2026-02-18)
 - [x] **Phase 4: Runtime Integration** - Windows background execution and final integration (completed 2026-02-18)
+- [ ] **Phase 5: CLI Immediate Update** - Support startup parameter for immediate update
 
 ## Phase Details
 
@@ -118,3 +119,13 @@ Phases execute in numeric order: 1 -> 01.1 -> 2 -> 3 -> 4
 | 2. Core Update Logic | 2/2 | Complete | 2026-02-18 |
 | 3. Scheduling and Notifications | 3/3 | Complete | 2026-02-18 |
 | 4. Runtime Integration | 1/1 | Complete | 2026-02-18 |
+| 5. CLI Immediate Update | 0/0 | Not started | - |
+
+### Phase 5: CLI Immediate Update - 支持启动参数立即更新
+
+**Goal:** Support command-line flag to trigger immediate update on startup
+**Depends on:** Phase 4
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run /gsd:plan-phase 5 to break down)

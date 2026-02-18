@@ -44,6 +44,7 @@ Progress: [===================] 100% (1/1 plans in phase 04)
 ### Roadmap Evolution
 
 - Phase 1.1 inserted after Phase 1: Nanobot lifecycle management - stop before update, start after update (URGENT)
+- Phase 5 added: CLI Immediate Update - 支持启动参数立即更新
 
 ### Decisions
 
