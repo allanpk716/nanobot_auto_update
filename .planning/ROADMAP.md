@@ -17,7 +17,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 2: Core Update Logic** - Dependency checking, update execution, and rollback mechanism (completed 2026-02-18)
 - [x] **Phase 3: Scheduling and Notifications** - Cron-based scheduling and Pushover failure alerts (completed 2026-02-18)
 - [x] **Phase 4: Runtime Integration** - Windows background execution and final integration (completed 2026-02-18)
-- [ ] **Phase 5: CLI Immediate Update** - Support startup parameter for immediate update
+- [x] **Phase 5: CLI Immediate Update** - Support startup parameter for immediate update (completed 2026-02-18)
 
 ## Phase Details
 
@@ -119,7 +119,7 @@ Phases execute in numeric order: 1 -> 01.1 -> 2 -> 3 -> 4
 | 2. Core Update Logic | 2/2 | Complete | 2026-02-18 |
 | 3. Scheduling and Notifications | 3/3 | Complete | 2026-02-18 |
 | 4. Runtime Integration | 1/1 | Complete | 2026-02-18 |
-| 5. CLI Immediate Update | 0/1 | Not started | - |
+| 5. CLI Immediate Update | 0/1 | Complete    | 2026-02-18 |
 
 ### Phase 5: CLI Immediate Update
 
@@ -133,7 +133,7 @@ Phases execute in numeric order: 1 -> 01.1 -> 2 -> 3 -> 4
   4. Exit code is 0 on success, non-zero on failure
   5. Help output documents new flags and JSON output format
   6. Old --run-once flag is completely removed
-**Plans:** 1 plan
+**Plans:** 1/1 plans complete
 
 Plans:
 - [ ] 05-01-PLAN.md - Add --update-now flag with JSON output, --timeout flag, remove --run-once (CLI-01, CLI-02, CLI-03, CLI-04, CLI-05)
