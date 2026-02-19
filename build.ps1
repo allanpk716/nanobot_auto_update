@@ -26,7 +26,7 @@ function Get-Version {
 
 function Build-Console {
     Write-Host "Building console version..." -ForegroundColor Cyan
-    go build -o nanobot-auto-updater.exe ./cmd
+    go build -o nanobot-auto-updater.exe ./cmd/nanobot-auto-updater
     if ($LASTEXITCODE -ne 0) {
         Write-Host "Build failed!" -ForegroundColor Red
         exit 1
@@ -38,7 +38,7 @@ function Build-Release {
     Write-Host "Building release version (no console)..." -ForegroundColor Cyan
     $ver = Get-Version
     $ldflags = "-H=windowsgui -X main.Version=$ver"
-    go build -ldflags="$ldflags" -o nanobot-auto-updater.exe ./cmd
+    go build -ldflags="$ldflags" -o nanobot-auto-updater.exe ./cmd/nanobot-auto-updater
     if ($LASTEXITCODE -ne 0) {
         Write-Host "Build failed!" -ForegroundColor Red
         exit 1

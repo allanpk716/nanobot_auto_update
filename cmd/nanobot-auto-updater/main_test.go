@@ -14,8 +14,8 @@ func TestVersionFlag(t *testing.T) {
 		t.Skip("Skipping integration test in short mode")
 	}
 
-	// Build the binary first
-	buildCmd := exec.Command("go", "build", "-o", "test-updater.exe", "./cmd/main.go")
+	// Build the binary first (from project root)
+	buildCmd := exec.Command("go", "build", "-o", "test-updater.exe", ".")
 	if err := buildCmd.Run(); err != nil {
 		t.Fatalf("Failed to build binary: %v", err)
 	}
@@ -49,7 +49,7 @@ func TestHelpFlag(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			cmd := exec.Command("go", "run", "./cmd/main.go", tt.flag)
+			cmd := exec.Command("go", "run", ".", tt.flag)
 			output, err := cmd.CombinedOutput()
 			if err != nil {
 				t.Fatalf("Expected %s to exit cleanly, got error: %v", tt.flag, err)
@@ -75,7 +75,7 @@ func TestInvalidCronFlag(t *testing.T) {
 		t.Skip("Skipping integration test in short mode")
 	}
 
-	cmd := exec.Command("go", "run", "./cmd/main.go", "-cron", "invalid-cron")
+	cmd := exec.Command("go", "run", ".", "-cron", "invalid-cron")
 	output, err := cmd.CombinedOutput()
 
 	// Should exit with error
@@ -98,7 +98,7 @@ func TestUpdateNowFlag(t *testing.T) {
 
 	// Note: This test will actually try to run the updater, so we can't verify full execution
 	// But we can verify the flag is accepted without immediate error
-	cmd := exec.Command("go", "run", "./cmd/main.go", "--update-now", "-config", "nonexistent.yaml")
+	cmd := exec.Command("go", "run", ".", "--update-now", "--config", "nonexistent.yaml")
 
 	// We expect it to fail due to missing config or uv check, but not flag parsing
 	output, _ := cmd.CombinedOutput()
@@ -129,7 +129,7 @@ func TestTimeoutFlag(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			cmd := exec.Command("go", "run", "./cmd/main.go", "--timeout", tt.timeout, "--help")
+			cmd := exec.Command("go", "run", ".", "--timeout", tt.timeout, "--help")
 			output, err := cmd.CombinedOutput()
 
 			if tt.valid {
@@ -158,7 +158,7 @@ func TestTimeoutDefault(t *testing.T) {
 	expectedDefault := 5 * time.Minute
 
 	// We verify this by checking that the help output shows the default
-	cmd := exec.Command("go", "run", "./cmd/main.go", "--help")
+	cmd := exec.Command("go", "run", ".", "--help")
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("Failed to run help: %v", err)

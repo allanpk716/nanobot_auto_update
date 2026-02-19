@@ -11,12 +11,12 @@ LDFLAGS_RELEASE = -H=windowsgui -X main.Version=$(VERSION)
 
 # Default: console build (easier debugging)
 build:
-	go build -o nanobot-auto-updater.exe ./cmd
+	go build -o nanobot-auto-updater.exe ./cmd/nanobot-auto-updater
 	@echo "Built console version: nanobot-auto-updater.exe"
 
 # Release: GUI build (no console window)
 build-release:
-	go build -ldflags="$(LDFLAGS_RELEASE)" -o nanobot-auto-updater.exe ./cmd
+	go build -ldflags="$(LDFLAGS_RELEASE)" -o nanobot-auto-updater.exe ./cmd/nanobot-auto-updater
 	@echo "Built release version (no console): nanobot-auto-updater.exe"
 
 # Clean build artifacts

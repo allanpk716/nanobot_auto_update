@@ -28,8 +28,22 @@ func (h *simpleHandler) Handle(ctx context.Context, record slog.Record) error {
 	// Format level: "[INFO]", "[WARN]", "[ERROR]", "[DEBUG]"
 	level := fmt.Sprintf("[%s]", record.Level.String())
 
-	// Build the output: "timestamp - [LEVEL]: message\n"
-	_, err := fmt.Fprintf(h.w, "%s - %s: %s\n", timestamp, level, record.Message)
+	// Build base output: "timestamp - [LEVEL]: message"
+	output := fmt.Sprintf("%s - %s: %s", timestamp, level, record.Message)
+
+	// Append handler-level attributes
+	for _, attr := range h.attrs {
+		output += fmt.Sprintf(" %s=%v", attr.Key, attr.Value)
+	}
+
+	// Append record-level attributes
+	record.Attrs(func(attr slog.Attr) bool {
+		output += fmt.Sprintf(" %s=%v", attr.Key, attr.Value)
+		return true
+	})
+
+	// Write with newline
+	_, err := fmt.Fprintln(h.w, output)
 	return err
 }
 

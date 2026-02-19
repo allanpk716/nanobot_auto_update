@@ -138,7 +138,7 @@ func main() {
 			Port:           cfg.Nanobot.Port,
 			StartupTimeout: cfg.Nanobot.StartupTimeout,
 		}
-		lifecycleMgr := lifecycle.NewManager(lifecycleCfg)
+		lifecycleMgr := lifecycle.NewManager(lifecycleCfg, logger)
 
 		result := UpdateNowResult{}
 
@@ -237,36 +237,36 @@ func main() {
 // Manual Test Cases:
 //
 // 1. Test default config loading:
-//    go run ./cmd/main.go
+//    go run ./cmd/nanobot-auto-updater
 //    Should log: cron="0 3 * * *", config="./config.yaml"
 //
 // 2. Test --cron override:
-//    go run ./cmd/main.go -cron "*/5 * * * *"
+//    go run ./cmd/nanobot-auto-updater -cron "*/5 * * * *"
 //    Should log: cron="*/5 * * * *" (overridden)
 //
 // 3. Test --config flag:
 //    Create test config with cron: "0 5 * * *"
-//    go run ./cmd/main.go -config test-config.yaml
+//    go run ./cmd/nanobot-auto-updater -config test-config.yaml
 //    Should log: cron="0 5 * * *" (from test config)
 //
 // 4. Test --update-now flag:
-//    go run ./cmd/main.go --update-now
+//    go run ./cmd/nanobot-auto-updater --update-now
 //    Should execute update and output JSON to stdout
 //
 // 5. Test --timeout flag:
-//    go run ./cmd/main.go --update-now --timeout 2m
+//    go run ./cmd/nanobot-auto-updater --update-now --timeout 2m
 //    Should use 2 minute timeout for update
 //
 // 6. Test invalid cron:
-//    go run ./cmd/main.go -cron "invalid" 2>&1
+//    go run ./cmd/nanobot-auto-updater -cron "invalid" 2>&1
 //    Should exit with error about invalid cron expression
 //
 // 7. Test -h/--help:
-//    go run ./cmd/main.go -h
-//    go run ./cmd/main.go --help
+//    go run ./cmd/nanobot-auto-updater -h
+//    go run ./cmd/nanobot-auto-updater --help
 //    Both should show usage information including JSON output format
 //
 // 8. Test --version:
-//    go run ./cmd/main.go --version
+//    go run ./cmd/nanobot-auto-updater --version
 //    Should show version and exit immediately
 //
