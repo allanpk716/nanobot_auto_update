@@ -87,6 +87,18 @@ func main() {
 		cfg.Cron = *cronExpr
 	}
 
+	// Daemonize if running in --update-now mode (called by nanobot)
+	// This ensures the updater process survives when nanobot is terminated
+	if *updateNow {
+		if daemonized, err := lifecycle.MakeDaemon(); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: failed to daemonize: %v\n", err)
+			// Continue anyway - may work if parent doesn't exit immediately
+		} else if daemonized {
+			// This process will exit, daemon has been started
+			return
+		}
+	}
+
 	// Create logs directory
 	if err := os.MkdirAll("./logs", 0755); err != nil {
 		fmt.Fprintf(os.Stderr, "Error creating logs directory: %v\n", err)

@@ -6,9 +6,6 @@ import (
 	"io"
 	"log/slog"
 	"os"
-	"time"
-
-	"gopkg.in/natefinch/lumberjack.v2"
 )
 
 // simpleHandler implements slog.Handler with a simple format output:
@@ -53,32 +50,20 @@ func (h *simpleHandler) WithGroup(name string) slog.Handler {
 // The logger writes to both a rotating log file and stdout simultaneously.
 //
 // Log format: "2024-01-01 12:00:00.123 - [INFO]: message"
-// Log files are organized by date (e.g., app-2024-01-01.log) and rotated at 50MB per day.
+// Log files are organized by date (e.g., app-2024-01-01.log) and automatically
+// rotate to a new file at midnight. Each daily file is rotated at 50MB.
 // Old log files are kept for 7 days.
 func NewLogger(logDir string) *slog.Logger {
-	// Create log directory if it doesn't exist
-	if err := os.MkdirAll(logDir, 0755); err != nil {
-		// If we can't create the log directory, fall back to stdout only
-		fmt.Fprintf(os.Stderr, "Warning: failed to create log directory %s: %v\n", logDir, err)
+	// Create daily rotating writer
+	dailyWriter, err := newDailyRotateWriter(logDir)
+	if err != nil {
+		// If we can't create the daily writer, fall back to stdout only
+		fmt.Fprintf(os.Stderr, "Warning: failed to create daily rotate writer: %v\n", err)
 		return slog.New(&simpleHandler{w: os.Stdout})
 	}
 
-	// Generate date-based log filename
-	today := time.Now().Format("2006-01-02")
-	logFilename := fmt.Sprintf("%s/app-%s.log", logDir, today)
-
-	// Configure lumberjack for log rotation
-	fileLogger := &lumberjack.Logger{
-		Filename:   logFilename,
-		MaxSize:    50, // MB - triggers rotation
-		MaxBackups: 3,  // keep 3 old files per day
-		MaxAge:     7,  // days - retention
-		Compress:   false,
-		LocalTime:  true,
-	}
-
 	// Use MultiWriter to output to both file and stdout
-	multiWriter := io.MultiWriter(fileLogger, os.Stdout)
+	multiWriter := io.MultiWriter(dailyWriter, os.Stdout)
 
 	// Create custom handler with simple format
 	handler := &simpleHandler{w: multiWriter}

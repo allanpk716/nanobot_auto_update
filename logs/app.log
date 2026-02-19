@@ -53,3 +53,11 @@ time="2026-02-18 14:35:29.635" level=[INFO] msg="Run-once mode - would execute u
 2026-02-18 19:25:59.113 - [INFO]: Scheduler stopped, all jobs completed
 2026-02-18 19:25:59.113 - [INFO]: stop
 2026-02-18 19:25:59.113 - [INFO]: Application shutdown complete
+2026-02-19 10:20:41.142 - [INFO]: Checking uv installation
+2026-02-19 10:20:41.154 - [INFO]: uv is installed and available
+2026-02-19 10:20:41.154 - [INFO]: Application starting
+2026-02-19 10:20:41.154 - [INFO]: Executing immediate update
+2026-02-19 10:20:41.155 - [INFO]: Starting update from GitHub main branch
+2026-02-19 10:21:19.955 - [WARN]: GitHub update failed, attempting PyPI fallback
+2026-02-19 10:21:38.408 - [ERROR]: Update failed - both GitHub and PyPI attempts failed
+2026-02-19 10:21:38.408 - [ERROR]: Update failed
