@@ -1,0 +1,55 @@
+time="2026-02-18 14:33:52.018" level=[INFO] msg="Application starting" version=dev config=./config.yaml cron="0 3 * * *" run_once=false
+time="2026-02-18 14:33:52.031" level=[INFO] msg="Infrastructure phase complete - no update logic yet"
+time="2026-02-18 14:35:27.097" level=[INFO] msg="Application starting" version=dev config=./config.yaml cron="*/5 * * * *" run_once=false
+time="2026-02-18 14:35:27.109" level=[INFO] msg="Infrastructure phase complete - no update logic yet"
+time="2026-02-18 14:35:29.622" level=[INFO] msg="Application starting" version=dev config=./config.yaml cron="0 3 * * *" run_once=true
+time="2026-02-18 14:35:29.635" level=[INFO] msg="Infrastructure phase complete - no update logic yet"
+time="2026-02-18 14:35:29.635" level=[INFO] msg="Run-once mode - would execute update here"
+2026-02-18 14:56:23.463 - [INFO]: Application starting
+2026-02-18 14:56:23.474 - [INFO]: Infrastructure phase complete - no update logic yet
+2026-02-18 14:56:23.474 - [INFO]: Run-once mode - would execute update here
+2026-02-18 14:56:32.375 - [INFO]: Application starting
+2026-02-18 14:56:32.387 - [INFO]: Infrastructure phase complete - no update logic yet
+2026-02-18 14:56:32.387 - [INFO]: Run-once mode - would execute update here
+2026-02-18 14:58:30.553 - [INFO]: Application starting
+2026-02-18 14:58:30.565 - [INFO]: Infrastructure phase complete - no update logic yet
+2026-02-18 14:58:30.565 - [INFO]: Run-once mode - would execute update here
+2026-02-18 14:58:31.594 - [INFO]: Application starting
+2026-02-18 14:58:31.606 - [INFO]: Infrastructure phase complete - no update logic yet
+2026-02-18 14:58:31.606 - [INFO]: Run-once mode - would execute update here
+2026-02-18 15:03:54.975 - [INFO]: Application starting
+2026-02-18 15:03:54.988 - [INFO]: Infrastructure phase complete - no update logic yet
+2026-02-18 15:03:54.988 - [INFO]: Run-once mode - would execute update here
+2026-02-18 15:04:28.830 - [INFO]: Application starting
+2026-02-18 15:04:28.842 - [INFO]: Infrastructure phase complete - no update logic yet
+2026-02-18 15:04:43.018 - [INFO]: Application starting
+2026-02-18 15:04:43.029 - [INFO]: Infrastructure phase complete - no update logic yet
+2026-02-18 15:04:43.029 - [INFO]: Run-once mode - would execute update here
+2026-02-18 15:41:18.775 - [INFO]: Checking uv installation
+2026-02-18 15:41:18.853 - [INFO]: uv is installed and available
+2026-02-18 15:41:18.853 - [INFO]: Application starting
+2026-02-18 15:41:18.853 - [INFO]: Infrastructure phase complete - no update logic yet
+2026-02-18 15:41:18.853 - [INFO]: Run-once mode - would execute update here
+2026-02-18 18:10:18.780 - [INFO]: Checking uv installation
+2026-02-18 18:10:18.859 - [INFO]: uv is installed and available
+2026-02-18 18:10:18.859 - [INFO]: Application starting
+2026-02-18 18:10:18.859 - [INFO]: Pushover notifications enabled
+2026-02-18 18:10:18.859 - [INFO]: Job scheduled
+2026-02-18 18:10:18.859 - [INFO]: Starting scheduler
+2026-02-18 18:10:18.859 - [INFO]: Scheduler started
+2026-02-18 18:10:18.859 - [INFO]: start
+2026-02-18 18:10:18.859 - [INFO]: schedule, now=2026-02-18T18:10:18+08:00, entry=1, next=2026-02-19T03:00:00+08:00
+2026-02-18 19:25:35.418 - [INFO]: Checking uv installation
+2026-02-18 19:25:35.486 - [INFO]: uv is installed and available
+2026-02-18 19:25:35.486 - [INFO]: Application starting
+2026-02-18 19:25:35.487 - [INFO]: Pushover notifications enabled
+2026-02-18 19:25:35.487 - [INFO]: Job scheduled
+2026-02-18 19:25:35.487 - [INFO]: Starting scheduler
+2026-02-18 19:25:35.487 - [INFO]: Scheduler started
+2026-02-18 19:25:35.487 - [INFO]: start
+2026-02-18 19:25:35.487 - [INFO]: schedule, now=2026-02-18T19:25:35+08:00, entry=1, next=2026-02-19T03:00:00+08:00
+2026-02-18 19:25:59.113 - [INFO]: Shutdown signal received
+2026-02-18 19:25:59.113 - [INFO]: Stopping scheduler
+2026-02-18 19:25:59.113 - [INFO]: Scheduler stopped, all jobs completed
+2026-02-18 19:25:59.113 - [INFO]: stop
+2026-02-18 19:25:59.113 - [INFO]: Application shutdown complete
