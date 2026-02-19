@@ -1,9 +1,0 @@
-2026-02-19 11:13:35.606 - [INFO]: Checking uv installation
-2026-02-19 11:13:35.611 - [INFO]: uv is installed and available
-2026-02-19 11:13:35.611 - [INFO]: Application starting
-2026-02-19 11:13:35.611 - [INFO]: Pushover notifications enabled
-2026-02-19 11:13:35.611 - [INFO]: Job scheduled
-2026-02-19 11:13:35.611 - [INFO]: Starting scheduler
-2026-02-19 11:13:35.611 - [INFO]: Scheduler started
-2026-02-19 11:13:35.611 - [INFO]: start
-2026-02-19 11:13:35.611 - [INFO]: schedule, now=2026-02-19T11:13:35+08:00, entry=1, next=2026-02-20T03:00:00+08:00

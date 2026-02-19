@@ -1,9 +1,0 @@
-2026-02-19 10:38:24.592 - [INFO]: Job scheduled
-2026-02-19 10:38:24.593 - [INFO]: Job scheduled
-2026-02-19 10:38:24.594 - [INFO]: Job scheduled
-2026-02-19 10:38:24.594 - [INFO]: Starting scheduler
-2026-02-19 10:38:24.594 - [INFO]: start
-2026-02-19 10:38:24.594 - [INFO]: schedule, now=2026-02-19T10:38:24+08:00, entry=1, next=2026-02-19T10:39:00+08:00
-2026-02-19 10:38:24.694 - [INFO]: Stopping scheduler
-2026-02-19 10:38:24.694 - [INFO]: stop
-2026-02-19 10:38:24.694 - [INFO]: Scheduler stopped, all jobs completed
