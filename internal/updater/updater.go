@@ -69,14 +69,15 @@ func truncateOutput(s string) string {
 }
 
 // Update attempts to update nanobot from GitHub main branch first,
-// falling back to PyPI stable version if GitHub fails
+// falling back to PyPI stable version if GitHub fails.
+// Uses --force flag to ensure updates work even when already installed.
 func (u *Updater) Update(ctx context.Context) (UpdateResult, error) {
 	ctx, cancel := context.WithTimeout(ctx, u.updateTimeout)
 	defer cancel()
 
 	// Primary: Try GitHub main branch
-	u.logger.Info("Starting update from GitHub main branch")
-	output, err := u.runCommand(ctx, "uv", "tool", "install", u.githubURL)
+	u.logger.Info("Starting forced update from GitHub main branch")
+	output, err := u.runCommand(ctx, "uv", "tool", "install", "--force", u.githubURL)
 	if err == nil {
 		u.logger.Info("Update successful from GitHub",
 			"source", "github",
@@ -84,12 +85,12 @@ func (u *Updater) Update(ctx context.Context) (UpdateResult, error) {
 		return ResultSuccess, nil
 	}
 
-	u.logger.Warn("GitHub update failed, attempting PyPI fallback",
+	u.logger.Warn("GitHub forced update failed, attempting PyPI fallback",
 		"error", err.Error(),
 		"github_output", truncateOutput(output))
 
 	// Fallback: Try PyPI stable version
-	output, err = u.runCommand(ctx, "uv", "tool", "install", u.pypiPackage)
+	output, err = u.runCommand(ctx, "uv", "tool", "install", "--force", u.pypiPackage)
 	if err == nil {
 		u.logger.Info("Update successful from PyPI fallback",
 			"source", "pypi",

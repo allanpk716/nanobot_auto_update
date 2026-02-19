@@ -56,14 +56,17 @@ The **uv** package manager (by Astral) is used to update Python tools. Key comma
 
 | Command | Purpose |
 |---------|---------|
-| `uv tool upgrade <package>` | Upgrade a specific tool installed via uv |
-| `uv tool install <package>` | Install a new tool |
+| `uv tool install --force <package>` | Install or upgrade a tool (force reinstall if already installed) |
+| `uv tool upgrade <package>` | Upgrade a specific tool (only works for installed tools, not Git URLs) |
+| `uv tool install <package>` | Install a new tool (won't upgrade if already installed) |
 | `uv self update` | Update uv itself |
 | `uv --version` | Check installed version |
 
+**Important:** Use `--force` flag with `uv tool install` for updates, as without it the command will only report "already installed" and not perform an upgrade. The `uv tool upgrade` command exists but doesn't support Git URL sources.
+
 Execution pattern in Go:
 ```go
-cmd := exec.Command("uv", "tool", "upgrade", "nanobot")
+cmd := exec.Command("uv", "tool", "install", "--force", "nanobot")
 output, err := cmd.CombinedOutput()
 if err != nil {
     log.Error("uv upgrade failed: %s", string(output))

@@ -6,9 +6,9 @@
 
 ## Summary
 
-Phase 2 implements the core update logic that allows nanobot to be updated from GitHub's main branch using the `uv` Python package manager, with automatic fallback to the stable PyPI version if the GitHub update fails. The implementation requires understanding three key areas: (1) Go's `os/exec` package for running external commands with hidden windows, (2) `exec.LookPath` for verifying uv installation at startup, and (3) `uv tool install` commands for installing Python packages from both Git repositories and PyPI.
+Phase 2 implements the core update logic that allows nanobot to be updated from GitHub's main branch using the `uv` Python package manager, with automatic fallback to the stable PyPI version if the GitHub update fails. The implementation requires understanding three key areas: (1) Go's `os/exec` package for running external commands with hidden windows, (2) `exec.LookPath` for verifying uv installation at startup, and (3) `uv tool install --force` commands for installing Python packages from both Git repositories and PyPI. The `--force` flag is essential to ensure updates work when the tool is already installed, as `uv tool install` without this flag will only report "already installed" and not perform an upgrade.
 
-The primary technical approach is straightforward: use `exec.LookPath("uv")` to verify uv is installed at startup (exit with error if not), then use `exec.Command` with `windows.SysProcAttr{HideWindow: true, CreationFlags: windows.CREATE_NO_WINDOW}` to execute `uv tool install git+https://github.com/nanobot-ai/nanobot@main` for the primary update, falling back to `uv tool install nanobot-ai` if the first command fails. Capture command output using `CombinedOutput()` for detailed logging.
+The primary technical approach is straightforward: use `exec.LookPath("uv")` to verify uv is installed at startup (exit with error if not), then use `exec.Command` with `windows.SysProcAttr{HideWindow: true, CreationFlags: windows.CREATE_NO_WINDOW}` to execute `uv tool install --force git+https://github.com/nanobot-ai/nanobot@main` for the primary update, falling back to `uv tool install --force nanobot-ai` if the first command fails. Capture command output using `CombinedOutput()` for detailed logging. The `--force` flag ensures that updates work correctly even when nanobot is already installed.
 
 **Primary recommendation:** Create a dedicated `internal/updater` package with three components: (1) `checker.go` for uv installation verification using `exec.LookPath`, (2) `updater.go` for the update logic with GitHub primary and PyPI fallback, and (3) use the existing `windows.SysProcAttr` pattern from `lifecycle/stopper.go` and `starter.go` for hiding command windows.
 
@@ -115,7 +115,7 @@ func RunHiddenCommand(ctx context.Context, name string, args ...string) (string,
 
 // Example usage for update:
 func UpdateFromGitHub(ctx context.Context) error {
-    output, err := RunHiddenCommand(ctx, "uv", "tool", "install",
+    output, err := RunHiddenCommand(ctx, "uv", "tool", "install", "--force",
         "git+https://github.com/nanobot-ai/nanobot@main")
     if err != nil {
         return fmt.Errorf("github update failed: %w\nOutput: %s", err, output)
@@ -147,7 +147,7 @@ const (
 func Update(ctx context.Context, logger *slog.Logger) (UpdateResult, error) {
     // Primary: Install from GitHub main branch
     logger.Info("Attempting update from GitHub main branch")
-    output, err := RunHiddenCommand(ctx, "uv", "tool", "install",
+    output, err := RunHiddenCommand(ctx, "uv", "tool", "install", "--force",
         "git+https://github.com/nanobot-ai/nanobot@main")
     if err == nil {
         logger.Info("Update successful from GitHub",
@@ -161,7 +161,7 @@ func Update(ctx context.Context, logger *slog.Logger) (UpdateResult, error) {
         "github_output", output)
 
     // Fallback: Install stable version from PyPI
-    output, err = RunHiddenCommand(ctx, "uv", "tool", "install", "nanobot-ai")
+    output, err = RunHiddenCommand(ctx, "uv", "tool", "install", "--force", "nanobot-ai")
     if err == nil {
         logger.Info("Update successful from PyPI fallback",
             "source", "pypi",
@@ -244,6 +244,19 @@ cmd := exec.CommandContext(ctx, "uv", ...)
 - PyPI stable: just `nanobot-ai` (package name only)
 **Warning signs:** "Invalid requirement" or "cannot find repository" errors from uv
 
+### Pitfall 6: Missing --force Flag
+**What goes wrong:** Update command reports "already installed" but doesn't upgrade the package
+**Why it happens:** `uv tool install` without `--force` will not reinstall or upgrade already-installed packages
+**How to avoid:** Always include the `--force` flag in update commands:
+```go
+// Wrong - won't upgrade if already installed
+output, err := u.runCommand(ctx, "uv", "tool", "install", u.githubURL)
+
+// Correct - forces reinstall/upgrade
+output, err := u.runCommand(ctx, "uv", "tool", "install", "--force", u.githubURL)
+```
+**Warning signs:** Logs show "already installed" message but version remains unchanged
+
 ## Code Examples
 
 ### Complete Updater Package Structure
@@ -324,7 +337,7 @@ func (u *Updater) Update(ctx context.Context) (UpdateResult, error) {
 
 	// Primary: Try GitHub main branch
 	u.logger.Info("Starting update from GitHub main branch")
-	output, err := u.runCommand(ctx, "uv", "tool", "install", u.githubURL)
+	output, err := u.runCommand(ctx, "uv", "tool", "install", "--force", u.githubURL)
 	if err == nil {
 		u.logger.Info("Update successful from GitHub",
 			"source", "github",
@@ -337,7 +350,7 @@ func (u *Updater) Update(ctx context.Context) (UpdateResult, error) {
 		"github_output", truncateOutput(output))
 
 	// Fallback: Try PyPI stable version
-	output, err = u.runCommand(ctx, "uv", "tool", "install", u.pypiPackage)
+	output, err = u.runCommand(ctx, "uv", "tool", "install", "--force", u.pypiPackage)
 	if err == nil {
 		u.logger.Info("Update successful from PyPI fallback",
 			"source", "pypi",
@@ -437,8 +450,8 @@ func main() {
 |----|-------------|------------------|
 | UPDT-01 | Check if uv is installed on startup | Pattern 1: exec.LookPath for clean existence check |
 | UPDT-02 | Log error and exit if uv is not installed | Check at startup, use slog.Error + os.Exit(1) |
-| UPDT-03 | Install nanobot from GitHub main branch using uv | Pattern 3: `uv tool install git+https://github.com/nanobot-ai/nanobot@main` |
-| UPDT-04 | Fallback to uv tool install nanobot-ai stable version if update fails | Pattern 3: Try GitHub first, fall back to `uv tool install nanobot-ai` |
+| UPDT-03 | Install nanobot from GitHub main branch using uv | Pattern 3: `uv tool install --force git+https://github.com/nanobot-ai/nanobot@main` |
+| UPDT-04 | Fallback to uv tool install nanobot-ai stable version if update fails | Pattern 3: Try GitHub first, fall back to `uv tool install --force nanobot-ai` |
 | UPDT-05 | Log detailed update process information | Pattern 2 & 3: Capture CombinedOutput, log with context at each step |
 | INFR-10 | Hide command window when executing uv commands | Pattern 2: SysProcAttr with HideWindow + CREATE_NO_WINDOW |
 
