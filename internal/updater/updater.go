@@ -37,7 +37,7 @@ type Updater struct {
 func NewUpdater(logger *slog.Logger) *Updater {
 	return &Updater{
 		logger:        logger,
-		githubURL:     "git+https://github.com/HKUDS/nanobot.git",
+		githubURL:     "git+https://github.com/nanobot-ai/nanobot@main",
 		pypiPackage:   "nanobot-ai",
 		updateTimeout: 5 * time.Minute,
 	}

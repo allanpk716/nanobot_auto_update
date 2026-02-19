@@ -2,12 +2,14 @@ package logging
 
 import (
 	"bytes"
+	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
+	"time"
 )
 
 // TestLoggerFormat verifies the exact log output format:
@@ -83,8 +85,9 @@ func TestNewLogger(t *testing.T) {
 	// Log a test message
 	logger.Info("test message")
 
-	// Verify the log file was created
-	logFile := filepath.Join(tempDir, "app.log")
+	// Verify the log file was created with date-based naming
+	today := time.Now().Format("2006-01-02")
+	logFile := filepath.Join(tempDir, fmt.Sprintf("app-%s.log", today))
 	content, err := os.ReadFile(logFile)
 	if err != nil {
 		t.Fatalf("Failed to read log file: %v", err)
