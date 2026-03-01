@@ -66,10 +66,15 @@ func restartAsDaemon() (bool, error) {
 	// Set environment variable to mark as daemon
 	cmd.Env = append(os.Environ(), "NANOBOT_UPDATER_DAEMON=1")
 
-	// Redirect stdio to avoid holding any handles
+	// Redirect stdio to log file for debugging daemon process
+	// This ensures we capture any errors during daemon execution
+	logFile, err := os.OpenFile("./logs/daemon.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	if err != nil {
+		return false, fmt.Errorf("failed to create daemon log file: %w", err)
+	}
 	cmd.Stdin = nil
-	cmd.Stdout = nil
-	cmd.Stderr = nil
+	cmd.Stdout = logFile
+	cmd.Stderr = logFile
 
 	// Start detached process
 	if err := cmd.Start(); err != nil {

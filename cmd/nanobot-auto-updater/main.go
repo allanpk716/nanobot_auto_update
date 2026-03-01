@@ -89,7 +89,8 @@ func main() {
 
 	// Daemonize if running in --update-now mode (called by nanobot)
 	// This ensures the updater process survives when nanobot is terminated
-	if *updateNow {
+	// Can be disabled with NO_DAEMON=1 environment variable for debugging
+	if *updateNow && os.Getenv("NO_DAEMON") != "1" {
 		if daemonized, err := lifecycle.MakeDaemon(); err != nil {
 			fmt.Fprintf(os.Stderr, "Warning: failed to daemonize: %v\n", err)
 			// Continue anyway - may work if parent doesn't exit immediately
@@ -118,6 +119,13 @@ func main() {
 	}
 	logger.Info("uv is installed and available")
 
+	// Initialize notifier with config
+	notifCfg := notifier.Config{
+		ApiToken: cfg.Pushover.ApiToken,
+		UserKey:  cfg.Pushover.UserKey,
+	}
+	notif := notifier.NewWithConfig(notifCfg, logger)
+
 	logger.Info("Application starting",
 		"version", Version,
 		"config", *configFile,
@@ -145,6 +153,10 @@ func main() {
 		// Stop nanobot before update
 		if err := lifecycleMgr.StopForUpdate(ctx); err != nil {
 			logger.Error("Failed to stop nanobot", "error", err.Error())
+
+			// Send failure notification
+			notif.NotifyFailure("Stop nanobot", err)
+
 			result = UpdateNowResult{
 				Success:  false,
 				Error:    fmt.Sprintf("Failed to stop nanobot: %s", err.Error()),
@@ -156,9 +168,30 @@ func main() {
 
 		// Execute update
 		u := updater.NewUpdater(logger)
+
+		// Log context before update
+		logger.Info("Update context",
+			"working_dir", getWorkingDir(),
+			"timeout", timeout.String(),
+			"daemon_env", os.Getenv("NANOBOT_UPDATER_DAEMON"),
+			"no_daemon_env", os.Getenv("NO_DAEMON"),
+			"uv_version", updater.GetUvVersion(),
+			"pid", os.Getpid())
+
 		updateResult, err := u.Update(ctx)
 		if err != nil {
-			logger.Error("Update failed", "result", updateResult, "error", err.Error())
+			logger.Error("Update failed",
+				"result", updateResult,
+				"error", err.Error(),
+				"timeout", timeout.String(),
+				"daemon_mode", os.Getenv("NANOBOT_UPDATER_DAEMON"),
+				"no_daemon", os.Getenv("NO_DAEMON"),
+				"working_dir", getWorkingDir(),
+				"uv_version", updater.GetUvVersion())
+
+			// Send failure notification
+			notif.NotifyFailure("Update", err)
+
 			result = UpdateNowResult{
 				Success:  false,
 				Error:    err.Error(),
@@ -180,12 +213,13 @@ func main() {
 			Message: "Update completed",
 		}
 		logger.Info("Update completed", "result", updateResult)
+
+		// Send success notification
+		notif.NotifySuccess("Update", fmt.Sprintf("Source: %s\nVersion may have changed.", updateResult))
+
 		outputJSON(result)
 		os.Exit(0)
 	}
-
-	// Initialize notifier (logs warning if Pushover not configured)
-	notif := notifier.New(logger)
 
 	// Initialize scheduler with overlap prevention
 	sched := scheduler.New(logger)
@@ -270,3 +304,12 @@ func main() {
 //    go run ./cmd/nanobot-auto-updater --version
 //    Should show version and exit immediately
 //
+
+// getWorkingDir returns the current working directory for logging
+func getWorkingDir() string {
+	dir, err := os.Getwd()
+	if err != nil {
+		return fmt.Sprintf("error: %v", err)
+	}
+	return dir
+}

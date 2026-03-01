@@ -43,6 +43,20 @@ func NewUpdater(logger *slog.Logger) *Updater {
 	}
 }
 
+// GetUvVersion returns the installed uv version for diagnostic purposes
+func GetUvVersion() string {
+	cmd := exec.Command("uv", "--version")
+	cmd.SysProcAttr = &windows.SysProcAttr{
+		HideWindow:    true,
+		CreationFlags: windows.CREATE_NO_WINDOW,
+	}
+	output, err := cmd.Output()
+	if err != nil {
+		return fmt.Sprintf("error: %v", err)
+	}
+	return string(bytes.TrimSpace(output))
+}
+
 // runCommand executes a command with hidden window and returns combined output
 func (u *Updater) runCommand(ctx context.Context, name string, args ...string) (string, error) {
 	cmd := exec.CommandContext(ctx, name, args...)
@@ -75,9 +89,40 @@ func (u *Updater) Update(ctx context.Context) (UpdateResult, error) {
 	ctx, cancel := context.WithTimeout(ctx, u.updateTimeout)
 	defer cancel()
 
+	// Start heartbeat logging goroutine to track update progress
+	heartbeatCtx, heartbeatCancel := context.WithCancel(context.Background())
+	defer heartbeatCancel()
+	go func() {
+		ticker := time.NewTicker(10 * time.Second)
+		defer ticker.Stop()
+		startTime := time.Now()
+		for {
+			select {
+			case <-heartbeatCtx.Done():
+				return
+			case <-ticker.C:
+				elapsed := time.Since(startTime).Round(time.Second)
+				u.logger.Info("Update in progress - heartbeat",
+					"elapsed", elapsed.String(),
+					"timeout", u.updateTimeout.String())
+			}
+		}
+	}()
+
 	// Primary: Try GitHub main branch
-	u.logger.Info("Starting forced update from GitHub main branch")
+	u.logger.Info("Starting forced update from GitHub main branch",
+		"command", "uv tool install --force "+u.githubURL,
+		"timeout", u.updateTimeout.String())
+
 	output, err := u.runCommand(ctx, "uv", "tool", "install", "--force", u.githubURL)
+
+	// Always log command completion for debugging
+	u.logger.Info("GitHub update command completed",
+		"success", err == nil,
+		"error", err,
+		"output_length", len(output),
+		"output", truncateOutput(output))
+
 	if err == nil {
 		u.logger.Info("Update successful from GitHub",
 			"source", "github",
@@ -90,7 +135,18 @@ func (u *Updater) Update(ctx context.Context) (UpdateResult, error) {
 		"github_output", truncateOutput(output))
 
 	// Fallback: Try PyPI stable version
+	u.logger.Info("Attempting PyPI fallback",
+		"command", "uv tool install --force "+u.pypiPackage)
+
 	output, err = u.runCommand(ctx, "uv", "tool", "install", "--force", u.pypiPackage)
+
+	// Always log command completion for debugging
+	u.logger.Info("PyPI fallback command completed",
+		"success", err == nil,
+		"error", err,
+		"output_length", len(output),
+		"output", truncateOutput(output))
+
 	if err == nil {
 		u.logger.Info("Update successful from PyPI fallback",
 			"source", "pypi",
