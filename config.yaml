@@ -6,3 +6,8 @@ cron: "0 3 * * *"
 nanobot:
   port: 18790
   startup_timeout: 30s
+
+# Pushover notification settings
+pushover:
+  api_token: "aqquyv31y73mzh9k3qfptpd1zyi73z"
+  user_key: "uw3b9cbopa5jn843xqxwknzcbjzoe5"

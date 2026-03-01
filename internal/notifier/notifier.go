@@ -8,6 +8,12 @@ import (
 	"github.com/gregdel/pushover"
 )
 
+// Config holds Pushover configuration
+type Config struct {
+	ApiToken string
+	UserKey  string
+}
+
 // Notifier handles push notification sending via Pushover
 type Notifier struct {
 	client    *pushover.Pushover
@@ -16,7 +22,7 @@ type Notifier struct {
 	enabled   bool
 }
 
-// New creates a notifier from environment variables
+// New creates a notifier from environment variables (for backward compatibility)
 // If PUSHOVER_TOKEN or PUSHOVER_USER are not set, returns a disabled notifier
 // that logs warnings instead of failing
 func New(logger *slog.Logger) *Notifier {
@@ -27,6 +33,39 @@ func New(logger *slog.Logger) *Notifier {
 		logger.Warn("Pushover notifications disabled",
 			"reason", "PUSHOVER_TOKEN and/or PUSHOVER_USER environment variables not set",
 			"hint", "Set both variables to enable failure notifications")
+		return &Notifier{
+			enabled: false,
+			logger:  logger,
+		}
+	}
+
+	logger.Info("Pushover notifications enabled (from env)")
+	return &Notifier{
+		client:    pushover.New(token),
+		recipient: pushover.NewRecipient(user),
+		logger:    logger,
+		enabled:   true,
+	}
+}
+
+// NewWithConfig creates a notifier from Config struct
+// Falls back to environment variables if config is empty
+func NewWithConfig(cfg Config, logger *slog.Logger) *Notifier {
+	token := cfg.ApiToken
+	user := cfg.UserKey
+
+	// Fallback to environment variables if config is empty
+	if token == "" {
+		token = os.Getenv("PUSHOVER_TOKEN")
+	}
+	if user == "" {
+		user = os.Getenv("PUSHOVER_USER")
+	}
+
+	if token == "" || user == "" {
+		logger.Warn("Pushover notifications disabled",
+			"reason", "Pushover config not provided and env vars not set",
+			"hint", "Set pushover.api_token and pushover.user_key in config.yaml, or set PUSHOVER_TOKEN and PUSHOVER_USER env vars")
 		return &Notifier{
 			enabled: false,
 			logger:  logger,
@@ -74,5 +113,12 @@ func (n *Notifier) Notify(title, message string) error {
 func (n *Notifier) NotifyFailure(operation string, err error) error {
 	title := fmt.Sprintf("Nanobot Update Failed: %s", operation)
 	message := fmt.Sprintf("Operation: %s\n\nError: %v", operation, err)
+	return n.Notify(title, message)
+}
+
+// NotifySuccess is a convenience method for sending success notifications
+func (n *Notifier) NotifySuccess(operation, details string) error {
+	title := fmt.Sprintf("Nanobot Update Success: %s", operation)
+	message := fmt.Sprintf("Operation: %s\n\n%s", operation, details)
 	return n.Notify(title, message)
 }

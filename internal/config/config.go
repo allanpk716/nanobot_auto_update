@@ -15,10 +15,17 @@ type NanobotConfig struct {
 	StartupTimeout time.Duration `yaml:"startup_timeout" mapstructure:"startup_timeout"`
 }
 
+// PushoverConfig holds configuration for Pushover notifications.
+type PushoverConfig struct {
+	ApiToken string `yaml:"api_token" mapstructure:"api_token"`
+	UserKey  string `yaml:"user_key" mapstructure:"user_key"`
+}
+
 // Config holds the main application configuration.
 type Config struct {
-	Cron    string        `yaml:"cron" mapstructure:"cron"`
-	Nanobot NanobotConfig `yaml:"nanobot" mapstructure:"nanobot"`
+	Cron     string         `yaml:"cron" mapstructure:"cron"`
+	Nanobot  NanobotConfig  `yaml:"nanobot" mapstructure:"nanobot"`
+	Pushover PushoverConfig `yaml:"pushover" mapstructure:"pushover"`
 }
 
 // defaults sets the default values for the configuration.
@@ -26,6 +33,8 @@ func (c *Config) defaults() {
 	c.Cron = "0 3 * * *"
 	c.Nanobot.Port = 18790
 	c.Nanobot.StartupTimeout = 30 * time.Second
+	c.Pushover.ApiToken = ""
+	c.Pushover.UserKey = ""
 }
 
 // Validate validates the NanobotConfig values.
@@ -85,6 +94,8 @@ func Load(configPath string) (*Config, error) {
 	v.SetDefault("cron", cfg.Cron)
 	v.SetDefault("nanobot.port", cfg.Nanobot.Port)
 	v.SetDefault("nanobot.startup_timeout", cfg.Nanobot.StartupTimeout.String())
+	v.SetDefault("pushover.api_token", cfg.Pushover.ApiToken)
+	v.SetDefault("pushover.user_key", cfg.Pushover.UserKey)
 
 	// Read config file (optional - use defaults if missing)
 	if err := v.ReadInConfig(); err != nil {
