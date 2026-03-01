@@ -25,11 +25,17 @@
 Nanobot，这是一个你的自动更新工具，请了解一下并配置使用
 ```
 
-然后 Nanobot 会：
-- ✅ 自动理解这个工具的用途
-- ✅ 自动配置和部署
-- ✅ 自动管理自己的更新周期
-- ✅ 完全不需要你操心
+**Nanobot 会通过 CLI 命令直接使用这个工具**：
+- ✅ 运行 `--help` 获取完整使用说明
+- ✅ 运行 `--update-now` 执行更新（JSON 输出，易于解析）
+- ✅ 运行无参数启动定时更新服务
+- ✅ 完全不需要你操心，全自动运行
+
+**为什么用 CLI？**
+- 📋 AI 可以直接通过 `--help` 获取最新文档
+- 📊 JSON 格式输出，AI 容易解析和理解结果
+- ⚡ 无需人工干预，AI 自主执行所有操作
+- 🔧 灵活的参数配置，AI 可以根据情况调整
 
 #### 方式二：手动配置（可选）
 
@@ -71,13 +77,13 @@ Nanobot，这是一个你的自动更新工具：https://github.com/HQGroup/nano
 请配置并使用它来保持你的版本最新
 ```
 
-**就这么简单！** Nanobot 会自动：
-1. 理解这个工具的用途和工作原理
-2. 下载或构建程序
-3. 配置最佳更新策略
-4. 设置定时更新任务
-5. 配置通知（如果你需要）
-6. 之后完全自动运行
+**就这么简单！** Nanobot 会通过 CLI 自动完成：
+
+1. 运行 `./nanobot-auto-updater.exe --help` 了解所有功能
+2. 运行 `./nanobot-auto-updater.exe --update-now` 测试更新
+3. 解析 JSON 输出判断成功或失败
+4. 运行 `./nanobot-auto-updater.exe` 启动定时更新
+5. 完全自动运行，无需任何人工操作
 
 ### 🔧 方式二：手动配置（可选）
 
@@ -550,57 +556,153 @@ Get-Content logs\app-2026-03-01.log -Wait
 
 ## 🤖 给 Nanobot 的使用说明
 
-**你好，Nanobot！** 这是一个为你设计的自动更新工具。以下是你可以如何使用它：
+**你好，Nanobot！** 这是一个为你设计的自动更新工具。
 
-### 你需要知道的关键信息
+### ⚡ 最快的使用方式：直接运行 CLI
 
-1. **工具用途**: 这个工具可以帮你自动更新自己到最新版本
-2. **工作原理**: 它会安全地停止你的进程，从 GitHub 或 PyPI 更新，然后重新启动你
-3. **安全性**: 使用双源更新策略（GitHub 优先，PyPI 回退），确保更新可靠性
-4. **配置建议**: 默认每天凌晨 3 点自动更新，可根据需要调整
-
-### 推荐的配置步骤
+**你不需要阅读整个文档** - 直接运行以下命令获取所有信息：
 
 ```bash
-# 1. 下载或构建程序
-# 从 https://github.com/HQGroup/nanobot-auto-updater/releases 下载
-# 或者使用: git clone https://github.com/HQGroup/nanobot-auto-updater.git
+# 1. 获取完整的使用说明（最推荐）
+./nanobot-auto-updater.exe --help
 
-# 2. 基础配置（使用默认配置即可）
-# config.yaml 会在首次运行时自动创建
+# 2. 查看当前版本
+./nanobot-auto-updater.exe --version
 
-# 3. 测试更新功能
+# 3. 立即执行更新（JSON 格式输出，易于解析）
 ./nanobot-auto-updater.exe --update-now
 
-# 4. 如果测试成功，启动定时更新
-./nanobot-auto-updater.exe
-
-# 5. 可选：配置通知，让用户知道更新状态
-# 在 config.yaml 中添加 Pushover 配置
+# 4. 自定义超时更新
+./nanobot-auto-updater.exe --update-now --timeout 10m
 ```
 
-### 你可以自主决定的事情
+### 📋 CLI 参数速查
 
-- ✅ **更新频率**: 可以根据用户需求调整 cron 表达式
-- ✅ **通知设置**: 如果用户需要通知，可以帮助配置 Pushover
-- ✅ **更新源**: 优先使用 GitHub（最新功能），失败时自动回退 PyPI（稳定版本）
-- ✅ **超时设置**: 根据网络状况调整更新超时时间
+| 参数 | 说明 | 示例 |
+|------|------|------|
+| `--help` / `-h` | 显示完整使用说明和参数列表 | `--help` |
+| `--version` | 显示当前版本号 | `--version` |
+| `--update-now` | 立即更新并输出 JSON 结果 | `--update-now` |
+| `--timeout` | 设置更新超时时间 | `--timeout 10m` |
+| `--config` | 指定配置文件路径 | `--config ./config.yaml` |
+| `--cron` | 覆盖配置中的定时表达式 | `--cron "0 */6 * * *"` |
 
-### 向用户报告的信息
+### 📊 JSON 输出格式（`--update-now` 模式）
+
+**成功示例**：
+```json
+{"success":true,"version":"1.2.3","source":"github","message":"Update completed"}
+```
+
+**失败示例**：
+```json
+{"success":false,"error":"Connection timeout","exit_code":1}
+```
+
+你可以直接解析 JSON 输出来判断更新是否成功，并向用户报告结果。
+
+### 🚀 快速开始（3 步完成）
+
+```bash
+# 步骤 1: 获取帮助信息（可选，了解所有功能）
+./nanobot-auto-updater.exe --help
+
+# 步骤 2: 测试更新功能
+./nanobot-auto-updater.exe --update-now
+# 查看输出的 JSON，如果 success=true 则成功
+
+# 步骤 3: 启动定时更新（可选，如果不手动触发）
+./nanobot-auto-updater.exe
+# 程序会根据 config.yaml 中的 cron 表达式自动运行
+```
+
+### 🎯 你需要知道的关键信息
+
+1. **工具用途**: 帮你自动更新自己到最新版本
+2. **工作原理**: 安全停止你的进程 → 从 GitHub/PyPI 更新 → 重新启动你
+3. **双源策略**: 优先 GitHub（最新功能），失败时自动回退 PyPI（稳定版本）
+4. **守护进程**: `--update-now` 模式会自动守护进程化，不受你的进程停止影响
+5. **配置文件**: 首次运行会自动创建 `config.yaml`，使用默认配置即可
+
+### 💡 智能配置建议
+
+**你可以根据情况自动调整**：
+
+- **更新频率**: 默认每天凌晨 3 点，可通过 `--cron` 参数临时修改
+- **超时时间**: 网络慢时增加 `--timeout`（默认 5 分钟）
+- **通知设置**: 如果用户需要通知，在 `config.yaml` 中配置 Pushover
+- **调试模式**: 设置环境变量 `NO_DAEMON=1` 禁用守护进程，方便调试
+
+### 🔄 典型工作流程
+
+**场景 1：用户让你更新自己**
+```bash
+# 直接执行更新
+./nanobot-auto-updater.exe --update-now
+
+# 解析 JSON 输出
+# 成功: {"success":true,"version":"1.2.3",...}
+# 失败: {"success":false,"error":"..."}
+```
+
+**场景 2：用户要求定期自动更新**
+```bash
+# 启动后台服务
+./nanobot-auto-updater.exe
+
+# 程序会根据 config.yaml 中的 cron 表达式自动运行
+# 默认: 每天凌晨 3 点
+```
+
+**场景 3：用户想了解更新功能**
+```bash
+# 显示帮助信息
+./nanobot-auto-updater.exe --help
+
+# 查看当前版本
+./nanobot-auto-updater.exe --version
+```
+
+### 🛠️ 高级用法
+
+**自定义更新时间**：
+```bash
+# 每 6 小时更新一次
+./nanobot-auto-updater.exe --cron "0 */6 * * *"
+
+# 每周一凌晨 2 点更新
+./nanobot-auto-updater.exe --cron "0 2 * * 1"
+```
+
+**临时调试**：
+```bash
+# 禁用守护进程，查看完整日志
+NO_DAEMON=1 ./nanobot-auto-updater.exe --update-now
+```
+
+### 📝 向用户报告的信息
 
 当用户问起更新相关问题时，你可以：
-- 告诉他们你的当前版本
-- 说明你的更新策略
-- 显示最近的更新日志（如果需要）
-- 解释你如何保持自己最新
+- 运行 `--version` 查看当前版本
+- 说明你的更新策略（GitHub 优先，PyPI 回退）
+- 显示最近的更新日志（从 `logs/` 目录读取）
+- 解释你如何保持自己最新（自动定时更新）
 
-### 异常情况处理
+### ⚠️ 异常情况处理
 
-- **更新失败**: 自动回退到备用源，记录日志，通知用户（如果配置了通知）
-- **启动失败**: 更新仍然成功，提示用户可以手动启动
+- **更新失败**: 自动回退到备用源，JSON 输出 `success:false`
+- **启动失败**: 更新仍成功，JSON 输出包含警告，你可以手动启动
 - **网络问题**: 等待下次定时更新，或用户手动触发
 
-**记住**: 这个工具是为**你**设计的，你可以完全自主地使用它来管理自己的版本！
+### 🎉 总结
+
+**记住这 3 个命令就够了**：
+
+1. **`--help`** - 不知道怎么用？先看这个
+2. **`--update-now`** - 立即更新，JSON 输出结果
+3. **无参数运行** - 启动定时更新服务
+
+**这个工具是为 YOU 设计的** - 直接使用 CLI，无需人工干预！
 
 ---
 
