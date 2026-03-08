@@ -168,6 +168,7 @@ func main() {
 
 		// Execute update
 		u := updater.NewUpdater(logger)
+		u.SetRepoPath(cfg.Nanobot.RepoPath)
 
 		// Log context before update
 		logger.Info("Update context",
@@ -207,6 +208,12 @@ func main() {
 			logger.Warn("Failed to start nanobot after update", "error", err.Error())
 		}
 
+		// Sync local git repo after successful update
+		if err := u.SyncRepo(ctx); err != nil {
+			// Log warning but don't fail - update was successful
+			logger.Warn("Failed to sync local repo", "error", err.Error())
+		}
+
 		result = UpdateNowResult{
 			Success: true,
 			Source:  string(updateResult),
@@ -226,6 +233,7 @@ func main() {
 
 	// Create updater instance
 	u := updater.NewUpdater(logger)
+	u.SetRepoPath(cfg.Nanobot.RepoPath)
 
 	// Register the update job
 	err = sched.AddJob(cfg.Cron, func() {
@@ -245,6 +253,11 @@ func main() {
 		}
 
 		logger.Info("Scheduled update completed successfully", "result", result)
+
+		// Sync local git repo after successful update
+		if err := u.SyncRepo(context.Background()); err != nil {
+			logger.Warn("Failed to sync local repo after scheduled update", "error", err.Error())
+		}
 	})
 	if err != nil {
 		logger.Error("Failed to register scheduled job", "error", err.Error())

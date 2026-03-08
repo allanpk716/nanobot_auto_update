@@ -21,7 +21,7 @@ func TestNewUpdater(t *testing.T) {
 		t.Error("Logger not set correctly")
 	}
 
-	expectedGithubURL := "git+https://github.com/nanobot-ai/nanobot@main"
+	expectedGithubURL := "git+https://github.com/HKUDS/nanobot.git"
 	if u.githubURL != expectedGithubURL {
 		t.Errorf("Expected githubURL %q, got %q", expectedGithubURL, u.githubURL)
 	}

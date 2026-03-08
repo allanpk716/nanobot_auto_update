@@ -6,6 +6,8 @@ cron: "0 3 * * *"
 nanobot:
   port: 18790
   startup_timeout: 30s
+  # Local git repo path to sync after update (optional)
+  repo_path: "C:\\Users\\allan716\\.nanobot\\nanobot-repo"
 
 # Pushover notification settings
 pushover:
