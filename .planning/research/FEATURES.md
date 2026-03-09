@@ -1,10 +1,8 @@
 # Feature Research
 
-**Domain:** Windows background service / CLI tool for auto-updating Python tools
-**Researched:** 2025-02-18
-**Confidence:** MEDIUM (based on WebSearch and industry patterns; limited official documentation for niche domain)
-
----
+**Domain:** Multi-instance process management and orchestration
+**Researched:** 2026-03-09
+**Confidence:** MEDIUM
 
 ## Feature Landscape
 
@@ -14,12 +12,12 @@ Features users assume exist. Missing these = product feels incomplete.
 
 | Feature | Why Expected | Complexity | Notes |
 |---------|--------------|------------|-------|
-| **Scheduling** | Auto-updater implies automation; users expect to set-and-forget | LOW | Cron expressions are standard. Libraries like `robfig/cron` in Go make this trivial. |
-| **Configuration File** | Persistent settings without re-specifying every time | LOW | YAML is expected for DevOps tools. Viper in Go handles this well. |
-| **Command-line Arguments** | Override config for testing, one-off runs, debugging | LOW | Standard Go `flag` or `cobra` library. |
-| **Logging** | Visibility into what the tool is doing | LOW | Users expect logs to diagnose issues. |
-| **Error Handling** | Graceful failures, not silent crashes | MEDIUM | Should catch errors, log them, continue/retry. |
-| **Background/Headless Operation** | Service runs without user interaction | LOW | Windows service or hidden console window. |
+| **Instance Configuration** | Users need to define what instances exist | LOW | YAML array structure with name, port, command fields |
+| **Unique Instance Names** | Required for identification and logging | LOW | Validate no duplicates in config, fail fast on startup |
+| **Stop All Instances** | Basic orchestration operation | LOW | Iterate through instances, stop each (reuse existing stop logic) |
+| **Start All Instances** | Basic orchestration operation | LOW | Iterate through instances, start each with configured command |
+| **Failure Notification** | Existing v0.1 feature, users expect it to continue | MEDIUM | Report which instances failed, include instance name in message |
+| **Graceful Degradation** | Some instances succeed, some fail - don't abort all | MEDIUM | Continue starting other instances when one fails |
 
 ### Differentiators (Competitive Advantage)
 
@@ -27,16 +25,10 @@ Features that set the product apart. Not required, but valuable.
 
 | Feature | Value Proposition | Complexity | Notes |
 |---------|-------------------|------------|-------|
-| **Failure Notifications (Pushover/Email/Slack)** | Proactive alerting when updates fail | MEDIUM | Pushover is simple; Slack webhooks add flexibility. Multi-channel = higher value. |
-| **Automatic Rollback/Fallback** | Resilience: if update fails, revert to last known good | MEDIUM-HIGH | Requires version tracking, backup before update. Complex state management. |
-| **Retry with Exponential Backoff** | Handles transient network issues gracefully | LOW-MEDIUM | Standard resilience pattern. Prevents retry storms. |
-| **Log Rotation** | Prevents disk fill-up on long-running services | LOW | Built into some logging libraries; otherwise needs external tool or custom code. |
-| **Dependency Checking (uv presence)** | Fail fast with clear message if prerequisites missing | LOW | Simple check before attempting update. |
-| **Maintenance Windows** | Only update during specified hours to avoid disruption | MEDIUM | Extends scheduling; adds time-window constraints. |
-| **Dry Run Mode** | Test configuration without making changes | LOW | `--dry-run` flag; simulate actions. |
-| **Version Pinning** | Update to specific version, not always latest | LOW-MEDIUM | Add `--version` flag; handle semver or exact tags. |
-| **Health Checks / Self-monitoring** | Periodically verify service is functioning | MEDIUM | Optional feature; could expose simple HTTP endpoint or write heartbeat file. |
-| **Update Verification** | Verify download integrity (checksums, signatures) | MEDIUM | Security feature; requires publisher to provide signatures. |
+| **Instance Health Status** | Know which instances are running vs failed | MEDIUM | Track state per instance, report in logs and notifications |
+| **Configurable Retry Policy** | Auto-retry failed instances | HIGH | Defer to v0.3 - adds significant complexity, needs backoff logic |
+| **Individual Instance Control** | Stop/start specific instance by name | MEDIUM | Future consideration for v0.3 - CLI flags for targeting specific instances |
+| **Parallel Instance Startup** | Start instances concurrently for faster recovery | HIGH | Defer to v0.3 - requires goroutine management, error aggregation |
 
 ### Anti-Features (Commonly Requested, Often Problematic)
 
@@ -44,189 +36,207 @@ Features that seem good but create problems.
 
 | Feature | Why Requested | Why Problematic | Alternative |
 |---------|---------------|-----------------|-------------|
-| **GUI Interface** | "Easier configuration" | Adds massive complexity; contradicts CLI/service nature; Windows GUI in Go is painful | Web UI or TUI if needed; keep CLI-first |
-| **Update History / Database** | "Track all changes" | Bloats scope; requires storage; parsing/persistence complexity | Log files provide history; external log aggregation if needed |
-| **Auto-start on Boot** | "Run without thinking" | Windows registry manipulation; service registration complexity; user may not want always-on | Document manual setup; provide helper script if needed |
-| **Cross-platform Support** | "Reach more users" | Triples testing burden; different service managers; different package managers | Start Windows-only; add platforms based on demand |
-| **Real-time Update Checking** | "Always on latest" | Constant network requests; battery/network waste; no benefit over scheduled checks | Scheduled checks are sufficient; hourly is aggressive enough |
-| **Auto-restart Service After Update** | "Seamless updates" | Self-modifying executable; Windows file locks; dangerous edge cases | Document manual restart; exit cleanly and let service manager restart |
-| **Built-in Package Management** | "Handle everything" | Reinventing uv/pip; maintenance nightmare; scope creep | Use uv for what it's designed; focus on orchestration |
-| **Complex Notification Rules** | "Only notify on certain conditions" | Configuration bloat; diminishing returns | Simple on/off for notifications; let users filter on Pushover side |
-
----
+| **Rolling Updates (sequential)** | Maintain availability during update | Not applicable - nanobot instances are stateless agents, no traffic to route | All-at-once is simpler and appropriate for this use case |
+| **Dependency Ordering** | Start instances in specific order | Adds complexity for minimal benefit in this single-tool context | Parallel start with graceful degradation handles failures adequately |
+| **Auto-restart on Crash** | Keep instances running | Conflicts with update orchestration, creates race conditions | Cron-based health checks or external monitoring is better fit |
 
 ## Feature Dependencies
 
 ```
-[Configuration File]
-    └──required by──> [Scheduling]
-    └──required by──> [Failure Notifications]
-    └──required by──> [Log Rotation]
+[Multi-Instance Configuration]
+    └──requires──> [Instance Name Validation]
+    └──requires──> [Port Detection per Instance]
 
-[Logging]
-    └──required by──> [Failure Notifications]
-    └──required by──> [Retry with Exponential Backoff]
-    └──required by──> [Log Rotation]
+[Stop All Instances]
+    └──requires──> [Instance Configuration]
+    └──requires──> [Process Detection by Port] (exists from v0.1)
 
-[Dependency Checking]
-    └──required by──> [Update Execution]
-    └──blocks gracefully──> [Update Execution] if missing
+[Update Operation]
+    └──requires──> [Stop All Instances]
+    └──requires──> [Update Binary] (exists from v0.1)
 
-[Automatic Rollback/Fallback]
-    └──requires──> [Version Tracking]
-    └──requires──> [Backup Before Update]
+[Start All Instances]
+    └──requires──> [Update Operation]
+    └──requires──> [Graceful Degradation]
+    └──requires──> [Failure Notification per Instance]
 
-[Maintenance Windows]
-    └──requires──> [Scheduling]
-    └──extends──> [Cron-based scheduling]
+[Graceful Degradation]
+    └──requires──> [Failure Notification per Instance]
 
-[Update Verification]
-    └──requires──> [Checksums from Publisher]
-    └──conflicts with──> [Simple GitHub download] (unless GH provides checksums)
-
-[Real-time Update Checking]
-    └──conflicts──> [Low Resource Usage]
-    └──conflicts──> [Battery Efficiency]
+[Failure Notification per Instance]
+    └──requires──> [Instance Configuration]
+    └──enhances──> [Pushover Integration] (exists from v0.1)
 ```
 
 ### Dependency Notes
 
-- **Configuration File requires Logging:** Logs need to indicate which config was loaded, errors parsing config.
-- **Failure Notifications requires Logging:** Notification message should include relevant log context.
-- **Automatic Rollback requires Version Tracking:** Must know which version to roll back to; requires storing previous version info.
-- **Maintenance Windows extends Scheduling:** Builds on cron but adds time-window filter; both must work together.
-- **Update Verification conflicts with Simple GitHub download:** GitHub releases can have checksums, but not all projects provide them; adds verification step that may fail.
+- **Multi-Instance Configuration requires Instance Name Validation:** Duplicate names would cause ambiguity in logs and notifications. Validate on startup, fail fast with clear error message.
 
----
+- **Multi-Instance Configuration requires Port Detection per Instance:** Each instance runs on a unique port. Config must specify port per instance for process detection (existing v0.1 logic adapted).
+
+- **Start All Instances requires Graceful Degradation:** If one instance fails to start, continue starting others. Don't abort the entire operation because of a single instance failure.
+
+- **Graceful Degradation requires Failure Notification per Instance:** Users need to know which specific instances failed. Aggregate failures and send single notification with all failed instance names.
+
+- **Failure Notification per Instance enhances Pushover Integration:** Reuse existing Pushover setup from v0.1, extend message format to include instance names.
 
 ## MVP Definition
 
-### Launch With (v1)
+### Launch With (v0.2)
 
-Minimum viable product - what's needed to validate the concept.
+Minimum viable product - what's needed to validate multi-instance management.
 
-- [x] **Scheduling (cron-based)** — Core value proposition; without this, it's not an auto-updater
-- [x] **Configuration File (YAML)** — Required for persistent settings
-- [x] **Command-line Arguments** — For testing, one-off runs, config override
-- [x] **Logging** — Essential for debugging and monitoring
-- [x] **Background/Headless Operation** — Core requirement for background service
-- [x] **Dependency Checking (uv)** — Fail fast; core prerequisite
-- [x] **Failure Notifications (Pushover)** — Single notification channel to start
+- [x] **Instance Configuration (YAML)** - Essential: Define instances as array with name, port, start_command fields
+- [x] **Instance Name Validation** - Essential: Detect duplicates on startup, fail fast
+- [x] **Stop All Instances** - Essential: Iterate config, stop each by port (reuse v0.1 logic)
+- [x] **Start All Instances** - Essential: Iterate config, start each with command, capture errors per instance
+- [x] **Graceful Degradation** - Essential: Continue starting other instances when one fails
+- [x] **Per-Instance Failure Notification** - Essential: Report which instances failed in Pushover message
 
-### Add After Validation (v1.x)
+### Add After Validation (v0.3)
 
-Features to add once core is working.
+Features to add once multi-instance is working.
 
-- [ ] **Log Rotation** — Needed for production use; prevents disk fill-up
-- [ ] **Retry with Exponential Backoff** — Improves reliability for transient failures
-- [ ] **Automatic Rollback/Fallback** — Current project requirement; defer if MVP proves complex
-- [ ] **Dry Run Mode** — Helpful for testing; not critical for initial validation
-- [ ] **Additional Notification Channels (Slack, Email)** — Expand reach after Pushover validates
+- [ ] **Instance Health Status Tracking** - Track running/stopped/failed state per instance for better logging
+- [ ] **Individual Instance Control** - CLI flags like `-instance <name>` to target specific instance
+- [ ] **Parallel Instance Startup** - Start instances concurrently for faster recovery after update
 
 ### Future Consideration (v2+)
 
-Features to defer until product-market fit is established.
+Features to defer until product has more users and feedback.
 
-- [ ] **Maintenance Windows** — Nice to have; adds complexity to scheduling
-- [ ] **Version Pinning** — Advanced use case; most users want latest
-- [ ] **Update Verification (checksums)** — Security feature; requires ecosystem support
-- [ ] **Health Checks** — Monitoring feature; external observability can handle this
-- [ ] **Web UI** — Significant scope increase; only if user demand is clear
-
----
+- [ ] **Configurable Retry Policy** - Auto-retry failed starts with exponential backoff
+- [ ] **Instance Groups** - Define groups of instances for partial updates (e.g., "frontend" vs "backend" groups)
+- [ ] **Health Check Endpoint** - Expose instance status via HTTP endpoint for external monitoring
 
 ## Feature Prioritization Matrix
 
 | Feature | User Value | Implementation Cost | Priority |
 |---------|------------|---------------------|----------|
-| Scheduling (cron) | HIGH | LOW | P1 |
-| Configuration File (YAML) | HIGH | LOW | P1 |
-| Command-line Arguments | HIGH | LOW | P1 |
-| Logging | HIGH | LOW | P1 |
-| Background/Headless Operation | HIGH | LOW | P1 |
-| Dependency Checking | HIGH | LOW | P1 |
-| Failure Notifications (Pushover) | HIGH | MEDIUM | P1 |
-| Log Rotation | MEDIUM | LOW | P2 |
-| Retry with Exponential Backoff | MEDIUM | LOW | P2 |
-| Automatic Rollback/Fallback | MEDIUM | MEDIUM-HIGH | P2 |
-| Dry Run Mode | MEDIUM | LOW | P2 |
-| Additional Notification Channels | LOW-MEDIUM | MEDIUM | P3 |
-| Maintenance Windows | LOW-MEDIUM | MEDIUM | P3 |
-| Version Pinning | LOW | LOW-MEDIUM | P3 |
-| Update Verification | MEDIUM | MEDIUM | P3 |
-| Health Checks | LOW | MEDIUM | P3 |
-| GUI Interface | LOW | HIGH | ANTI-FEATURE |
-| Update History Database | LOW | MEDIUM-HIGH | ANTI-FEATURE |
-| Auto-start on Boot | LOW | MEDIUM | ANTI-FEATURE |
-| Cross-platform Support | MEDIUM | HIGH | ANTI-FEATURE (defer) |
-| Real-time Update Checking | LOW | MEDIUM | ANTI-FEATURE |
-| Auto-restart After Update | LOW | HIGH | ANTI-FEATURE |
+| Instance Configuration (YAML) | HIGH | LOW | P1 |
+| Instance Name Validation | HIGH | LOW | P1 |
+| Stop All Instances | HIGH | LOW | P1 |
+| Start All Instances | HIGH | MEDIUM | P1 |
+| Graceful Degradation | HIGH | MEDIUM | P1 |
+| Per-Instance Failure Notification | HIGH | LOW | P1 |
+| Instance Health Status Tracking | MEDIUM | MEDIUM | P2 |
+| Individual Instance Control | MEDIUM | MEDIUM | P2 |
+| Parallel Instance Startup | LOW | HIGH | P3 |
+| Configurable Retry Policy | MEDIUM | HIGH | P3 |
 
 **Priority key:**
-- P1: Must have for launch
-- P2: Should have, add when possible
-- P3: Nice to have, future consideration
-
----
+- P1: Must have for launch (v0.2)
+- P2: Should have, add when possible (v0.3)
+- P3: Nice to have, future consideration (v2+)
 
 ## Competitor Feature Analysis
 
-| Feature | Chromium Updater | Windows Update | Advanced Installer Auto-Updater | Go self-update libs | Our Approach |
-|---------|-----------------|----------------|--------------------------------|---------------------|--------------|
-| Scheduling | Yes (periodic) | Yes (Windows Task Scheduler) | Yes | Manual | Cron expression (flexible) |
-| Configuration | Registry/Policy | Group Policy | XML/YAML | Code-based | YAML file + CLI override |
-| Notifications | System tray | Windows Notification | Custom | Manual | Pushover (simple, push-based) |
-| Rollback | Yes (previous version) | Yes (uninstall update) | Yes | Manual | Fallback to stable version |
-| Retry | Yes (backoff) | Yes | Yes | Manual | Exponential backoff |
-| Log Rotation | No (system logs) | No (Event Log) | Optional | Manual | Built-in log rotation |
-| Dependency Check | Yes (OS version) | Yes | Yes | No | uv presence check |
-| Verification | Yes (signatures) | Yes (signatures) | Optional | Optional | Deferred (v2+) |
-| Update Source | Google servers | Microsoft | Custom URL | GitHub Releases | GitHub (latest) + fallback |
-| Background Service | Windows service | Windows service | Optional | App-based | Hidden console/service |
+| Feature | Docker Compose | Supervisord | Systemd | Our Approach (Nanobot Updater) |
+|---------|----------------|-------------|---------|--------------------------------|
+| **Configuration Format** | YAML services array | INI [program:x] sections | INI unit files with @ templates | YAML instances array (simple, familiar) |
+| **Instance Identification** | Service name (key) | Program name after [program:] | Unit name with @instance | Instance name field in config |
+| **Startup Order** | depends_on + healthcheck | priority field | After=, Wants= | Parallel start (no dependencies needed for stateless agents) |
+| **Failure Handling** | restart: on-failure | autorestart=true | Restart=on-failure | Continue other instances, notify failures |
+| **Status Reporting** | docker-compose ps | supervisorctl status | systemctl status | Logs + Pushover notification |
+| **Duplicate Detection** | YAML parser error | Last definition wins | Multiple units allowed | Explicit validation, fail fast |
 
 ### Key Insights from Competitor Analysis
 
-1. **Enterprise tools (Windows Update, Chromium)** have extensive verification, rollback, and policy integration - overkill for single-user tool
-2. **Go self-update libraries** focus on binary replacement, not orchestration - our tool orchestrates external package manager
-3. **Commercial updaters (Advanced Installer)** have GUI, complex scheduling, enterprise features - we're CLI-first, single-purpose
-4. **Gap we fill:** Simple, Go-based, cron-driven, notification-enabled updater for Python tools via uv
+1. **Docker Compose Pattern** (HIGH confidence):
+   - Services defined as YAML map with service names as keys
+   - Healthchecks for startup ordering (`depends_on: condition: service_healthy`)
+   - [Source: Docker Docs](https://docs.docker.com/compose/how-tos/startup-order/)
 
----
+2. **Supervisord Pattern** (MEDIUM confidence):
+   - Programs defined as `[program:name]` sections
+   - Group multiple programs with `[group:name] programs=prog1,prog2`
+   - Last duplicate definition wins (potential silent failure)
+   - [Source: Supervisord Docs](https://supervisord.org/configuration.html)
+
+3. **Systemd Template Pattern** (HIGH confidence):
+   - Template unit files with `@` symbol (e.g., `service@.service`)
+   - Instantiate multiple: `service@1.service`, `service@2.service`
+   - Use `%I` specifier in unit file to reference instance identifier
+   - [Source: Icinga Blog](https://icinga.com/blog/managing-multiple-service-instances-with-a-systemd-generator/)
+
+4. **Our Approach Rationale**:
+   - Use YAML array (not map) for instances - simpler iteration, explicit ordering
+   - Validate duplicates explicitly (unlike supervisord's silent override)
+   - Skip dependency ordering - nanobot instances are stateless, no interdependencies
+   - Graceful degradation with notification - appropriate for background tool management
+
+## Implementation Notes
+
+### Configuration Structure (YAML)
+
+```yaml
+# v0.1 single instance (backward compatible)
+cron: "0 3 * * *"
+pushover_token: ""
+pushover_user: ""
+
+# v0.2 multi-instance addition
+instances:
+  - name: "bot-alpha"
+    port: 8080
+    start_command: "nanobot serve --port 8080"
+  - name: "bot-beta"
+    port: 8081
+    start_command: "nanobot serve --port 8081 --config beta.yaml"
+```
+
+**Rationale:**
+- Array (not map) preserves explicit ordering
+- Name field required for identification in logs/notifications
+- Port required for process detection (existing v0.1 logic)
+- Start command per instance allows different configurations
+
+### Graceful Degradation Strategy
+
+**Pattern:** Continue on failure, aggregate errors, report at end
+
+```go
+// Pseudocode
+failedInstances := []string{}
+for _, instance := range instances {
+    if err := startInstance(instance); err != nil {
+        log.Errorf("Failed to start %s: %v", instance.Name, err)
+        failedInstances = append(failedInstances, instance.Name)
+    }
+}
+
+if len(failedInstances) > 0 {
+    notifyFailedInstances(failedInstances)
+}
+```
+
+**Notification Format:**
+```
+Nanobot Update Complete - Partial Failure
+
+Failed to start: bot-alpha, bot-gamma
+Successfully started: bot-beta
+
+Check logs for details.
+```
+
+### Instance Name Validation Rules
+
+1. **Required field** - Empty name rejected
+2. **No duplicates** - Case-sensitive comparison
+3. **Valid characters** - Alphanumeric, hyphens, underscores (no spaces or special chars)
+4. **Length limit** - 1-64 characters (reasonable for logging and display)
 
 ## Sources
 
-### HIGH Confidence
-- [Chromium Updater Functional Specification](https://chromium.googlesource.com/chromium/src/+/HEAD/docs/updater/functional_spec.md) - Official spec, authoritative patterns
-- [Microsoft: Auto-update and repair apps - MSIX](https://learn.microsoft.com/en-us/windows/msix/app-installer/auto-update-and-repair--overview) - Official Windows patterns
-- [Go selfupdate libraries](https://pkg.go.dev/github.com/creativeprojects/go-selfupdate) - Active Go ecosystem patterns
-
-### MEDIUM Confidence
-- [Software Deployment Best Practices 2025](https://www.42coffeecups.com/blog/software-deployment-best-practices) - Industry patterns for rollback, retry
-- [Modern Deployment Rollback Techniques](https://www.featbit.co/articles2025/modern-deploy-rollback-strategies-2025/) - Current rollback patterns
-- [Preventing Retry Storms](https://keyholesoftware.com/preventing-retry-storms-with-responsible-client-policies/) - Retry best practices
-- [Cron Expression Scheduling](https://cloud.google.com/scheduler/docs/configuring/cron-job-schedules) - Scheduling patterns
-- [Dependabot Cron Scheduling](https://github.blog/changelog/2025-04-22-dependabot-now-lets-you-schedule-update-frequencies-with-cron-expressions/) - Modern cron usage
-- [Go Logging Best Practices](https://dev.to/fazal_mansuri_/effective-logging-in-go-best-practices-and-implementation-guide-23hp) - Go logging patterns
-- [Log Rotation for Long-running Services](https://cloud.google.com/logging/docs/agent/ops-agent/rotate-logs) - Production logging
-- [Pushover API](https://pushover.net/api) - Notification service capabilities
-
-### LOW Confidence (Needs Validation)
-- [Windows Service Best Practices](https://support.microsoft.com/en-us/topic/descriptions-of-some-best-practices-when-you-create-windows-services-13ca508e-231d-43e6-b960-3b04ccf79064) - General guidance, not updater-specific
-- WebSearch-only findings on anti-patterns - Should verify with actual production experience
+- [Docker Compose Startup Order](https://docs.docker.com/compose/how-tos/startup-order/) - Healthcheck and dependency patterns (HIGH confidence)
+- [Supervisord Configuration](https://supervisord.org/configuration.html) - Multi-program configuration format (MEDIUM confidence - network error during fetch, relied on search snippets)
+- [Systemd Template Services](https://icinga.com/blog/managing-multiple-service-instances-with-a-systemd-generator/) - Multi-instance management patterns (HIGH confidence)
+- [AWS Well-Architected - Graceful Degradation](https://docs.aws.amazon.com/wellarchitected/latest/reliability-pillar/rel_mitigate_interaction_failure_graceful_degradation.html) - Partial failure handling philosophy (HIGH confidence)
+- [Rolling vs All-at-Once Deployments](https://www.harness.io/blog/difference-between-rolling-and-blue-green-deployments) - Deployment strategy comparison (HIGH confidence)
+- [YAML Duplicate Key Detection](https://stackoverflow.com/questions/47668308/duplicate-key-in-yaml-configuaration-file) - Validation best practices (HIGH confidence)
+- [Server Naming Conventions](https://blog.invgate.com/server-naming-conventions) - Instance identification best practices (MEDIUM confidence)
 
 ---
-
-## Research Gaps
-
-Areas requiring deeper investigation:
-
-1. **Windows service vs. hidden console** - Need to research pros/cons of each approach for Go programs
-2. **uv package manager integration** - Need to verify uv commands for installing from GitHub vs. PyPI
-3. **Go logging library integration** - Need to evaluate `github.com/WQGroup/logger` capabilities for rotation
-4. **Pushover rate limits** - Need to verify API limits for failure notification frequency
-5. **nanobot version detection** - Need to understand how to detect installed version vs. GitHub latest
-
----
-
-*Feature research for: Windows background service / CLI tool for auto-updating Python tools*
-*Researched: 2025-02-18*
+*Feature research for: Multi-instance nanobot management*
+*Researched: 2026-03-09*

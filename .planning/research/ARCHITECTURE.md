@@ -1,616 +1,683 @@
-# Architecture Research
+# Architecture Research: Multi-Instance Management
 
-**Domain:** Windows Background Service / CLI Tool (Go)
-**Researched:** 2025-02-18
+**Domain:** Multi-instance process management for Windows auto-updater
+**Researched:** 2026-03-09
 **Confidence:** HIGH
 
-## Standard Architecture
+## Executive Summary
+
+This research addresses **extending the existing single-instance nanobot auto-updater to support multiple instances**. The current architecture has clean separation between lifecycle management, updating, and scheduling, making it straightforward to add multi-instance orchestration.
+
+**Key Recommendation:** Add a new `internal/instance` package with an `InstanceManager` orchestrator that coordinates stop-all → update → start-all workflows, while preserving the existing single-instance lifecycle logic in `internal/lifecycle`.
+
+## Current Architecture Analysis
+
+### Existing System Structure
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    cmd/nanobot-auto-updater                 │
+│                    (Main Entry Point)                       │
+├─────────────────────────────────────────────────────────────┤
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐      │
+│  │   scheduler  │  │   updater    │  │   notifier   │      │
+│  │  (cron jobs) │  │  (UV logic)  │  │  (Pushover)  │      │
+│  └──────┬───────┘  └──────┬───────┘  └──────────────┘      │
+│         │                 │                                  │
+├─────────┴─────────────────┴──────────────────────────────────┤
+│                    internal/config                           │
+│              (Single-instance configuration)                 │
+├─────────────────────────────────────────────────────────────┤
+│                    internal/lifecycle                        │
+│              (Single-instance management)                    │
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐    │
+│  │ detector │  │ stopper  │  │ starter  │  │ manager  │    │
+│  └──────────┘  └──────────┘  └──────────┘  └──────────┘    │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Current Component Responsibilities
+
+| Component | Responsibility | Current Implementation |
+|-----------|----------------|------------------------|
+| config | Configuration loading, validation | Single `NanobotConfig` (port, timeout, repo_path) |
+| lifecycle.Manager | Orchestrates stop/start for single instance | `StopForUpdate()`, `StartAfterUpdate()` methods |
+| lifecycle.detector | Process detection | Port-based and process name detection |
+| lifecycle.stopper | Process termination | Graceful → force kill with timeout |
+| lifecycle.starter | Process startup | Background spawn with verification |
+| updater | UV-based update logic | GitHub main → PyPI fallback |
+| scheduler | Cron job management | Single update job with overlap prevention |
+| notifier | Failure/success notifications | Pushover integration |
+
+## Recommended Multi-Instance Architecture
 
 ### System Overview
 
 ```
-+-------------------------------------------------------------+
-|                    Entry Point Layer                         |
-|  +-------------------------------------------------------+  |
-|  |              cmd/nanobot-auto-update/                  |  |
-|  |  +---------+  +---------+  +----------+  +----------+  |  |
-|  |  | main.go |  | root.go |  | run.go   |  | install.go|  |  |
-|  |  +----+----+  +----+----+  +-----+----+  +-----+----+  |  |
-|  +-------|----------|---------------|-------------|-------+  |
-+----------|----------|---------------|-------------|----------+
-           |          |               |             |
-+----------|----------|---------------|-------------|----------+
-|          v          v               v             v          |
-|                    Core Application Layer                     |
-|  +-------------------------------------------------------+  |
-|  |              internal/app/service.go                   |  |
-|  |  +--------------------------------------------------+  |  |
-|  |  |              Service Interface                    |  |  |
-|  |  |  Start() | Stop() | Run(ctx context.Context)     |  |  |
-|  |  +--------------------------------------------------+  |  |
-|  +-------------------------------------------------------+  |
-|                                                              |
-|  +------------+  +-------------+  +----------+  +---------+  |
-|  | Scheduler  |  |   Config    |  |  Logger  |  | Notifier|  |
-|  | (cron/v3)  |  |  (viper)    |  |  (slog)  |  |(pushover)|  |
-|  +-----+------+  +------+------+  +----+-----+  +----+----+  |
-|        |                |              |             |        |
-+--------|----------------|--------------|-------------|--------+
-         |                |              |             |
-+--------|----------------|--------------|-------------|--------+
-|        v                v              v             v        |
-|                    Infrastructure Layer                       |
-|  +------------+  +-------------+  +----------+  +---------+  |
-|  |  Executor  |  |  Config     |  |  File    |  |  HTTP   |  |
-|  | (os/exec)  |  |  Loader     |  |  Logger  |  | Client  |  |
-|  +-----+------+  +------+------+  +----+-----+  +----+----+  |
-|        |                |              |             |        |
-+--------|----------------|--------------|-------------|--------+
-         |                |              |             |
-         v                v              v             v
-    +---------+      +---------+    +---------+   +---------+
-    |  uv CLI |      | YAML/ENV|    | log.txt |   | Pushover|
-    | Process |      | Config  |    | stdout  |   |   API   |
-    +---------+      +---------+    +---------+   +---------+
+┌─────────────────────────────────────────────────────────────┐
+│                    cmd/nanobot-auto-updater                 │
+│                    (Main Entry Point)                       │
+├─────────────────────────────────────────────────────────────┤
+│  ┌──────────────────────────────────────────────────────┐   │
+│  │           internal/instance (NEW PACKAGE)             │   │
+│  │                  InstanceManager                       │   │
+│  │  ┌────────────────────────────────────────────────┐   │   │
+│  │  │  Instance Orchestrator (supervisor pattern)    │   │   │
+│  │  │  - Manage all nanobot instances                │   │   │
+│  │  │  - Coordinate stop all → update → start all    │   │   │
+│  │  │  - Collect results and failures                │   │   │
+│  │  └────────────────────────────────────────────────┘   │   │
+│  └──────────────────────────────────────────────────────┘   │
+├─────────────────────────────────────────────────────────────┤
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐      │
+│  │   scheduler  │  │   updater    │  │   notifier   │      │
+│  │  (unchanged) │  │  (unchanged) │  │  (enhanced)  │      │
+│  └──────┬───────┘  └──────┬───────┘  └──────┬───────┘      │
+│         │                 │                 │               │
+├─────────┴─────────────────┴─────────────────┴───────────────┤
+│                    internal/config (EXTENDED)                │
+│  ┌──────────────────────────────────────────────────────┐   │
+│  │  Config struct with Instances []InstanceConfig       │   │
+│  │  Each InstanceConfig: Name, Port, StartupTimeout,    │   │
+│  │                       RepoPath                       │   │
+│  └──────────────────────────────────────────────────────┘   │
+├─────────────────────────────────────────────────────────────┤
+│              internal/lifecycle (EXTENDED)                   │
+│  ┌───────────────────────────────────────────────────────┐  │
+│  │  InstanceLifecycle (per-instance lifecycle manager)   │  │
+│  │  - StopForUpdate(ctx) → error                         │  │
+│  │  - StartAfterUpdate(ctx) → error                      │  │
+│  │  - Uses existing detector/stopper/starter logic       │  │
+│  └───────────────────────────────────────────────────────┘  │
+│  ┌───────────────────────────────────────────────────────┐  │
+│  │  Existing detector/stopper/starter (unchanged)        │  │
+│  └───────────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────┘
 ```
 
-### Component Responsibilities
+### Component Responsibilities (Multi-Instance)
 
-| Component | Responsibility | Typical Implementation |
-|-----------|----------------|------------------------|
-| **Entry Point (cmd/)** | Parse CLI args, initialize dependencies, start service | `spf13/cobra` for CLI structure |
-| **Service Wrapper** | Bridge between OS service manager and application logic | `kardianos/service` for cross-platform support |
-| **Scheduler** | Execute tasks at configured intervals | `robfig/cron/v3` with cron expressions |
-| **Configuration** | Load and merge settings from multiple sources | `spf13/viper` (YAML + ENV + CLI flags) |
-| **Logger** | Structured logging with configurable output | `log/slog` (Go 1.21+) or `zerolog` |
-| **Command Executor** | Run external commands (`uv` tool) safely | `os/exec` with proper argument handling |
-| **Notifier** | Send push notifications on events | `gregdel/pushover` library |
-| **Dependency Checker** | Verify `uv` is installed and accessible | `os/exec.LookPath()` |
+| Component | Responsibility | Changes Required |
+|-----------|----------------|------------------|
+| **config** | Load instance list from YAML | **EXTEND:** Add `Instances []InstanceConfig` field, validation for unique names/ports |
+| **instance** (NEW) | Coordinate multi-instance operations | **CREATE:** New package with `InstanceManager` orchestrator |
+| **lifecycle** | Per-instance lifecycle operations | **EXTEND:** Add `InstanceLifecycle` wrapper that uses instance name for logging context |
+| **updater** | UV update logic | **UNCHANGED:** Already global operation (updates nanobot binary) |
+| **scheduler** | Cron job management | **MINIMAL:** Update job function to call `InstanceManager.UpdateAll()` |
+| **notifier** | Pushover notifications | **EXTEND:** Add `NotifyInstanceFailure(name, operation, err)` method |
 
 ## Recommended Project Structure
 
 ```
-nanobot-auto-update/
-+-- cmd/
-|   +-- nanobot-auto-update/
-|       +-- main.go              # Entry point, wire dependencies
-|       +-- root.go              # Root cobra command
-|       +-- run.go               # Run command (foreground)
-|       +-- install.go           # Install/uninstall service commands
-|       +-- version.go           # Version command
-|
-+-- internal/
-|   +-- app/
-|   |   +-- service.go           # Service interface and implementation
-|   |   +-- updater.go           # Core update logic
-|   |   +-- checker.go           # Update availability checker
-|   |
-|   +-- config/
-|   |   +-- config.go            # Configuration struct and loader
-|   |   +-- defaults.go          # Default configuration values
-|   |
-|   +-- executor/
-|   |   +-- executor.go          # Command execution wrapper
-|   |   +-- uv.go                # uv-specific commands
-|   |
-|   +-- notify/
-|   |   +-- notifier.go          # Notification interface
-|   |   +-- pushover.go          # Pushover implementation
-|   |   +-- mock.go              # Mock for testing
-|   |
-|   +-- scheduler/
-|   |   +-- scheduler.go         # Cron scheduler wrapper
-|   |   +-- jobs.go              # Job definitions
-|   |
-|   +-- logger/
-|       +-- logger.go            # Logger initialization
-|       +-- format.go            # Custom formatters
-|
-+-- pkg/                         # (Optional) Public packages
-|
-+-- configs/
-|   +-- config.yaml              # Default configuration file
-|   +-- config.example.yaml      # Example configuration
-|
-+-- .goreleaser.yml              # Release configuration
-+-- go.mod
-+-- go.sum
-+-- main.go                      # (Alternative simple entry)
-+-- Makefile
-+-- README.md
+internal/
+├── config/
+│   ├── config.go              # EXTEND: Add InstanceConfig struct, Instances slice
+│   └── config_test.go         # EXTEND: Add multi-instance validation tests
+│
+├── instance/                  # NEW PACKAGE
+│   ├── manager.go             # InstanceManager - orchestrates all instances
+│   ├── manager_test.go        # Unit tests for InstanceManager
+│   └── types.go               # Result types (InstanceResult, UpdateAllResult)
+│
+├── lifecycle/
+│   ├── detector.go            # UNCHANGED
+│   ├── stopper.go             # UNCHANGED
+│   ├── starter.go             # UNCHANGED
+│   ├── manager.go             # EXTEND: Add InstanceLifecycle wrapper
+│   └── manager_test.go        # EXTEND: Add InstanceLifecycle tests
+│
+├── updater/
+│   ├── updater.go             # UNCHANGED (global nanobot update)
+│   └── checker.go             # UNCHANGED
+│
+├── scheduler/
+│   └── scheduler.go           # MINIMAL CHANGE (update job function)
+│
+└── notifier/
+    └── notifier.go            # EXTEND: Add instance-specific notification methods
+
+cmd/
+└── nanobot-auto-updater/
+    └── main.go                # MODIFY: Initialize InstanceManager, update job logic
 ```
 
 ### Structure Rationale
 
-- **cmd/:** Standard Go convention for executable entry points. Multiple subdirectories for different binaries if needed.
-- **internal/:** Enforced privacy by Go compiler. Contains all application-specific code that should not be imported externally.
-- **config/:** Centralized configuration management with clear separation of loading vs. defaults.
-- **executor/:** Isolates external command execution for testability and security (prevents command injection).
-- **notify/:** Interface-based design allows swapping notification backends (Pushover, Slack, email) without changing core logic.
-- **scheduler/:** Wraps cron library to provide application-specific job management.
+- **internal/instance/**: New package for multi-instance coordination logic (single responsibility: orchestration)
+- **internal/config/**: Extended in-place because instance configuration is natural extension of app config
+- **internal/lifecycle/**: Extended minimally with `InstanceLifecycle` wrapper to preserve existing single-instance logic
+- **internal/updater/**: Unchanged because UV updates the global nanobot binary (not instance-specific)
+- **internal/scheduler/**: Minimal changes because scheduling is unchanged (only job function calls new orchestrator)
 
 ## Architectural Patterns
 
-### Pattern 1: Service Wrapper Pattern
+### Pattern 1: Supervisor/Orchestrator Pattern
 
-**What:** Use `kardianos/service` to run the application as a native OS service while maintaining CLI usability.
+**What:** A central `InstanceManager` coordinates lifecycle operations across multiple instances, similar to Erlang supervisor trees or process managers.
 
-**When to use:** When the application needs to run as a Windows service AND as a standalone CLI tool for development/debugging.
+**When to use:** When managing multiple related processes that need coordinated start/stop/update operations.
 
 **Trade-offs:**
-- Pros: Single codebase works as service and CLI; cross-platform support; proper lifecycle management
-- Cons: Additional abstraction layer; service debugging requires extra steps
+- ✅ Clear separation of concerns (orchestration vs. individual lifecycle)
+- ✅ Easy to add per-instance error handling and continuation
+- ✅ Simple to aggregate results for notification
+- ❌ Adds one layer of indirection
+- ❌ Requires careful error aggregation design
 
 **Example:**
+
 ```go
-package main
+// internal/instance/manager.go
+package instance
 
 import (
     "context"
-    "log"
+    "fmt"
+    "log/slog"
 
-    "github.com/kardianos/service"
+    "github.com/HQGroup/nanobot-auto-updater/internal/config"
+    "github.com/HQGroup/nanobot-auto-updater/internal/lifecycle"
 )
 
-type program struct {
-    ctx    context.Context
-    cancel context.CancelFunc
-    app    *Application
+// InstanceManager coordinates multi-instance operations
+type InstanceManager struct {
+    instances map[string]*lifecycle.InstanceLifecycle // keyed by instance name
+    logger    *slog.Logger
 }
 
-func (p *program) Start(s service.Service) error {
-    // Start must not block
-    p.ctx, p.cancel = context.WithCancel(context.Background())
-    go p.run()
-    return nil
+func NewInstanceManager(cfg *config.Config, logger *slog.Logger) *InstanceManager {
+    instances := make(map[string]*lifecycle.InstanceLifecycle)
+    for _, instCfg := range cfg.Instances {
+        instances[instCfg.Name] = lifecycle.NewInstanceLifecycle(instCfg, logger)
+    }
+    return &InstanceManager{
+        instances: instances,
+        logger:    logger,
+    }
 }
 
-func (p *program) run() {
-    // Main application logic runs here
-    p.app.Run(p.ctx)
-}
+// StopAllInstances stops all instances, collecting errors but continuing on failure
+func (m *InstanceManager) StopAllInstances(ctx context.Context) []InstanceResult {
+    m.logger.Info("Stopping all instances", "count", len(m.instances))
 
-func (p *program) Stop(s service.Service) error {
-    // Clean shutdown
-    p.cancel()
-    return nil
-}
-
-func main() {
-    svcConfig := &service.Config{
-        Name:        "NanobotAutoUpdate",
-        DisplayName: "Nanobot Auto Updater",
-        Description: "Automatically updates the nanobot AI agent tool",
+    var results []InstanceResult
+    for name, lc := range m.instances {
+        m.logger.Info("Stopping instance", "name", name)
+        err := lc.StopForUpdate(ctx)
+        results = append(results, InstanceResult{
+            Name:      name,
+            Operation: "stop",
+            Success:   err == nil,
+            Error:     err,
+        })
+        if err != nil {
+            m.logger.Error("Failed to stop instance", "name", name, "error", err)
+            // Continue with other instances (don't return early)
+        }
     }
 
-    app := NewApplication()
-    prg := &program{app: app}
+    return results
+}
 
-    s, err := service.New(prg, svcConfig)
-    if err != nil {
-        log.Fatal(err)
+// StartAllInstances starts all instances, continuing on failure
+func (m *InstanceManager) StartAllInstances(ctx context.Context) []InstanceResult {
+    m.logger.Info("Starting all instances", "count", len(m.instances))
+
+    var results []InstanceResult
+    for name, lc := range m.instances {
+        m.logger.Info("Starting instance", "name", name)
+        err := lc.StartAfterUpdate(ctx)
+        results = append(results, InstanceResult{
+            Name:      name,
+            Operation: "start",
+            Success:   err == nil,
+            Error:     err,
+        })
+        if err != nil {
+            m.logger.Error("Failed to start instance", "name", name, "error", err)
+            // Continue with other instances
+        }
     }
 
-    // Run as service (or interactively if not managed by service manager)
-    if err := s.Run(); err != nil {
-        log.Fatal(err)
-    }
+    return results
 }
 ```
 
-### Pattern 2: Configuration Hierarchy Pattern
+### Pattern 2: Configuration Extension Pattern
 
-**What:** Load configuration from multiple sources with explicit precedence: defaults < config file < environment variables < CLI flags.
+**What:** Extend existing configuration structures with slice of instance configs, maintaining backward compatibility.
 
-**When to use:** When the application needs flexible configuration across development, testing, and production environments.
+**When to use:** When adding multi-instance support to a single-instance system.
 
 **Trade-offs:**
-- Pros: Sensible defaults; environment-specific overrides; no hardcoded values
-- Cons: More complex initialization; potential for confusion about value sources
+- ✅ Maintains backward compatibility (old configs still work)
+- ✅ Natural YAML structure (`instances:` list)
+- ✅ Validation logic stays centralized in config package
+- ❌ Slightly more complex validation (unique names, ports)
 
 **Example:**
+
 ```go
+// internal/config/config.go
 package config
 
-import (
-    "github.com/spf13/viper"
-)
+// InstanceConfig holds configuration for a single nanobot instance
+type InstanceConfig struct {
+    Name           string        `yaml:"name" mapstructure:"name"`
+    Port           uint32        `yaml:"port" mapstructure:"port"`
+    StartupTimeout time.Duration `yaml:"startup_timeout" mapstructure:"startup_timeout"`
+    RepoPath       string        `yaml:"repo_path" mapstructure:"repo_path"`
+}
 
+// Config holds the main application configuration (EXTENDED)
 type Config struct {
-    Schedule      string `mapstructure:"schedule"`
-    UVPath        string `mapstructure:"uv_path"`
-    CheckOnStart  bool   `mapstructure:"check_on_start"`
-    LogFile       string `mapstructure:"log_file"`
-    LogLevel      string `mapstructure:"log_level"`
-    Notifications NotifyConfig `mapstructure:"notifications"`
+    Cron      string           `yaml:"cron" mapstructure:"cron"`
+    Instances []InstanceConfig `yaml:"instances" mapstructure:"instances"` // NEW
+    Pushover  PushoverConfig   `yaml:"pushover" mapstructure:"pushover"`
 }
 
-type NotifyConfig struct {
-    Enabled  bool   `mapstructure:"enabled"`
-    Provider string `mapstructure:"provider"`
-    Token    string `mapstructure:"token"`
-    User     string `mapstructure:"user"`
-}
-
-func Load(configPath string) (*Config, error) {
-    // 1. Set defaults (lowest priority)
-    viper.SetDefault("schedule", "0 */6 * * *")  // Every 6 hours
-    viper.SetDefault("uv_path", "uv")
-    viper.SetDefault("check_on_start", true)
-    viper.SetDefault("log_level", "info")
-
-    // 2. Config file
-    if configPath != "" {
-        viper.SetConfigFile(configPath)
-    } else {
-        viper.SetConfigName("config")
-        viper.SetConfigType("yaml")
-        viper.AddConfigPath(".")
-        viper.AddConfigPath("$HOME/.nanobot-auto-update")
-        viper.AddConfigPath("/etc/nanobot-auto-update")
+// Validate validates the entire Config (EXTENDED)
+func (c *Config) Validate() error {
+    if err := ValidateCron(c.Cron); err != nil {
+        return err
     }
 
-    // 3. Environment variables (override config file)
-    viper.SetEnvPrefix("NANOBOT")
-    viper.AutomaticEnv()
+    // Validate unique instance names
+    names := make(map[string]bool)
+    ports := make(map[uint32]bool)
 
-    // Read config
-    if err := viper.ReadInConfig(); err != nil {
-        if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
-            return nil, err
+    for _, inst := range c.Instances {
+        if names[inst.Name] {
+            return fmt.Errorf("duplicate instance name: %s", inst.Name)
         }
-        // Config file not found is okay, use defaults/env
+        if ports[inst.Port] {
+            return fmt.Errorf("duplicate port %d in instance %s", inst.Port, inst.Name)
+        }
+        names[inst.Name] = true
+        ports[inst.Port] = true
+
+        if err := inst.Validate(); err != nil {
+            return fmt.Errorf("instance %s: %w", inst.Name, err)
+        }
     }
 
-    var cfg Config
-    if err := viper.Unmarshal(&cfg); err != nil {
-        return nil, err
-    }
-
-    return &cfg, nil
-}
-```
-
-### Pattern 3: Repository/Interface Pattern for External Services
-
-**What:** Define interfaces for external dependencies (notifications, command execution) to enable testing with mocks.
-
-**When to use:** When you need to test business logic without making real API calls or executing real commands.
-
-**Trade-offs:**
-- Pros: Testable; swappable implementations; clean separation
-- Cons: More boilerplate; potential over-abstraction for simple cases
-
-**Example:**
-```go
-package notify
-
-// Notifier interface allows different notification backends
-type Notifier interface {
-    Send(ctx context.Context, msg Message) error
-}
-
-type Message struct {
-    Title   string
-    Body    string
-    Priority int
-}
-
-// Pushover implementation
-type PushoverNotifier struct {
-    client *pushover.Pushover
-    recipient *pushover.Recipient
-}
-
-func (p *PushoverNotifier) Send(ctx context.Context, msg Message) error {
-    message := pushover.NewMessageWithTitle(msg.Body, msg.Title)
-    message.Priority = msg.Priority
-    _, err := p.client.SendMessage(message, p.recipient)
-    return err
-}
-
-// Mock for testing
-type MockNotifier struct {
-    Sent []Message
-}
-
-func (m *MockNotifier) Send(ctx context.Context, msg Message) error {
-    m.Sent = append(m.Sent, msg)
     return nil
 }
 ```
 
-### Pattern 4: Graceful Shutdown Pattern
+### Pattern 3: Context-Aware Logging Pattern
 
-**What:** Handle shutdown signals properly to complete in-flight operations.
+**What:** Each instance lifecycle operation includes instance name in all log messages for traceability.
 
-**When to use:** For any long-running service that performs operations that should complete cleanly.
+**When to use:** When managing multiple concurrent processes in logs.
 
 **Trade-offs:**
-- Pros: No data loss on shutdown; clean resource release
-- Cons: Slightly more complex main loop
+- ✅ Easy to trace which instance an operation belongs to
+- ✅ Simple to implement with logger.With("instance", name)
+- ✅ Helps debugging multi-instance issues
+- ❌ Slightly more verbose logs
 
 **Example:**
+
 ```go
-package main
+// internal/lifecycle/manager.go (EXTENDED)
+package lifecycle
 
-import (
-    "context"
-    "os"
-    "os/signal"
-    "syscall"
-)
+// InstanceLifecycle wraps Manager with instance-specific context
+type InstanceLifecycle struct {
+    manager *Manager
+    name    string
+    logger  *slog.Logger // Pre-configured with instance name
+}
 
-func main() {
-    ctx, cancel := context.WithCancel(context.Background())
-    defer cancel()
+func NewInstanceLifecycle(cfg InstanceConfig, logger *slog.Logger) *InstanceLifecycle {
+    instanceLogger := logger.With("instance", cfg.Name)
 
-    // Set up signal handling
-    sigChan := make(chan os.Signal, 1)
-    signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
-
-    // Handle shutdown in separate goroutine
-    go func() {
-        sig := <-sigChan
-        log.Printf("Received signal %v, shutting down...", sig)
-        cancel()
-    }()
-
-    // Run application
-    if err := app.Run(ctx); err != nil {
-        log.Fatal(err)
+    managerCfg := Config{
+        Port:           cfg.Port,
+        StartupTimeout: cfg.StartupTimeout,
     }
+
+    return &InstanceLifecycle{
+        manager: NewManager(managerCfg, instanceLogger),
+        name:    cfg.Name,
+        logger:  instanceLogger,
+    }
+}
+
+func (il *InstanceLifecycle) StopForUpdate(ctx context.Context) error {
+    il.logger.Info("Stopping instance for update")
+    return il.manager.StopForUpdate(ctx)
+}
+
+func (il *InstanceLifecycle) StartAfterUpdate(ctx context.Context) error {
+    il.logger.Info("Starting instance after update")
+    return il.manager.StartAfterUpdate(ctx)
 }
 ```
 
 ## Data Flow
 
-### Update Check Flow
+### Multi-Instance Update Flow
 
 ```
-[Cron Scheduler]
-    |
-    v (trigger at scheduled time)
-[Update Checker]
-    |
-    +--> [Executor: uv --version]
-    |         |
-    |         v
-    |     [Current Version]
-    |
-    +--> [Executor: uv self update --check]
-    |         |
-    |         v
-    |     [Available Update?]
-    |
-    v
-[Update Available?]
-    |
-    +-- No --> [Log: No update needed] --> [Wait for next schedule]
-    |
-    +-- Yes --> [Executor: uv self update]
-                   |
-                   v
-               [Update Result]
-                   |
-                   +-- Success --> [Notifier: Update successful]
-                   |                    |
-                   |                    v
-                   |               [Logger: Update complete]
-                   |
-                   +-- Failure --> [Notifier: Update failed]
-                                        |
-                                        v
-                                   [Logger: Error details]
+[Cron Trigger / --update-now]
+    ↓
+[main.go] → [InstanceManager.UpdateAll()]
+    ↓
+┌─────────────────────────────────────────┐
+│  Phase 1: Stop All Instances            │
+│  ┌──────────────────────────────────┐   │
+│  │ for each instance:               │   │
+│  │   - detector.IsNanobotRunning()  │   │
+│  │   - stopper.StopNanobot()        │   │
+│  │   - collect result               │   │
+│  │   - continue on failure          │   │
+│  └──────────────────────────────────┘   │
+└─────────────────────────────────────────┘
+    ↓
+[Check if any instances stopped successfully]
+    ↓
+┌─────────────────────────────────────────┐
+│  Phase 2: Update Binary (ONCE)          │
+│  ┌──────────────────────────────────┐   │
+│  │ updater.Update()                 │   │
+│  │   - GitHub main → PyPI fallback  │   │
+│  └──────────────────────────────────┘   │
+└─────────────────────────────────────────┘
+    ↓
+[If update succeeded]
+    ↓
+┌─────────────────────────────────────────┐
+│  Phase 3: Start All Instances           │
+│  ┌──────────────────────────────────┐   │
+│  │ for each instance:               │   │
+│  │   - starter.StartNanobot()       │   │
+│  │   - collect result               │   │
+│  │   - continue on failure          │   │
+│  └──────────────────────────────────┘   │
+└─────────────────────────────────────────┘
+    ↓
+[Aggregate results]
+    ↓
+┌─────────────────────────────────────────┐
+│  Phase 4: Notifications                 │
+│  ┌──────────────────────────────────┐   │
+│  │ if any failures:                 │   │
+│  │   - notifier.NotifyFailures()    │   │
+│  │     with instance names/details  │   │
+│  │ if all success:                  │   │
+│  │   - notifier.NotifySuccess()     │   │
+│  └──────────────────────────────────┘   │
+└─────────────────────────────────────────┘
+    ↓
+[Return UpdateAllResult (JSON for --update-now)]
 ```
 
-### Configuration Load Flow
+### Configuration Loading Flow
 
 ```
-[Application Start]
-    |
-    v
-[Viper Config Loader]
-    |
-    +--> [Load Defaults]
-    |         |
-    |         v
-    |     schedule: "0 */6 * * *"
-    |     uv_path: "uv"
-    |     log_level: "info"
-    |
-    +--> [Read YAML Config File]
-    |         |
-    |         v
-    |     Merge with defaults
-    |
-    +--> [Read Environment Variables]
-    |         |
-    |         v
-    |     NANOBOT_SCHEDULE overrides
-    |     NANOBOT_UV_PATH overrides
-    |
-    +--> [Read CLI Flags]
-    |         |
-    |         v
-    |     --schedule overrides all
-    |     --config specifies path
-    |
-    v
-[Final Config Object]
-    |
-    v
-[Initialize Components]
+[config.yaml]
+    ↓
+[viper.ReadInConfig()]
+    ↓
+┌─────────────────────────────────────────┐
+│  instances:                              │
+│    - name: "instance1"                   │
+│      port: 18790                         │
+│      startup_timeout: 30s                │
+│    - name: "instance2"                   │
+│      port: 18791                         │
+│      startup_timeout: 30s                │
+└─────────────────────────────────────────┘
+    ↓
+[config.Load()]
+    ↓
+┌─────────────────────────────────────────┐
+│  Validation:                             │
+│  - Unique names?                        │
+│  - Unique ports?                        │
+│  - Each instance valid?                 │
+└─────────────────────────────────────────┘
+    ↓
+[Config struct with Instances slice]
+    ↓
+[InstanceManager initialization]
+    ↓
+┌─────────────────────────────────────────┐
+│  for each InstanceConfig:               │
+│    - Create InstanceLifecycle           │
+│    - Add to map by name                 │
+└─────────────────────────────────────────┘
 ```
 
 ### Key Data Flows
 
-1. **Configuration Flow:** CLI flags > Environment variables > Config file > Defaults. Viper handles this hierarchy automatically when properly configured.
-
-2. **Update Execution Flow:** Scheduler triggers -> Checker validates -> Executor runs `uv self update` -> Notifier sends result -> Logger records outcome.
-
-3. **Error Propagation Flow:** Errors bubble up from infrastructure layer through application layer to CLI layer where they are logged and optionally surfaced to user via notifications.
-
-4. **Log Flow:** All components write to structured logger -> Logger writes to configured outputs (file, stdout, or both) with proper formatting.
-
-## Component Boundaries
-
-| Boundary | Communication | Notes |
-|----------|---------------|-------|
-| CLI Layer <-> Core Application | Direct function calls | CLI commands instantiate and call app methods |
-| Scheduler <-> Updater | Function callbacks | Scheduler invokes registered job functions |
-| Updater <-> Executor | Interface methods | Executor interface enables mocking in tests |
-| Updater <-> Notifier | Interface methods | Notifier interface enables different backends |
-| All Components <-> Logger | Direct calls | Logger is passed via dependency injection or context |
-| Config -> All Components | Struct passing | Config is loaded once and passed to constructors |
+1. **Instance Configuration Flow:** YAML → viper → Config.Instances[] → InstanceManager.instances map (keyed by name)
+2. **Stop-All Flow:** InstanceManager.StopAll() → sequential stop attempts → collect InstanceResult[] → continue on errors
+3. **Start-All Flow:** InstanceManager.StartAll() → sequential start attempts → collect InstanceResult[] → continue on errors
+4. **Notification Flow:** InstanceResult[] aggregation → filter failures → NotifyFailures(failedInstances) with instance names
 
 ## Integration Points
 
-### External Services
+### Existing Code Integration
 
-| Service | Integration Pattern | Notes |
-|---------|---------------------|-------|
-| uv CLI | `os/exec` command execution | Must handle PATH lookup, argument escaping, timeout |
-| Pushover API | HTTP via `gregdel/pushover` | Simple POST to API endpoint with token/user credentials |
-| Windows SCM | `kardianos/service` | Abstracts Windows service control manager API |
+| Component | Integration Pattern | Notes |
+|-----------|---------------------|-------|
+| **config** | Direct extension | Add `Instances []InstanceConfig` to existing `Config` struct |
+| **lifecycle.Manager** | Wrapped by InstanceLifecycle | Existing single-instance logic preserved, InstanceLifecycle adds context |
+| **updater.Updater** | Called once by InstanceManager | Update remains global (updates nanobot binary for all instances) |
+| **scheduler** | Update job function modified | Replace direct update call with `instanceManager.UpdateAll()` |
+| **notifier** | Extended with instance methods | Add `NotifyInstanceFailures(results []InstanceResult)` |
+| **main.go** | Initialization changes | Create InstanceManager, pass to scheduler job function |
 
 ### Internal Boundaries
 
 | Boundary | Communication | Notes |
 |----------|---------------|-------|
-| CLI <-> Service | Interface via `kardianos/service` | Same binary works interactively and as service |
-| Config -> Components | Constructor injection | All components receive config at creation time |
+| **instance ↔ lifecycle** | Method calls | InstanceManager calls InstanceLifecycle methods |
+| **instance ↔ updater** | Method calls | InstanceManager calls Updater.Update() once |
+| **instance ↔ notifier** | Method calls | InstanceManager calls Notifier with aggregated results |
+| **lifecycle ↔ detector/stopper/starter** | Function calls | InstanceLifecycle delegates to existing functions |
 
-## Build Order Recommendations
+## Build Order and Dependencies
 
-### Phase 1: Core Infrastructure (Foundation)
-- **Logger** - Required by all other components for debugging
-- **Configuration** - Required for all component initialization
-- **Executor** - Required by updater and dependency checker
+### Phase 1: Configuration Extension (NO DEPENDENCIES)
+**Files to modify:**
+- `internal/config/config.go` — Add `InstanceConfig` struct, extend `Config` with `Instances []InstanceConfig`, add validation
+- `internal/config/config_test.go` — Add multi-instance validation tests
 
-**Rationale:** These have no dependencies on other custom components and are needed by everything else.
+**Why first:** No other code depends on this, can be tested independently
 
-### Phase 2: Core Application Logic
-- **Dependency Checker** - Verifies uv presence (depends on Executor)
-- **Update Checker** - Checks for updates (depends on Executor)
-- **Updater** - Performs update (depends on Executor, Checker)
-- **Service Core** - Main run loop (depends on Updater)
+**Estimated effort:** 1-2 hours (includes tests)
 
-**Rationale:** Builds on infrastructure to implement the core update functionality.
+### Phase 2: Lifecycle Extension (DEPENDS ON: Phase 1)
+**Files to modify:**
+- `internal/lifecycle/manager.go` — Add `InstanceLifecycle` wrapper struct, `NewInstanceLifecycle()` constructor
+- `internal/lifecycle/manager_test.go` — Add InstanceLifecycle tests
 
-### Phase 3: Notifications and Scheduling
-- **Notifier Interface** - Define interface first
-- **Pushover Notifier** - Implement interface
-- **Scheduler** - Cron-based job scheduling (depends on Updater)
+**Why second:** Needs `InstanceConfig` from Phase 1, wraps existing Manager
 
-**Rationale:** Notifications and scheduling are independent and can be developed in parallel after core logic exists.
+**Estimated effort:** 1-2 hours (includes tests)
 
-### Phase 4: CLI and Service Integration
-- **Cobra Commands** - CLI structure (depends on all above)
-- **Service Wrapper** - `kardianos/service` integration (depends on Service Core)
-- **Install/Uninstall Commands** - Service management
+### Phase 3: Instance Package Creation (DEPENDS ON: Phases 1-2)
+**Files to create:**
+- `internal/instance/types.go` — Define `InstanceResult`, `UpdateAllResult` structs
+- `internal/instance/manager.go` — Implement `InstanceManager` with `StopAllInstances()`, `StartAllInstances()`, `UpdateAll()`
+- `internal/instance/manager_test.go` — Unit tests for InstanceManager
 
-**Rationale:** CLI ties everything together and should be last.
+**Why third:** Needs `InstanceLifecycle` from Phase 2 and config from Phase 1
 
-### Phase 5: Polish and Distribution
-- **Configuration Examples** - Sample YAML files
-- **Documentation** - README, usage examples
-- **Release Automation** - GoReleaser configuration
+**Estimated effort:** 3-4 hours (includes tests and result aggregation logic)
 
-**Rationale:** These depend on the complete application being functional.
+### Phase 4: Notifier Extension (DEPENDS ON: Phase 3)
+**Files to modify:**
+- `internal/notifier/notifier.go` — Add `NotifyInstanceFailures(results []InstanceResult)` method
+
+**Why fourth:** Needs `InstanceResult` type from Phase 3
+
+**Estimated effort:** 30 minutes - 1 hour
+
+### Phase 5: Main Integration (DEPENDS ON: Phases 1-4)
+**Files to modify:**
+- `cmd/nanobot-auto-updater/main.go` — Initialize InstanceManager, modify update job function, modify --update-now logic
+
+**Why last:** Integrates all components, end-to-end testing
+
+**Estimated effort:** 2-3 hours (includes integration testing)
+
+### Total Estimated Effort
+**7.5 - 12 hours** across all phases
 
 ## Anti-Patterns
 
-### Anti-Pattern 1: Blocking in Service Start
+### Anti-Pattern 1: Parallel Instance Operations (Premature Optimization)
 
-**What people do:** Implement long-running logic directly in the `Start()` method of the service.
+**What people do:** Use goroutines + sync.WaitGroup to stop/start instances in parallel
 
-**Why it's wrong:** Windows Service Control Manager expects `Start()` to return quickly. Blocking causes timeout errors (Error 1053: "The service did not respond to the start or control request in a timely fashion").
+**Why it's wrong:**
+- Adds unnecessary complexity for managing 2-3 instances
+- Windows process management is not CPU-bound
+- Error handling becomes more complex with concurrent operations
+- Logging becomes harder to trace without careful coordination
 
-**Do this instead:** Spawn a goroutine from `Start()` for the main logic and return immediately:
+**Do this instead:** Sequential loop with continue-on-error. Simple, easy to debug, fast enough for small N instances.
+
+**Code to avoid:**
 ```go
-func (p *program) Start(s service.Service) error {
-    go p.run()  // Run in background
-    return nil  // Return immediately
+// DON'T DO THIS - Premature parallelization
+var wg sync.WaitGroup
+var mu sync.Mutex
+results := []InstanceResult{}
+
+for name, lc := range m.instances {
+    wg.Add(1)
+    go func(name string, lc *lifecycle.InstanceLifecycle) {
+        defer wg.Done()
+        err := lc.StopForUpdate(ctx)
+        mu.Lock()
+        results = append(results, InstanceResult{Name: name, Error: err})
+        mu.Unlock()
+    }(name, lc)
 }
+wg.Wait()
 ```
 
-### Anti-Pattern 2: Command Injection via String Concatenation
-
-**What people do:** Build command strings with user input using string concatenation or `fmt.Sprintf`.
-
-**Why it's wrong:** Allows arbitrary command execution if input contains shell metacharacters like `; rm -rf /`.
-
-**Do this instead:** Use `exec.Command` with separate arguments - Go handles escaping automatically:
+**Do this instead:**
 ```go
-// BAD - vulnerable to injection
-cmd := exec.Command("sh", "-c", "uv " + userInput)
-
-// GOOD - arguments are safely separated
-cmd := exec.Command("uv", "self", "update")
-```
-
-### Anti-Pattern 3: Hardcoded Configuration Paths
-
-**What people do:** Hardcode configuration file paths like `/etc/myapp/config.yaml`.
-
-**Why it's wrong:** Fails on Windows, makes testing difficult, prevents user-specific installations.
-
-**Do this instead:** Use Viper's multi-path config search or XDG/Base Directory specifications:
-```go
-viper.AddConfigPath(".")
-viper.AddConfigPath("$HOME/.nanobot-auto-update")
-viper.AddConfigPath("/etc/nanobot-auto-update")  // Linux
-viper.AddConfigPath(filepath.Join(os.Getenv("APPDATA"), "NanobotAutoUpdate"))  // Windows
-```
-
-### Anti-Pattern 4: Global Logger State
-
-**What people do:** Use a global logger variable that components access directly.
-
-**Why it's wrong:** Makes testing difficult, prevents per-component log levels, hides dependencies.
-
-**Do this instead:** Pass logger via dependency injection:
-```go
-type Updater struct {
-    logger   *slog.Logger
-    executor Executor
-}
-
-func NewUpdater(logger *slog.Logger, exec Executor) *Updater {
-    return &Updater{
-        logger:   logger,
-        executor: exec,
+// DO THIS - Simple sequential processing
+var results []InstanceResult
+for name, lc := range m.instances {
+    if err := lc.StopForUpdate(ctx); err != nil {
+        m.logger.Error("Failed to stop instance", "name", name, "error", err)
+        results = append(results, InstanceResult{Name: name, Error: err})
+        // Continue with next instance
     }
 }
 ```
 
+### Anti-Pattern 2: Global Instance Registry
+
+**What people do:** Create a global map/slice of instances accessible from anywhere
+
+**Why it's wrong:**
+- Makes testing difficult (global state)
+- Unclear ownership (who modifies the registry?)
+- Hard to reason about lifecycle (when is registry populated?)
+- Violates dependency injection principles
+
+**Do this instead:** Pass InstanceManager explicitly through constructor/function parameters
+
+### Anti-Pattern 3: Per-Instance Updater Instances
+
+**What people do:** Create a separate `updater.Updater` instance for each nanobot instance
+
+**Why it's wrong:**
+- UV updates the global nanobot binary (not instance-specific)
+- Multiple updater instances would duplicate work
+- No benefit since update is not instance-specific
+
+**Do this instead:** Single `updater.Updater` instance, called once by InstanceManager before starting instances
+
+### Anti-Pattern 4: Port-Based Instance Identification
+
+**What people do:** Use port number as instance identifier in logs/errors
+
+**Why it's wrong:**
+- Users configure instance by name, not port
+- Ports are implementation details, not user-facing identifiers
+- Hard to understand errors like "Failed to stop instance on port 18790"
+
+**Do this instead:** Always use instance name for identification, include port only in debug logs
+
 ## Scaling Considerations
 
-| Concern | Single Instance | Multiple Instances | Notes |
-|---------|-----------------|-------------------|-------|
-| Update checking | Single cron schedule | Coordinator needed | Multiple instances should not all update simultaneously |
-| Notification sending | Direct | Rate limiting | Pushover has rate limits; add backoff for failures |
-| Logging | Local file | Centralized logging | Consider log rotation for long-running services |
-| Configuration | Local file | Shared config | For complex setups, consider remote config (Consul, etcd) |
+| Concern | 2-3 Instances | 10+ Instances | 50+ Instances |
+|---------|---------------|---------------|---------------|
+| **Stop/Start time** | Sequential is fine (< 10 seconds) | Sequential still OK (< 30 seconds) | Consider parallelization with worker pool |
+| **Error aggregation** | Simple slice | Group by error type for readability | Consider error summarization (failed: 5/50) |
+| **Notification noise** | Send all failures | Group failures in single notification | Only notify on critical failures, log rest |
+| **Log volume** | Manageable | Consider log sampling | Centralized logging with filtering |
 
-### Scaling Priorities
+### When to Parallelize
 
-1. **First bottleneck:** Log file size - Implement log rotation or use rotating file handler from the start.
-2. **Second bottleneck:** Notification rate limits - If sending many notifications, implement batching or rate limiting.
+**Threshold:** Consider parallel stop/start when:
+1. Managing 10+ instances
+2. Total sequential time exceeds 30 seconds
+3. User feedback indicates slowness
+
+**How to parallelize safely:**
+```go
+// Worker pool pattern for N > 10 instances
+func (m *InstanceManager) StopAllInstancesParallel(ctx context.Context, maxWorkers int) []InstanceResult {
+    jobs := make(chan string, len(m.instances))
+    results := make(chan InstanceResult, len(m.instances))
+
+    // Start workers
+    var wg sync.WaitGroup
+    for i := 0; i < maxWorkers; i++ {
+        wg.Add(1)
+        go func() {
+            defer wg.Done()
+            for name := range jobs {
+                err := m.instances[name].StopForUpdate(ctx)
+                results <- InstanceResult{Name: name, Error: err}
+            }
+        }()
+    }
+
+    // Send jobs
+    for name := range m.instances {
+        jobs <- name
+    }
+    close(jobs)
+
+    // Wait and collect results
+    go func() {
+        wg.Wait()
+        close(results)
+    }()
+
+    var allResults []InstanceResult
+    for result := range results {
+        allResults = append(allResults, result)
+    }
+
+    return allResults
+}
+```
 
 ## Sources
 
-- golang.org/x/sys/windows/svc - Official Go Windows service package (https://pkg.go.dev/golang.org/x/sys/windows/svc)
-- github.com/kardianos/service - Cross-platform service management (https://github.com/kardianos/service)
-- github.com/spf13/cobra - CLI framework documentation (https://cobra.dev)
-- github.com/spf13/viper - Configuration management (https://github.com/spf13/viper)
-- github.com/robfig/cron - Cron scheduling library (https://github.com/robfig/cron)
-- log/slog - Go 1.21+ structured logging (https://pkg.go.dev/log/slog)
-- github.com/gregdel/pushover - Pushover API client (https://github.com/gregdel/pushover)
-- dev.to - "Writing a Windows Service in Go" (https://dev.to/cosmic_predator/writing-a-windows-service-in-go-1d1m)
-- Medium - "Building Cross-Platform System Services in Go" (https://medium.com/@ansxuman/building-cross-platform-system-services-in-go-a-step-by-step-guide-5784f96098b4)
+- [Reddit: Process Monitoring/Control Design Patterns in Go](https://www.reddit.com/r/golang/comments/mk7zfm/which_design_pattern_for_process_monitoringcontrol/) — Community discussion on process lifecycle management
+- [Medium: Goroutine Management Strategies and Patterns](https://dsysd-dev.medium.com/mastering-goroutine-management-in-go-strategies-and-patterns-20645b113851) — Comprehensive guide on goroutine lifecycle patterns
+- [Level Up: Context-Based Goroutine Management](https://levelup.gitconnected.com/how-to-use-context-to-manage-your-goroutines-like-a-boss-ef1e478919e6) — Using context.Context for lifecycle control
+- [Suture: Supervisor Trees for Go](https://www.jerf.org/iri/post/2930/) — Erlang-style supervisor tree implementation in Go (reference for pattern, but overkill for this use case)
+- [Go Design Patterns GitHub Repository](https://github.com/tmrts/go-patterns) — Curated collection of idiomatic Go patterns
+- [Dependency Lifecycle Management in Go](https://www.jacoelho.com/blog/2025/05/dependency-lifecycle-management-in-go/) — Patterns for managing component initialization and startup ordering
+- [GitHub Issue: Windows Job Objects for Process Groups](https://github.com/golang/go/issues/17608) — Discussion on Windows process group management (not needed for this use case)
+- [GitHub Gist: Managing Child Processes on Windows](https://gist.github.com/hallazzang/76f3970bfc949831808bbebc8ca15209) — Practical examples of Windows process lifecycle management
 
 ---
-*Architecture research for: Windows Background Service / CLI Tool in Go*
-*Researched: 2025-02-18*
+*Architecture research for: Multi-instance nanobot management integration*
+*Researched: 2026-03-09*

@@ -1,7 +1,7 @@
 # Stack Research
 
-**Domain:** Windows Background Service / CLI Tool for Auto-Updating Python Tools
-**Researched:** 2025-02-18
+**Domain:** Multi-instance nanobot process management (Windows service)
+**Researched:** 2026-03-09
 **Confidence:** HIGH
 
 ## Recommended Stack
@@ -10,169 +10,199 @@
 
 | Technology | Version | Purpose | Why Recommended |
 |------------|---------|---------|-----------------|
-| **Go** | 1.23+ | Primary language | Required by project specification. Excellent for CLI tools and background services with single-binary deployment, cross-compilation support, and minimal runtime dependencies. |
-| **kardianos/service** | v1.2.4 | Cross-platform service management | The de facto standard for running Go programs as Windows services. Supports Windows XP+, Linux (systemd/Upstart/SysV), and macOS Launchd with a unified API. 4.8k stars, actively maintained, handles Windows service callbacks that are non-trivial to implement manually. |
-| **robfig/cron** | v3.x | Cron-based job scheduling | Industry standard cron library for Go with 98.3 benchmark score. Supports standard 5-field cron expressions, timezone-aware scheduling (CRON_TZ prefix), predefined descriptors (@hourly, @daily), and @every intervals. Thread-safe with concurrent job execution in separate goroutines. |
-| **go-yaml** | v4.x (go.yaml.in/yaml/v4) | YAML configuration parsing | Official YAML library for Go with active maintenance. Supports strict field validation via WithKnownFields() to catch typos in config files. Pure Go implementation with reliable performance. Use go.yaml.in/yaml/v4 import path. |
-| **urfave/cli** | v3.x | Command-line argument parsing | Zero-dependency CLI framework with 23.8k stars and high activity (9.0). Provides declarative API for commands, subcommands, flags with aliases, shell completion for 4 shells, and built-in help generation. Simpler than Cobra for straightforward CLI tools. |
-| **WQGroup/logger** | Latest | Structured logging | Project-specified requirement. Built on logrus with added features: log rotation (time + size based), automatic cleanup of old logs, hierarchical path storage (YYYY/MM/DD), YAML config support, and Windows GUI compatibility. Provides millisecond timestamps. |
+| golang.org/x/sync/errgroup | v0.18.0 (latest) | Concurrent goroutine coordination with error propagation | Provides built-in error handling for parallel operations - ideal for managing multiple nanobot stop/start operations simultaneously with proper error collection |
+| sync.Map | stdlib (Go 1.24+) | Thread-safe process state tracking | Go 1.24+ uses HashTrieMap backing with lock-free reads - perfect for read-heavy state tracking scenarios where multiple goroutines check instance status |
 
 ### Supporting Libraries
 
 | Library | Version | Purpose | When to Use |
 |---------|---------|---------|-------------|
-| **gregdel/pushover** | v1.x | Pushover notification client | Required for failure alerts. Official Go wrapper for Pushover API with 154 stars. Simple API: create app with token, create recipient, send message. Supports message titles, priorities, and emergency priority with acknowledgment. |
-| **os/exec** | stdlib | Execute uv commands | Use standard library to run `uv tool upgrade` and `uv self update` commands. Capture stdout/stderr for logging. |
+| context | stdlib | Cancellation and timeout propagation | Use for coordinating stop/start operations across multiple instances with deadlines |
+| log/slog | stdlib (already in use) | Structured logging with instance context | Use for multi-instance logging with instance IDs embedded in log attributes |
 
 ### Development Tools
 
 | Tool | Purpose | Notes |
 |------|---------|-------|
-| **go mod** | Dependency management | Standard Go module system. Initialize with `go mod init github.com/yourorg/nanobot-auto-update` |
-| **golangci-lint** | Linting | Recommended linter for Go projects with comprehensive rule set |
-| **GoReleaser** | Build/release automation | Optional but recommended for creating Windows executables with version info and code signing support |
+| go test -race | Detect race conditions in concurrent code | Essential for validating multi-instance state management |
+| pprof | Profile goroutine usage | Monitor goroutine leaks when managing multiple concurrent process operations |
 
 ## Installation
 
 ```bash
-# Initialize Go module
-go mod init nanobot-auto-update
+# Add errgroup for concurrent process management
+go get golang.org/x/sync@v0.18.0
 
-# Core dependencies
-go get github.com/kardianos/service@v1.2.4
-go get github.com/robfig/cron/v3@latest
-go get go.yaml.in/yaml/v4@latest
-go get github.com/urfave/cli/v3@latest
-go get github.com/WQGroup/logger@latest
-go get github.com/gregdel/pushover@latest
-
-# Development tools (optional)
-go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+# No additional installs needed - sync.Map and context are in stdlib
 ```
-
-## uv Package Manager Integration
-
-The **uv** package manager (by Astral) is used to update Python tools. Key commands:
-
-| Command | Purpose |
-|---------|---------|
-| `uv tool install --force <package>` | Install or upgrade a tool (force reinstall if already installed) |
-| `uv tool upgrade <package>` | Upgrade a specific tool (only works for installed tools, not Git URLs) |
-| `uv tool install <package>` | Install a new tool (won't upgrade if already installed) |
-| `uv self update` | Update uv itself |
-| `uv --version` | Check installed version |
-
-**Important:** Use `--force` flag with `uv tool install` for updates, as without it the command will only report "already installed" and not perform an upgrade. The `uv tool upgrade` command exists but doesn't support Git URL sources.
-
-Execution pattern in Go:
-```go
-cmd := exec.Command("uv", "tool", "install", "--force", "nanobot")
-output, err := cmd.CombinedOutput()
-if err != nil {
-    log.Error("uv upgrade failed: %s", string(output))
-    // Send Pushover notification
-}
-```
-
-## Alternatives Considered
-
-| Category | Recommended | Alternative | When to Use Alternative |
-|----------|-------------|-------------|-------------------------|
-| Service | kardianos/service | golang.org/x/sys/windows/svc | Use x/sys/windows/svc when you need lower-level control and are willing to handle Windows service callbacks manually. More complex but no external dependency. |
-| Service | kardianos/service | judwhite/go-svc | Simpler alternative with 80 forks, good Linux compatibility. Choose if you prefer minimal API surface and don't need all platform features. |
-| CLI | urfave/cli | spf13/cobra | Use Cobra (43k stars) for complex CLIs with many subcommands, generated documentation needs, or when building tools similar to kubectl/docker CLI patterns. More dependencies (~15) but more features. |
-| CLI | urfave/cli | flag (stdlib) | Use standard library flag package for the simplest CLIs with no subcommand needs. Zero dependencies but limited features. |
-| Cron | robfig/cron | aptible/supercronic | Use Supercronic for containerized environments where you want crontab-compatible syntax with graceful shutdown and structured logging for containers. |
-| YAML | go.yaml.in/yaml/v4 | gopkg.in/yaml.v3 | Legacy import path still works but v4 (go.yaml.in) is the actively maintained version with bug fixes and new features. |
-| Logging | WQGroup/logger | rs/zerolog | Use Zerolog for new projects without the WQGroup constraint. Fastest structured logger (30 ns/op, 0 allocs), chainable API, excellent DX. |
-| Logging | WQGroup/logger | uber-go/zap | Use Zap for high-throughput systems where GC pauses must be minimized. 71 ns/op, 0 allocs, production-proven at Uber scale. |
-| Logging | WQGroup/logger | log/slog (stdlib) | Use Go 1.21+ standard library slog for new projects wanting zero external dependencies. Native JSON support, good performance (174 ns/op). |
-| Notifications | gregdel/pushover | nikoksr/notify | Use notify library when you need multi-channel notifications (Slack, Discord, Telegram, email) beyond just Pushover. Abstraction layer over 20+ services. |
 
 ## What NOT to Use
 
 | Avoid | Why | Use Instead |
 |-------|-----|-------------|
-| sirupsen/logrus directly | Logrus is in maintenance-mode (no new features), 2231 ns/op (slowest among modern loggers), 23 allocs/op. Acceptable only when wrapped by WQGroup/logger which adds rotation/cleanup. | WQGroup/logger (required) or zerolog/zap for new projects |
-| gopkg.in/yaml.v2 | Outdated, missing v3/v4 features like strict field validation and streaming support | go.yaml.in/yaml/v4 |
-| robfig/cron v1/v2 | Lacks v3 improvements: Go modules support, job wrappers, panic recovery, structured logging | robfig/cron/v3 |
-| urfave/cli v1/v2 | v3 has improved API, better shell completion, and active maintenance | urfave/cli/v3 |
-| github.com/go-ole/go-ole for Windows services | Overly complex for this use case, requires deep COM knowledge | kardianos/service |
-| exec.Command without timeout | Can hang indefinitely if uv process stalls | exec.CommandContext with context.WithTimeout |
+| External process managers (supervisord, systemd) | Overkill for simple multi-instance coordination - we're managing Python processes, not orchestrating containers | Use existing os/exec + errgroup for lightweight coordination |
+| Temporal/Cadence workflow engines | Designed for distributed workflows across services - our use case is single-machine, short-lived operations | Use errgroup with context for simple parallel execution |
+| Third-party process pools | Add dependency complexity when we just need parallel stop/start of 2-5 instances | Use errgroup.Group for simple parallel execution |
+| Docker/Kubernetes | Project constraint: single Windows machine, no containerization | Use native Windows process management (already implemented) |
+
+## Integration with Existing Codebase
+
+### Pattern 1: Multi-Instance Stop (using errgroup)
+
+**Why this approach:**
+- errgroup provides automatic cancellation: if one instance fails to stop, we can continue stopping others
+- Built-in error collection: collect all stop errors to report which instances failed
+- Context integration: timeout per instance with shared deadline
+
+**Integration points:**
+```go
+// Existing: lifecycle.Manager.StopForUpdate() - single instance
+// New: lifecycle.MultiManager.StopAllForUpdate() - multiple instances
+
+import "golang.org/x/sync/errgroup"
+
+func (m *MultiManager) StopAllForUpdate(ctx context.Context) map[string]error {
+    g, ctx := errgroup.WithContext(ctx)
+    errors := make(map[string]error)
+    var mu sync.Mutex
+
+    for name, instance := range m.instances {
+        name := name // capture loop variable
+        instance := instance
+
+        g.Go(func() error {
+            err := instance.manager.StopForUpdate(ctx)
+            if err != nil {
+                mu.Lock()
+                errors[name] = err
+                mu.Unlock()
+            }
+            return nil // Don't fail fast - continue stopping others
+        })
+    }
+
+    g.Wait() // Wait for all goroutines
+    return errors
+}
+```
+
+### Pattern 2: Multi-Instance State Tracking (using sync.Map)
+
+**Why this approach:**
+- sync.Map optimized for read-heavy workloads (status checks)
+- No locking overhead for concurrent reads
+- Go 1.24+ HashTrieMap provides lock-free reads via atomics
+
+**Integration points:**
+```go
+// Existing: IsNanobotRunning(port) returns (bool, int32, string, error)
+// New: MultiInstanceStatus stores state for all instances
+
+type InstanceStatus struct {
+    Name           string
+    Port           uint32
+    IsRunning      bool
+    PID            int32
+    DetectionMethod string
+    LastChecked    time.Time
+}
+
+type MultiManager struct {
+    instances map[string]*InstanceConfig
+    status    sync.Map // map[string]*InstanceStatus - key is instance name
+}
+
+func (m *MultiManager) RefreshAllStatus(ctx context.Context) error {
+    g, ctx := errgroup.WithContext(ctx)
+
+    for name, cfg := range m.instances {
+        name := name
+        port := cfg.Port
+
+        g.Go(func() error {
+            running, pid, method, err := IsNanobotRunning(port)
+            if err != nil {
+                return fmt.Errorf("instance %s: %w", name, err)
+            }
+
+            m.status.Store(name, &InstanceStatus{
+                Name:           name,
+                Port:           port,
+                IsRunning:      running,
+                PID:            pid,
+                DetectionMethod: method,
+                LastChecked:    time.Now(),
+            })
+            return nil
+        })
+    }
+
+    return g.Wait()
+}
+
+func (m *MultiManager) GetStatus(name string) (*InstanceStatus, bool) {
+    if v, ok := m.status.Load(name); ok {
+        return v.(*InstanceStatus), true
+    }
+    return nil, false
+}
+```
+
+### Pattern 3: Configuration Structure Extension
+
+**Why this approach:**
+- Reuse existing viper/yaml infrastructure
+- Backward compatible: single instance = default behavior
+- No new dependencies
+
+**Integration points:**
+```go
+// Existing: config.Config with single NanobotConfig
+// New: config.Config with map of instances
+
+type Config struct {
+    Cron      string                  `yaml:"cron" mapstructure:"cron"`
+    Instances map[string]NanobotConfig `yaml:"instances" mapstructure:"instances"` // NEW
+    Pushover  PushoverConfig          `yaml:"pushover" mapstructure:"pushover"`
+}
+
+// defaults() migration strategy:
+// If old config format (single nanobot), auto-migrate to instances["default"]
+```
 
 ## Stack Patterns by Variant
 
-**If you need HTTP health checks:**
-- Add: `net/http` (stdlib) for health endpoint
-- Because: Services should expose health status for monitoring
-- Pattern: Simple `/health` endpoint returning 200 when running
+**If managing 2-3 instances (most likely):**
+- Use errgroup without semaphore (no concurrency limiting needed)
+- Because overhead is minimal, simplicity over optimization
 
-**If you need Windows event log integration:**
-- Add: `golang.org/x/sys/windows/svc/eventlog`
-- Because: Windows Event Log is standard for service diagnostics
-- Integrate with WQGroup/logger via custom hook
+**If managing 5+ instances:**
+- Use errgroup.WithSemaphore(n) to limit concurrent operations
+- Because Windows process operations may have resource contention
+- Start with limit of 5 concurrent operations
 
-**If you need graceful shutdown:**
-- Add: `os/signal` and `context` (stdlib)
-- Because: Services should handle SIGTERM/SIGINT cleanly
-- Pattern: context cancellation propagated to cron jobs
-
-**If you need configuration hot-reload:**
-- Add: `github.com/fsnotify/fsnotify`
-- Because: Allow config changes without service restart
-- Pattern: Watch config.yaml, reload on modify
+**If instances have dependencies (instance A must stop before instance B):**
+- Use separate errgroup.Group for each dependency level
+- Because errgroup doesn't support DAG dependencies
+- NOT RECOMMENDED: Over-engineering for current requirements - keep instances independent
 
 ## Version Compatibility
 
-| Package A | Compatible With | Notes |
-|-----------|-----------------|-------|
-| Go 1.23+ | kardianos/service v1.2.4 | Requires golang.org/x/sys v0.34.0 as dependency |
-| robfig/cron v3 | Go 1.18+ | Uses generics in some optional features |
-| urfave/cli v3 | Go 1.18+ | Requires Go modules |
-| go.yaml.in/yaml/v4 | Go 1.19+ | Pure Go, no CGO required |
-| WQGroup/logger | sirupsen/logrus, lestrrat-go/file-rotatelogs, t-tomalak/logrus-easy-formatter | Has internal dependencies on these packages |
-
-## Architecture Integration
-
-The stack components integrate as follows:
-
-```
-+------------------+
-|   CLI Entry      | <- urfave/cli parses arguments, shows help
-+--------+---------+
-         |
-+--------v---------+
-| Service Manager  | <- kardianos/service handles Windows service lifecycle
-+--------+---------+
-         |
-+--------v---------+
-|  Cron Scheduler  | <- robfig/cron manages scheduled update jobs
-+--------+---------+
-         |
-    +----+----+
-    |         |
-+---v---+ +---v--------+
-|Logger | |  Update    | <- WQGroup/logger + exec.Command(uv)
-+-------+ +-----+------+
-                |
-          +-----v------+
-          | Pushover   | <- gregdel/pushover (on failure only)
-          +------------+
-```
+| Package | Compatible With | Notes |
+|---------|-----------------|-------|
+| golang.org/x/sync@v0.18.0 | Go 1.24.11 (current) | Full compatibility |
+| errgroup v0.14+ (2025-04) | All Go 1.24+ | Panic trapping added in v0.14 |
+| sync.Map (Go 1.24+) | Go 1.24.11 | HashTrieMap optimization available |
 
 ## Sources
 
-- `/robfig/cron` (Context7) - Cron expressions, timezone support, job management patterns
-- `/yaml/go-yaml` (Context7) - YAML unmarshal, strict field validation, streaming API
-- `/urfave/cli` (Context7) - CLI structure, flags, subcommands, shell completion
-- `/sirupsen/logrus` (Context7) - Logrus formatters, hooks, log levels
-- https://github.com/kardianos/service - Cross-platform service management, Windows service support (HIGH confidence)
-- https://github.com/gregdel/pushover - Pushover Go API wrapper documentation (HIGH confidence)
-- https://github.com/WQGroup/logger - Project-specified logger based on logrus (HIGH confidence)
-- https://docs.astral.sh/uv/reference/cli/ - uv CLI commands reference (HIGH confidence)
-- https://betterstack.com/community/guides/logging/best-golang-logging-libraries/ - Logging library benchmarks and comparisons (MEDIUM confidence)
-- https://pkg.go.dev/github.com/kardianos/service - Package documentation (HIGH confidence)
+- [pkg.go.dev/golang.org/x/sync](https://pkg.go.dev/golang.org/x/sync) — Version v0.18.0 (Oct 2025), verified errgroup panic trapping feature — HIGH confidence
+- [pkg.go.dev/golang.org/x/sync/errgroup](https://pkg.go.dev/golang.org/x/sync/errgroup) — Official API documentation — HIGH confidence
+- [dev.to/jones_charles_ad50858dbc0/go-concurrency-made-easy-mastering-errgroup](https://dev.to/jones_charles_ad50858dbc0/go-concurrency-made-easy-mastering-errgroup-for-error-handling-and-task-control-219) — errgroup usage patterns for concurrent task management — MEDIUM confidence
+- [victoriametrics.com/blog/go-sync-map](https://victoriametrics.com/blog/go-sync-map/) — sync.Map internals and use cases for state tracking — HIGH confidence
+- [github.com/puzpuzpuz/go-concurrent-map-bench](https://github.com/puzpuzpuz/go-concurrent-map-bench) — Go 1.24 HashTrieMap backing for sync.Map — HIGH confidence
+- [reddit.com/r/golang/comments/1raw8jl](https://www.reddit.com/r/golang/comments/1raw8jl/benchmarking_5_concurrent_map_implementations_in/) — sync.Map performance benchmarks — MEDIUM confidence
 
 ---
-*Stack research for: Windows Background Service / CLI Tool for Auto-Updating Python Tools*
-*Researched: 2025-02-18*
+*Stack research for: Multi-instance nanobot management*
+*Researched: 2026-03-09*
