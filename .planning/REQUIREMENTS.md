@@ -53,6 +53,35 @@ Requirements for initial release. Each maps to roadmap phases.
 - [x] **RUN-01**: Support Windows background execution, hide console window
 - [x] **RUN-02**: Program starts manually, not auto-start on boot
 
+### CLI
+
+- [x] **CLI-01**: Support --update-now flag for immediate update execution
+- [x] **CLI-02**: Support --timeout flag to configure update timeout (default 5 minutes)
+- [x] **CLI-03**: JSON output to stdout for programmatic consumption
+- [x] **CLI-04**: Exit code 0 on success, non-zero on failure
+- [x] **CLI-05**: Remove old --run-once flag
+
+## v0.2 Requirements
+
+Requirements for multi-instance support milestone.
+
+### Configuration
+
+- [ ] **CONF-01**: Instance configuration (YAML) - Users can define multiple instances using instances array in config.yaml, each instance contains name, port, start_command fields
+- [ ] **CONF-02**: Instance name validation - Detect duplicate instance names on startup, fail fast with clear error message
+- [ ] **CONF-03**: Port validation - Detect duplicate ports on startup, fail fast with clear error message
+
+### Lifecycle
+
+- [ ] **LIFECYCLE-01**: Stop all instances - Iterate through all configured instances and stop each one (reuse existing v0.1 stop logic)
+- [ ] **LIFECYCLE-02**: Start all instances - Iterate through all configured instances and start each one with configured command
+- [ ] **LIFECYCLE-03**: Graceful degradation - Continue starting/stopping other instances when one instance fails, don't abort entire operation
+
+### Error Handling
+
+- [ ] **ERROR-01**: Per-instance failure notification - Report which instances failed in Pushover message, include instance name, operation type (stop/start), and error details
+- [ ] **ERROR-02**: Error aggregation - Collect all instance errors (don't return early on first failure), structured error reporting shows which instances succeeded, which failed, and why
+
 ## v2 Requirements
 
 Deferred to future release. Tracked but not in current roadmap.
@@ -84,6 +113,8 @@ Explicitly excluded. Documented to prevent scope creep.
 
 Which phases cover which requirements. Updated during roadmap creation.
 
+### v1.0 Requirements (Complete)
+
 | Requirement | Phase | Status |
 |-------------|-------|--------|
 | INFR-01 | Phase 1 | Complete |
@@ -95,7 +126,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | INFR-07 | Phase 1 | Complete |
 | INFR-08 | Phase 1 | Complete |
 | INFR-09 | Phase 1 | Complete |
-| INFR-10 | Phase 1 | Complete |
+| INFR-10 | Phase 2 | Complete |
 | IMPL-01 | Phase 01.1 | Complete |
 | IMPL-02 | Phase 01.1 | Complete |
 | IMPL-03 | Phase 01.1 | Complete |
@@ -114,13 +145,31 @@ Which phases cover which requirements. Updated during roadmap creation.
 | NOTF-04 | Phase 3 | Complete |
 | RUN-01 | Phase 4 | Complete |
 | RUN-02 | Phase 4 | Complete |
+| CLI-01 | Phase 5 | Complete |
+| CLI-02 | Phase 5 | Complete |
+| CLI-03 | Phase 5 | Complete |
+| CLI-04 | Phase 5 | Complete |
+| CLI-05 | Phase 5 | Complete |
+
+### v0.2 Requirements (In Progress)
+
+| Requirement | Phase | Status |
+|-------------|-------|--------|
+| CONF-01 | Phase 6 | Pending |
+| CONF-02 | Phase 6 | Pending |
+| CONF-03 | Phase 6 | Pending |
+| LIFECYCLE-01 | Phase 7, Phase 8 | Pending |
+| LIFECYCLE-02 | Phase 7, Phase 8 | Pending |
+| LIFECYCLE-03 | Phase 8 | Pending |
+| ERROR-01 | Phase 9 | Pending |
+| ERROR-02 | Phase 8 | Pending |
 
 **Coverage:**
-- v1 requirements: 28 total
-- Mapped to phases: 28
-- Complete: 25
-- Unmapped: 0
+- v1 requirements: 33 total, 33 complete
+- v0.2 requirements: 8 total, 0 complete, 8 pending
+- Total requirements mapped: 41
 
 ---
+
 *Requirements defined: 2025-02-18*
-*Last updated: 2026-02-18 after plan 04-01 completion (ALL PHASES COMPLETE)*
+*Last updated: 2026-03-09 after v0.2 roadmap creation*

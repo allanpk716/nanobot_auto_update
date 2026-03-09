@@ -1,8 +1,9 @@
 # Roadmap: Nanobot Auto Updater
 
-## Overview
+## Milestones
 
-Build a Windows background service in Go that automatically keeps the nanobot AI agent tool up-to-date. Start with infrastructure (logging, configuration, CLI), implement the core update logic with rollback support, add scheduled execution with failure notifications, then polish for production use with hidden console window and documentation.
+- ✅ **v1.0 单实例自动更新** - Phases 1-5 (shipped 2026-02-18)
+- 🚧 **v0.2 多实例支持** - Phases 6-10 (in progress)
 
 ## Phases
 
@@ -12,27 +13,12 @@ Build a Windows background service in Go that automatically keeps the nanobot AI
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [x] **Phase 1: Infrastructure** - Logging, configuration, CLI (completed 2026-02-18)
-- [x] **Phase 01.1: Nanobot lifecycle management** - Stop before update, start after update (INSERTED) (completed 2026-02-18)
-- [x] **Phase 2: Core Update Logic** - Dependency checking, update execution, and rollback mechanism (completed 2026-02-18)
-- [x] **Phase 3: Scheduling and Notifications** - Cron-based scheduling and Pushover failure alerts (completed 2026-02-18)
-- [x] **Phase 4: Runtime Integration** - Windows background execution and final integration (completed 2026-02-18)
-- [x] **Phase 5: CLI Immediate Update** - Support startup parameter for immediate update (completed 2026-02-18)
-
-## Phase Details
+<details>
+<summary>✅ v1.0 单实例自动更新 (Phases 1-5) - SHIPPED 2026-02-18</summary>
 
 ### Phase 1: Infrastructure
 **Goal**: Application foundation with logging, configuration, and CLI
-**Depends on**: Nothing (first phase)
-**Requirements**: INFR-01, INFR-02, INFR-03, INFR-04, INFR-05, INFR-06, INFR-07, INFR-08, INFR-09
-**Success Criteria** (what must be TRUE):
-  1. User can run the program with `-help` flag and see usage information
-  2. User can run the program with `-version` flag and see version information
-  3. Logs are written to ./logs/ directory with the format "2024-01-01 12:00:00.123 - [INFO]: message"
-  4. Configuration is loaded from ./config.yaml with cron field defaulting to "0 3 * * *"
-  5. User can override config file path via `-config` flag and cron expression via `-cron` flag
-  6. User can run a one-time update via `-run-once` flag
-**Plans:** 4 plans (3 original + 1 gap closure)
+**Plans**: 4 plans
 
 Plans:
 - [x] 01-01-PLAN.md - Logging module with custom format and rotation (INFR-01, INFR-02)
@@ -40,20 +26,9 @@ Plans:
 - [x] 01-03-PLAN.md - CLI entry point with pflag and integration (INFR-05, INFR-06, INFR-07, INFR-08, INFR-09)
 - [x] 01-04-PLAN.md - Fix log format to exact specification (INFR-01 gap closure)
 
-**Note**: INFR-10 (hide window for uv commands) moved to Phase 2 - uv commands are only executed in Phase 2 update logic.
-
-### Phase 01.1: Nanobot lifecycle management - stop before update, start after update (INSERTED)
-
+### Phase 01.1: Nanobot lifecycle management (INSERTED)
 **Goal:** Stop nanobot before update, restart after update with graceful shutdown and hidden startup
-**Depends on:** Phase 1
-**Requirements:** IMPL-01, IMPL-02, IMPL-03, IMPL-04
-**Success Criteria** (what must be TRUE):
-  1. Nanobot running status can be detected by checking if port 18790 is listening
-  2. Stop command gracefully terminates nanobot with 5-second timeout, force-killing if needed
-  3. Start command launches "nanobot gateway" with hidden window (no console flash)
-  4. Startup is verified by checking port becomes available within configurable timeout
-  5. Stop failure cancels the update; start failure logs warning but does not fail update
-**Plans:** 4/4 plans complete
+**Plans**: 3 plans
 
 Plans:
 - [x] 01.1-01-PLAN.md - Config and process detection (NanobotConfig, FindPIDByPort)
@@ -62,16 +37,7 @@ Plans:
 
 ### Phase 2: Core Update Logic
 **Goal**: Nanobot can be updated from GitHub main branch with automatic fallback to stable version
-**Depends on**: Phase 1
-**Requirements**: UPDT-01, UPDT-02, UPDT-03, UPDT-04, UPDT-05, INFR-10
-**Success Criteria** (what must be TRUE):
-  1. Program exits with clear error message if uv is not installed on the system
-  2. User can trigger an update that installs nanobot from GitHub main branch using uv
-  3. If GitHub update fails, program automatically falls back to installing nanobot-ai stable version from PyPI
-  4. All update attempts are logged with detailed success/failure information
-  5. Update result (success/fallback/failure) is visible in logs
-  6. Executed uv commands do not flash a command prompt window (INFR-10)
-**Plans:** 2 plans
+**Plans**: 2 plans
 
 Plans:
 - [x] 02-01-PLAN.md - UV installation checker (UPDT-01, UPDT-02)
@@ -79,15 +45,7 @@ Plans:
 
 ### Phase 3: Scheduling and Notifications
 **Goal**: Updates run automatically on schedule and user is notified of failures
-**Depends on**: Phase 2
-**Requirements**: SCHD-01, SCHD-02, SCHD-03, NOTF-01, NOTF-02, NOTF-03, NOTF-04
-**Success Criteria** (what must be TRUE):
-  1. Program executes updates automatically based on cron expression from configuration
-  2. Default schedule runs daily at 3 AM ("0 3 * * *")
-  3. Overlapping update jobs are skipped if previous job is still running
-  4. User receives Pushover notification when update fails, including the failure reason
-  5. Program runs without Pushover configuration (logs warning instead of failing)
-**Plans:** 3 plans
+**Plans**: 3 plans
 
 Plans:
 - [x] 03-01-PLAN.md - Scheduler package with SkipIfStillRunning mode (SCHD-01, SCHD-03)
@@ -96,44 +54,113 @@ Plans:
 
 ### Phase 4: Runtime Integration
 **Goal**: Program runs as a Windows background service without visible console window
-**Depends on**: Phase 3
-**Requirements**: RUN-01, RUN-02
-**Success Criteria** (what must be TRUE):
-  1. Program runs on Windows without displaying a console window
-  2. User can start the program manually (not auto-started on boot)
-  3. All features from previous phases work correctly in background mode
-**Plans:** 1 plan
+**Plans**: 1 plan
 
 Plans:
 - [x] 04-01-PLAN.md - Makefile with build and build-release targets (RUN-01, RUN-02)
 
+### Phase 5: CLI Immediate Update
+**Goal:** Add --update-now flag for immediate update execution with JSON output
+**Plans**: 1 plan
+
+Plans:
+- [x] 05-01-PLAN.md - Add --update-now flag with JSON output, --timeout flag, remove --run-once (CLI-01, CLI-02, CLI-03, CLI-04, CLI-05)
+
+</details>
+
+### 🚧 v0.2 多实例支持 (In Progress)
+
+**Milestone Goal:** 支持同时管理多个 nanobot 实例的升级和启动
+
+#### Phase 6: 配置扩展
+**Goal**: 用户可以在 YAML 配置文件中定义多个 nanobot 实例
+**Depends on**: Phase 5
+**Requirements**: CONF-01, CONF-02, CONF-03
+**Success Criteria** (what must be TRUE):
+  1. 用户可以在 config.yaml 中使用 instances 数组定义多个实例,每个实例包含 name、port、start_command 字段
+  2. 程序启动时自动验证实例名称唯一性,发现重复时立即报错退出并显示清晰的错误信息
+  3. 程序启动时自动验证端口唯一性,发现重复时立即报错退出并显示清晰的错误信息
+  4. 旧的 v1.0 配置文件(无 instances 字段)仍然可以正常加载和使用
+**Plans**: TBD
+
+Plans:
+- [ ] 06-01: 扩展配置结构支持多实例
+
+#### Phase 7: 生命周期扩展
+**Goal**: 为每个实例提供独立的上下文感知生命周期管理
+**Depends on**: Phase 6
+**Requirements**: LIFECYCLE-01 (部分), LIFECYCLE-02 (部分)
+**Success Criteria** (what must be TRUE):
+  1. 每个实例的所有日志消息都包含实例名称,用户可以轻松追踪哪个实例发生了什么
+  2. 系统可以为特定名称的实例执行停止操作
+  3. 系统可以为特定名称的实例执行启动操作
+  4. 停止和启动操作复用现有的 v1.0 生命周期逻辑,无需重写底层实现
+**Plans**: TBD
+
+Plans:
+- [ ] 07-01: 实现 InstanceLifecycle 包装器
+
+#### Phase 8: 实例协调器
+**Goal**: InstanceManager 可以协调所有实例的停止→更新→启动流程
+**Depends on**: Phase 7
+**Requirements**: LIFECYCLE-01, LIFECYCLE-02, LIFECYCLE-03, ERROR-02
+**Success Criteria** (what must be TRUE):
+  1. 用户执行更新时,系统按顺序停止所有配置的实例(串行执行)
+  2. 用户执行更新时,系统在所有实例停止后执行一次 UV 更新操作(全局更新)
+  3. 用户执行更新时,系统按顺序启动所有配置的实例(串行执行)
+  4. 某个实例停止失败时,系统记录错误但继续停止其他实例(优雅降级)
+  5. 某个实例启动失败时,系统记录错误但继续启动其他实例(优雅降级)
+  6. 系统收集所有实例的操作结果(成功/失败状态和错误信息),不丢失任何失败信息
+**Plans**: TBD
+
+Plans:
+- [ ] 08-01: 实现 InstanceManager 协调器
+
+#### Phase 9: 通知扩展
+**Goal**: 失败通知包含具体哪些实例失败及其失败原因
+**Depends on**: Phase 8
+**Requirements**: ERROR-01
+**Success Criteria** (what must be TRUE):
+  1. 更新完成后,如果有实例失败,用户收到一条 Pushover 通知,列出所有失败的实例名称
+  2. 通知消息包含每个失败实例的具体操作(停止失败或启动失败)和错误原因
+  3. 通知消息包含成功启动的实例列表,用户可以了解整体状态
+  4. 所有实例都成功时,不发送失败通知(避免不必要的打扰)
+  5. 同一批次的多个实例失败只发送一条通知,避免通知风暴
+**Plans**: TBD
+
+Plans:
+- [ ] 09-01: 扩展通知支持多实例失败报告
+
+#### Phase 10: 主程序集成
+**Goal**: 主程序集成 InstanceManager,完整的多实例更新流程可用
+**Depends on**: Phase 9
+**Requirements**: 所有 v0.2 需求的端到端验证
+**Success Criteria** (what must be TRUE):
+  1. 定时任务触发时,系统自动执行"停止所有→更新→启动所有"的完整流程
+  2. 使用 -run-once 参数时,系统执行一次完整的多实例更新流程并退出
+  3. 用户可以通过日志查看每个实例的详细操作过程和状态
+  4. 多实例场景下的资源使用合理,无内存泄漏或句柄泄漏
+  5. 长期运行(24x7)稳定,多次更新周期后系统仍然正常工作
+**Plans**: TBD
+
+Plans:
+- [ ] 10-01: 主程序集成和端到端测试
+
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 -> 01.1 -> 2 -> 3 -> 4
+Phases execute in numeric order: 1 → 1.1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 9 → 10
 
-| Phase | Plans Complete | Status | Completed |
-|-------|----------------|--------|-----------|
-| 1. Infrastructure | 4/4 | Complete | 2026-02-18 |
-| 01.1. Nanobot Lifecycle | 3/3 | Complete | 2026-02-18 |
-| 2. Core Update Logic | 2/2 | Complete | 2026-02-18 |
-| 3. Scheduling and Notifications | 3/3 | Complete | 2026-02-18 |
-| 4. Runtime Integration | 1/1 | Complete | 2026-02-18 |
-| 5. CLI Immediate Update | 0/1 | Complete    | 2026-02-18 |
-
-### Phase 5: CLI Immediate Update
-
-**Goal:** Add --update-now flag for immediate update execution with JSON output for third-party programmatic invocation
-**Depends on:** Phase 4
-**Requirements:** CLI-01, CLI-02, CLI-03, CLI-04, CLI-05
-**Success Criteria** (what must be TRUE):
-  1. User can run with --update-now flag to trigger immediate update and exit
-  2. User can specify --timeout flag to configure update timeout (default 5 minutes)
-  3. JSON output is emitted to stdout as the last line for programmatic consumption
-  4. Exit code is 0 on success, non-zero on failure
-  5. Help output documents new flags and JSON output format
-  6. Old --run-once flag is completely removed
-**Plans:** 1/1 plans complete
-
-Plans:
-- [ ] 05-01-PLAN.md - Add --update-now flag with JSON output, --timeout flag, remove --run-once (CLI-01, CLI-02, CLI-03, CLI-04, CLI-05)
+| Phase | Milestone | Plans Complete | Status | Completed |
+|-------|-----------|----------------|--------|-----------|
+| 1. Infrastructure | v1.0 | 4/4 | Complete | 2026-02-18 |
+| 01.1. Nanobot Lifecycle | v1.0 | 3/3 | Complete | 2026-02-18 |
+| 2. Core Update Logic | v1.0 | 2/2 | Complete | 2026-02-18 |
+| 3. Scheduling and Notifications | v1.0 | 3/3 | Complete | 2026-02-18 |
+| 4. Runtime Integration | v1.0 | 1/1 | Complete | 2026-02-18 |
+| 5. CLI Immediate Update | v1.0 | 1/1 | Complete | 2026-02-18 |
+| 6. 配置扩展 | v0.2 | 0/1 | Not started | - |
+| 7. 生命周期扩展 | v0.2 | 0/1 | Not started | - |
+| 8. 实例协调器 | v0.2 | 0/1 | Not started | - |
+| 9. 通知扩展 | v0.2 | 0/1 | Not started | - |
+| 10. 主程序集成 | v0.2 | 0/1 | Not started | - |
