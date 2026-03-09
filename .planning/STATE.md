@@ -2,19 +2,17 @@
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2025-02-18)
+See: .planning/PROJECT.md (updated 2026-03-09)
 
-**Core value:** Automatically keep nanobot at the latest version without user manual intervention
-**Current focus:** Phase 4: Runtime Integration - COMPLETE
+**Core value:** 自动保持 nanobot 处于最新版本，无需用户手动干预
+**Current focus:** Milestone v0.2 - Multi-Instance Support
 
 ## Current Position
 
-Phase: 04 of 4 (Runtime Integration)
-Plan: 1 of 1 in current phase
-Status: Phase Complete - All phases finished!
-Last activity: 2026-02-18 - Plan 04-01 completed (Makefile with build targets)
-
-Progress: [===================] 100% (1/1 plans in phase 04)
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-03-09 — Milestone v0.2 started
 
 ## Performance Metrics
 

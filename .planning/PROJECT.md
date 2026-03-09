@@ -4,6 +4,15 @@
 
 一个 Windows 后台程序，使用 Golang 开发，用于自动更新 nanobot 工具。程序通过 cron 定时任务检查并更新 nanobot，支持失败通知和回退机制。无界面运行，通过配置文件和命令行参数控制行为。
 
+## Current Milestone: v0.2 Multi-Instance Support
+
+**Goal:** 支持同时管理多个 nanobot 实例的升级和启动
+
+**Target features:**
+- 配置多个 nanobot 实例及其启动命令
+- 停止所有实例 → 升级 → 启动所有实例的流程
+- 启动失败时继续其他实例，通过 Pushover 通知失败的实例
+
 ## Core Value
 
 自动保持 nanobot 处于最新版本，无需用户手动干预。
@@ -77,4 +86,4 @@
 - `help`: 显示帮助信息
 
 ---
-*Last updated: 2025-02-18 after initialization*
+*Last updated: 2026-03-09 after milestone v0.2 started*
