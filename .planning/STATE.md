@@ -4,6 +4,21 @@ milestone: v0.2
 milestone_name: 多实例支持
 status: planning
 stopped_at: Completed 06-02-PLAN.md
+last_updated: "2026-03-10T14:48:48.564Z"
+last_activity: 2026-03-10 — 06-02 测试套件完成(92.4%覆盖率,集成测试,YAML fixtures)
+progress:
+  total_phases: 11
+  completed_phases: 7
+  total_plans: 16
+  completed_plans: 16
+---
+
+---
+gsd_state_version: 1.0
+milestone: v0.2
+milestone_name: 多实例支持
+status: planning
+stopped_at: Completed 06-02-PLAN.md
 last_updated: "2026-03-10T14:43:36.037Z"
 last_activity: 2026-03-10 — 06-01 配置扩展完成(InstanceConfig,多实例验证)
 progress:
