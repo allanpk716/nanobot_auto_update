@@ -67,9 +67,9 @@ Requirements for multi-instance support milestone.
 
 ### Configuration
 
-- [ ] **CONF-01**: Instance configuration (YAML) - Users can define multiple instances using instances array in config.yaml, each instance contains name, port, start_command fields
-- [ ] **CONF-02**: Instance name validation - Detect duplicate instance names on startup, fail fast with clear error message
-- [ ] **CONF-03**: Port validation - Detect duplicate ports on startup, fail fast with clear error message
+- [x] **CONF-01**: Instance configuration (YAML) - Users can define multiple instances using instances array in config.yaml, each instance contains name, port, start_command fields
+- [x] **CONF-02**: Instance name validation - Detect duplicate instance names on startup, fail fast with clear error message
+- [x] **CONF-03**: Port validation - Detect duplicate ports on startup, fail fast with clear error message
 
 ### Lifecycle
 
@@ -155,9 +155,9 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| CONF-01 | Phase 6 | Pending |
-| CONF-02 | Phase 6 | Pending |
-| CONF-03 | Phase 6 | Pending |
+| CONF-01 | Phase 6 | Complete |
+| CONF-02 | Phase 6 | Complete |
+| CONF-03 | Phase 6 | Complete |
 | LIFECYCLE-01 | Phase 7, Phase 8 | Pending |
 | LIFECYCLE-02 | Phase 7, Phase 8 | Pending |
 | LIFECYCLE-03 | Phase 8 | Pending |

@@ -3,15 +3,14 @@ gsd_state_version: 1.0
 milestone: v0.2
 milestone_name: 多实例支持
 status: planning
-stopped_at: Phase 6 context gathered
-last_updated: "2026-03-10T14:13:57.949Z"
-last_activity: 2026-03-09 — v0.2 路线图创建完成,Phase 6 准备开始规划
+stopped_at: Completed 06-01-PLAN.md
+last_updated: "2026-03-10T14:38:39.341Z"
+last_activity: 2026-03-10 — 06-01 配置扩展完成(InstanceConfig,多实例验证)
 progress:
   total_phases: 11
   completed_phases: 6
-  total_plans: 14
-  completed_plans: 14
-  percent: 0
+  total_plans: 16
+  completed_plans: 15
 ---
 
 # Project State
@@ -26,11 +25,11 @@ See: .planning/PROJECT.md (updated 2026-03-09)
 ## Current Position
 
 Phase: 6 of 10 (配置扩展)
-Plan: 0 of 1 in current phase
-Status: Ready to plan
-Last activity: 2026-03-09 — v0.2 路线图创建完成,Phase 6 准备开始规划
+Plan: 1 of 2 in current phase
+Status: In progress
+Last activity: 2026-03-10 — 06-01 配置扩展完成(InstanceConfig,多实例验证)
 
-Progress: [░░░░░░░░░░] 0%
+Progress: [█████████░] 94%
 
 ## Performance Metrics
 
@@ -55,6 +54,7 @@ Progress: [░░░░░░░░░░] 0%
 - Trend: Stable
 
 *Updated after v0.2 roadmap creation*
+| Phase 06-configuration-extension P01 | 4min | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -86,6 +86,9 @@ Recent decisions affecting current work:
 - [v0.2]: 实例配置使用 YAML 数组结构,每个实例包含 name/port/start_command
 - [v0.2]: 停止和启动操作采用串行执行,优雅降级处理失败
 - [v0.2]: 错误聚合模式收集所有实例错误,避免静默失败
+- [Phase 06-configuration-extension]: 使用 mapstructure 标签而非 yaml 标签进行配置解析
+- [Phase 06-configuration-extension]: 使用 errors.Join 聚合所有验证错误,避免静默失败
+- [Phase 06-configuration-extension]: 使用 map-based O(n) 算法验证唯一性而非嵌套循环
 
 ### Pending Todos
 
@@ -97,6 +100,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-10T14:13:57.945Z
-Stopped at: Phase 6 context gathered
-Resume file: .planning/phases/06-configuration-extension/06-CONTEXT.md
+Last session: 2026-03-10T14:38:39.337Z
+Stopped at: Completed 06-01-PLAN.md
+Resume file: None
