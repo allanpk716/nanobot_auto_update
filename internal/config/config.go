@@ -33,8 +33,7 @@ type Config struct {
 // defaults sets the default values for the configuration.
 func (c *Config) defaults() {
 	c.Cron = "0 3 * * *"
-	c.Nanobot.Port = 18790
-	c.Nanobot.StartupTimeout = 30 * time.Second
+	// Note: Nanobot defaults are set in Validate() only when using legacy mode
 	c.Nanobot.RepoPath = ""
 	c.Pushover.ApiToken = ""
 	c.Pushover.UserKey = ""
@@ -117,7 +116,13 @@ func (c *Config) Validate() error {
 			}
 		}
 	} else {
-		// Legacy mode
+		// Legacy mode - set defaults for Nanobot if needed
+		if c.Nanobot.Port == 0 {
+			c.Nanobot.Port = 18790
+		}
+		if c.Nanobot.StartupTimeout == 0 {
+			c.Nanobot.StartupTimeout = 30 * time.Second
+		}
 		if err := c.Nanobot.Validate(); err != nil {
 			errs = append(errs, err)
 		}
@@ -162,8 +167,7 @@ func Load(configPath string) (*Config, error) {
 
 	// Set defaults in viper (for fields not in file)
 	v.SetDefault("cron", cfg.Cron)
-	v.SetDefault("nanobot.port", cfg.Nanobot.Port)
-	v.SetDefault("nanobot.startup_timeout", cfg.Nanobot.StartupTimeout.String())
+	// Note: Nanobot defaults are NOT set here to allow mode detection in Validate()
 	v.SetDefault("nanobot.repo_path", cfg.Nanobot.RepoPath)
 	v.SetDefault("pushover.api_token", cfg.Pushover.ApiToken)
 	v.SetDefault("pushover.user_key", cfg.Pushover.UserKey)
