@@ -24,9 +24,10 @@ type PushoverConfig struct {
 
 // Config holds the main application configuration.
 type Config struct {
-	Cron     string         `yaml:"cron" mapstructure:"cron"`
-	Nanobot  NanobotConfig  `yaml:"nanobot" mapstructure:"nanobot"`
-	Pushover PushoverConfig `yaml:"pushover" mapstructure:"pushover"`
+	Cron      string           `yaml:"cron" mapstructure:"cron"`
+	Nanobot   NanobotConfig    `yaml:"nanobot" mapstructure:"nanobot"`
+	Instances []InstanceConfig `yaml:"instances" mapstructure:"instances"`
+	Pushover  PushoverConfig   `yaml:"pushover" mapstructure:"pushover"`
 }
 
 // defaults sets the default values for the configuration.
@@ -50,12 +51,79 @@ func (nc *NanobotConfig) Validate() error {
 	return nil
 }
 
+// ValidateModeCompatibility checks if both legacy and new modes are configured.
+func (c *Config) ValidateModeCompatibility() error {
+	hasLegacyMode := c.Nanobot.Port != 0
+	hasNewMode := len(c.Instances) > 0
+
+	if hasLegacyMode && hasNewMode {
+		return fmt.Errorf("配置错误: 不能同时使用 'nanobot' section 和 'instances' 数组,请选择其中一种配置模式")
+	}
+	return nil
+}
+
+// validateUniqueNames checks for duplicate instance names.
+func validateUniqueNames(instances []InstanceConfig) error {
+	nameMap := make(map[string]int)
+	for i, inst := range instances {
+		if prevIndex, exists := nameMap[inst.Name]; exists {
+			return fmt.Errorf("配置验证失败: 实例名称重复 - %q 出现在第 %d 和第 %d 个实例配置中",
+				inst.Name, prevIndex+1, i+1)
+		}
+		nameMap[inst.Name] = i
+	}
+	return nil
+}
+
+// validateUniquePorts checks for duplicate instance ports.
+func validateUniquePorts(instances []InstanceConfig) error {
+	portMap := make(map[uint32]string)
+	for _, inst := range instances {
+		if prevName, exists := portMap[inst.Port]; exists {
+			return fmt.Errorf("配置验证失败: 端口重复 - %d 出现在实例 %q 和 %q 中",
+				inst.Port, prevName, inst.Name)
+		}
+		portMap[inst.Port] = inst.Name
+	}
+	return nil
+}
+
 // Validate validates the entire Config.
 func (c *Config) Validate() error {
+	var errs []error
+
+	// Validate cron expression
 	if err := ValidateCron(c.Cron); err != nil {
-		return err
+		errs = append(errs, err)
 	}
-	return c.Nanobot.Validate()
+
+	// Check mode compatibility
+	if err := c.ValidateModeCompatibility(); err != nil {
+		errs = append(errs, err)
+	}
+
+	// Validate based on mode
+	if len(c.Instances) > 0 {
+		// Multi-instance mode
+		if err := validateUniqueNames(c.Instances); err != nil {
+			errs = append(errs, err)
+		}
+		if err := validateUniquePorts(c.Instances); err != nil {
+			errs = append(errs, err)
+		}
+		for i := range c.Instances {
+			if err := c.Instances[i].Validate(); err != nil {
+				errs = append(errs, err)
+			}
+		}
+	} else {
+		// Legacy mode
+		if err := c.Nanobot.Validate(); err != nil {
+			errs = append(errs, err)
+		}
+	}
+
+	return errors.Join(errs...)
 }
 
 // New creates a new Config with default values.
