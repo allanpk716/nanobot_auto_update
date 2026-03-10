@@ -1,0 +1,10 @@
+cron: "0 3 * * *"
+
+instances:
+  - name: "instance1"
+    port: 18790
+    start_command: "cmd1"
+
+  - name: "instance2"
+    port: 18790
+    start_command: "cmd2"

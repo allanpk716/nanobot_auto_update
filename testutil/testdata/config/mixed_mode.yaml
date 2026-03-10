@@ -1,0 +1,9 @@
+cron: "0 3 * * *"
+
+nanobot:
+  port: 18790
+
+instances:
+  - name: "instance1"
+    port: 18791
+    start_command: "cmd"

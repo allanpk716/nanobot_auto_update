@@ -1,0 +1,10 @@
+cron: "0 3 * * *"
+
+nanobot:
+  port: 18790
+  startup_timeout: 30s
+  repo_path: "C:\\Users\\test\\.nanobot\\repo"
+
+pushover:
+  api_token: "test_token"
+  user_key: "test_user"
