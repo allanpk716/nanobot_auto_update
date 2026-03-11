@@ -3,14 +3,29 @@ gsd_state_version: 1.0
 milestone: v0.2
 milestone_name: 多实例支持
 status: planning
-stopped_at: Phase 7 context gathered
-last_updated: "2026-03-10T15:40:46.271Z"
-last_activity: 2026-03-10 — 06-02 测试套件完成(92.4%覆盖率,集成测试,YAML fixtures)
+stopped_at: Completed 07-01-PLAN.md
+last_updated: "2026-03-11T00:34:30.289Z"
+last_activity: 2026-03-11 — 07-01 实例生命周期包装器完成(InstanceError,InstanceLifecycle,动态命令)
 progress:
   total_phases: 11
-  completed_phases: 7
-  total_plans: 16
-  completed_plans: 16
+  completed_phases: 8
+  total_plans: 17
+  completed_plans: 17
+---
+
+---
+gsd_state_version: 1.0
+milestone: v0.2
+milestone_name: 多实例支持
+status: planning
+stopped_at: Completed 07-01-PLAN.md
+last_updated: "2026-03-11T00:33:50.316Z"
+last_activity: 2026-03-11 — 07-01 实例生命周期包装器完成(InstanceError,InstanceLifecycle,动态命令)
+progress:
+  total_phases: 11
+  completed_phases: 8
+  total_plans: 17
+  completed_plans: 17
 ---
 
 ---
@@ -51,14 +66,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-09)
 
 **Core value:** 自动保持 nanobot 处于最新版本,无需用户手动干预
-**Current focus:** 多实例支持 (v0.2 里程碑) - Phase 6: 配置扩展
+**Current focus:** 多实例支持 (v0.2 里程碑) - Phase 7: 生命周期扩展
 
 ## Current Position
 
-Phase: 6 of 10 (配置扩展)
-Plan: 2 of 2 in current phase
-Status: Phase 6 completed
-Last activity: 2026-03-10 — 06-02 测试套件完成(92.4%覆盖率,集成测试,YAML fixtures)
+Phase: 7 of 10 (生命周期扩展)
+Plan: 1 of 1 in current phase
+Status: Phase 7 completed
+Last activity: 2026-03-11 — 07-01 实例生命周期包装器完成(InstanceError,InstanceLifecycle,动态命令)
 
 Progress: [██████████] 100%
 
@@ -87,6 +102,7 @@ Progress: [██████████] 100%
 *Updated after v0.2 roadmap creation*
 | Phase 06-configuration-extension P01 | 4min | 2 tasks | 4 files |
 | Phase 06 P02 | 15min | 2 tasks | 7 files |
+| Phase 07-lifecycle-extension P01 | 4min | 3 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -122,6 +138,10 @@ Recent decisions affecting current work:
 - [Phase 06-configuration-extension]: 使用 errors.Join 聚合所有验证错误,避免静默失败
 - [Phase 06-configuration-extension]: 使用 map-based O(n) 算法验证唯一性而非嵌套循环
 - [Phase 06]: Defaults applied in Validate() not New() to enable proper mode detection for multi-instance configuration
+- [Phase 07-lifecycle-extension]: 使用中文错误消息(停止实例/启动实例)提升用户友好性
+- [Phase 07-lifecycle-extension]: InstanceError 实现 Unwrap() 方法支持 errors.Is/As 错误链遍历
+- [Phase 07-lifecycle-extension]: StartNanobot 使用 cmd /c 执行命令,支持管道和重定向等复杂命令
+- [Phase 07-lifecycle-extension]: 所有日志通过 logger.With() 预注入 instance 和 component 字段
 
 ### Pending Todos
 
@@ -133,6 +153,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-10T15:40:46.267Z
-Stopped at: Phase 7 context gathered
-Resume file: .planning/phases/07-lifecycle-extension/07-CONTEXT.md
+Last session: 2026-03-11T00:34:30.285Z
+Stopped at: Completed 07-01-PLAN.md
+Resume file: None

@@ -73,8 +73,8 @@ Requirements for multi-instance support milestone.
 
 ### Lifecycle
 
-- [ ] **LIFECYCLE-01**: Stop all instances - Iterate through all configured instances and stop each one (reuse existing v0.1 stop logic)
-- [ ] **LIFECYCLE-02**: Start all instances - Iterate through all configured instances and start each one with configured command
+- [x] **LIFECYCLE-01**: Stop all instances - Iterate through all configured instances and stop each one (reuse existing v0.1 stop logic)
+- [x] **LIFECYCLE-02**: Start all instances - Iterate through all configured instances and start each one with configured command
 - [ ] **LIFECYCLE-03**: Graceful degradation - Continue starting/stopping other instances when one instance fails, don't abort entire operation
 
 ### Error Handling
@@ -158,8 +158,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | CONF-01 | Phase 6 | Complete |
 | CONF-02 | Phase 6 | Complete |
 | CONF-03 | Phase 6 | Complete |
-| LIFECYCLE-01 | Phase 7, Phase 8 | Pending |
-| LIFECYCLE-02 | Phase 7, Phase 8 | Pending |
+| LIFECYCLE-01 | Phase 7, Phase 8 | Complete |
+| LIFECYCLE-02 | Phase 7, Phase 8 | Complete |
 | LIFECYCLE-03 | Phase 8 | Pending |
 | ERROR-01 | Phase 9 | Pending |
 | ERROR-02 | Phase 8 | Pending |
