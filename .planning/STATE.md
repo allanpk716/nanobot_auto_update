@@ -4,7 +4,7 @@ milestone: v0.2
 milestone_name: 多实例支持
 status: in_progress
 stopped_at: Completed 09-01-PLAN.md
-last_updated: "2026-03-11T04:11:24.081Z"
+last_updated: "2026-03-11T04:16:50.682Z"
 last_activity: 2026-03-11 — 08-01 实例协调器完成(InstanceManager,UpdateResult,优雅降级)
 progress:
   total_phases: 11
