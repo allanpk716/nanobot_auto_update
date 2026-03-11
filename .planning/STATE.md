@@ -2,10 +2,25 @@
 gsd_state_version: 1.0
 milestone: v0.2
 milestone_name: 多实例支持
+status: in_progress
+stopped_at: Completed 08-01-PLAN.md
+last_updated: "2026-03-11T02:45:00.000Z"
+last_activity: 2026-03-11 — 08-01 实例协调器完成(InstanceManager,UpdateResult,优雅降级)
+progress:
+  total_phases: 11
+  completed_phases: 9
+  total_plans: 18
+  completed_plans: 18
+---
+
+---
+gsd_state_version: 1.0
+milestone: v0.2
+milestone_name: 多实例支持
 status: planning
-stopped_at: Completed 07-01-PLAN.md
-last_updated: "2026-03-11T00:39:44.520Z"
-last_activity: 2026-03-11 — 07-01 实例生命周期包装器完成(InstanceError,InstanceLifecycle,动态命令)
+stopped_at: Phase 8 plan created
+last_updated: "2026-03-11T02:30:00.000Z"
+last_activity: 2026-03-11 — 08-01 实例协调器计划创建(InstanceManager,UpdateResult,优雅降级)
 progress:
   total_phases: 11
   completed_phases: 8
@@ -70,10 +85,10 @@ See: .planning/PROJECT.md (updated 2026-03-09)
 
 ## Current Position
 
-Phase: 7 of 10 (生命周期扩展)
+Phase: 8 of 10 (实例协调器) - ✅ COMPLETED
 Plan: 1 of 1 in current phase
-Status: Phase 7 completed
-Last activity: 2026-03-11 — 07-01 实例生命周期包装器完成(InstanceError,InstanceLifecycle,动态命令)
+Status: Phase 8 plan completed
+Last activity: 2026-03-11 — 08-01 实例协调器完成(InstanceManager,UpdateResult,优雅降级)
 
 Progress: [██████████] 100%
 
@@ -103,6 +118,7 @@ Progress: [██████████] 100%
 | Phase 06-configuration-extension P01 | 4min | 2 tasks | 4 files |
 | Phase 06 P02 | 15min | 2 tasks | 7 files |
 | Phase 07-lifecycle-extension P01 | 4min | 3 tasks | 6 files |
+| Phase 08-instance-coordinator P01 | 5min | 3 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -142,6 +158,9 @@ Recent decisions affecting current work:
 - [Phase 07-lifecycle-extension]: InstanceError 实现 Unwrap() 方法支持 errors.Is/As 错误链遍历
 - [Phase 07-lifecycle-extension]: StartNanobot 使用 cmd /c 执行命令,支持管道和重定向等复杂命令
 - [Phase 07-lifecycle-extension]: 所有日志通过 logger.With() 预注入 instance 和 component 字段
+- [Phase 08-instance-coordinator]: InstanceManager 使用类型断言处理 InstanceError 从 error 接口转换
+- [Phase 08-instance-coordinator]: 所有实例操作采用串行执行,简化实现并保证日志清晰
+- [Phase 08-instance-coordinator]: 停止失败时跳过 UV 更新,避免文件冲突
 
 ### Pending Todos
 
@@ -153,6 +172,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-11T00:34:30.285Z
-Stopped at: Completed 07-01-PLAN.md
-Resume file: None
+Last session: 2026-03-11T02:45:00.000Z
+Stopped at: Phase 8 completed
+Resume file: .planning/phases/09-notification-extension/09-CONTEXT.md (待创建)
