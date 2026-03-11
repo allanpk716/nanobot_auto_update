@@ -13,6 +13,7 @@ import (
 	flag "github.com/spf13/pflag"
 
 	"github.com/HQGroup/nanobot-auto-updater/internal/config"
+	"github.com/HQGroup/nanobot-auto-updater/internal/instance"
 	"github.com/HQGroup/nanobot-auto-updater/internal/lifecycle"
 	"github.com/HQGroup/nanobot-auto-updater/internal/logging"
 	"github.com/HQGroup/nanobot-auto-updater/internal/notifier"
@@ -134,6 +135,15 @@ func main() {
 		"timeout", timeout.String(),
 	)
 
+	// 模式检测 (配置验证已确保不会同时存在两种模式)
+	useMultiInstance := len(cfg.Instances) > 0
+
+	if useMultiInstance {
+		logger.Info("Running in multi-instance mode", "instance_count", len(cfg.Instances))
+	} else {
+		logger.Info("Running in legacy single-instance mode", "port", cfg.Nanobot.Port)
+	}
+
 	if *updateNow {
 		logger.Info("Executing immediate update", "timeout", timeout.String())
 
@@ -141,6 +151,61 @@ func main() {
 		ctx, cancel := context.WithTimeout(context.Background(), *timeout)
 		defer cancel()
 
+		// 多实例模式
+		if useMultiInstance {
+			manager := instance.NewInstanceManager(cfg, logger)
+
+			updateResult, err := manager.UpdateAll(ctx)
+
+			// 双层错误检查
+			if err != nil {
+				// UV 更新失败 (严重错误)
+				logger.Error("Multi-instance update failed", "error", err.Error())
+
+				notif.NotifyFailure("Multi-Instance Update", err)
+
+				outputResult := UpdateNowResult{
+					Success:  false,
+					Error:    err.Error(),
+					ExitCode: 1,
+				}
+				outputJSON(outputResult)
+				os.Exit(1)
+			}
+
+			// 实例失败 (优雅降级)
+			if updateResult.HasErrors() {
+				logger.Warn("Multi-instance update completed with errors",
+					"stopped_success", len(updateResult.Stopped),
+					"started_success", len(updateResult.Started),
+					"stop_failed", len(updateResult.StopFailed),
+					"start_failed", len(updateResult.StartFailed))
+
+				notif.NotifyUpdateResult(updateResult)
+
+				outputResult := UpdateNowResult{
+					Success:  false,
+					Error:    fmt.Sprintf("Update completed with %d instance failures", len(updateResult.StopFailed)+len(updateResult.StartFailed)),
+					ExitCode: 1,
+				}
+				outputJSON(outputResult)
+				os.Exit(1)
+			}
+
+			// 完全成功
+			logger.Info("Multi-instance update completed successfully",
+				"stopped_count", len(updateResult.Stopped),
+				"started_count", len(updateResult.Started))
+
+			outputResult := UpdateNowResult{
+				Success: true,
+				Message: fmt.Sprintf("Update completed successfully for %d instances", len(updateResult.Stopped)),
+			}
+			outputJSON(outputResult)
+			os.Exit(0)
+		}
+
+		// Legacy 单实例模式
 		// Initialize lifecycle manager
 		lifecycleCfg := lifecycle.Config{
 			Port:           cfg.Nanobot.Port,
@@ -231,13 +296,53 @@ func main() {
 	// Initialize scheduler with overlap prevention
 	sched := scheduler.New(logger)
 
-	// Create updater instance
-	u := updater.NewUpdater(logger)
-	u.SetRepoPath(cfg.Nanobot.RepoPath)
-
 	// Register the update job
 	err = sched.AddJob(cfg.Cron, func() {
 		logger.Info("Starting scheduled update job")
+
+		// 多实例模式
+		if useMultiInstance {
+			manager := instance.NewInstanceManager(cfg, logger)
+
+			result, err := manager.UpdateAll(context.Background())
+
+			// 双层错误检查
+			if err != nil {
+				// UV 更新失败 (严重错误)
+				logger.Error("Scheduled multi-instance update failed",
+					"error", err.Error())
+
+				if notifyErr := notif.NotifyFailure("Scheduled Multi-Instance Update", err); notifyErr != nil {
+					logger.Error("Failed to send failure notification", "error", notifyErr.Error())
+				}
+				return
+			}
+
+			// 实例失败 (优雅降级)
+			if result.HasErrors() {
+				logger.Error("Scheduled multi-instance update completed with errors",
+					"stopped_success", len(result.Stopped),
+					"started_success", len(result.Started),
+					"stop_failed", len(result.StopFailed),
+					"start_failed", len(result.StartFailed))
+
+				if notifyErr := notif.NotifyUpdateResult(result); notifyErr != nil {
+					logger.Error("Failed to send update result notification", "error", notifyErr.Error())
+				}
+				return
+			}
+
+			// 完全成功
+			logger.Info("Scheduled multi-instance update completed successfully",
+				"stopped_count", len(result.Stopped),
+				"started_count", len(result.Started))
+			return
+		}
+
+		// Legacy 单实例模式
+		// Create updater instance
+		u := updater.NewUpdater(logger)
+		u.SetRepoPath(cfg.Nanobot.RepoPath)
 
 		result, err := u.Update(context.Background())
 		if err != nil {
