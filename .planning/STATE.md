@@ -3,6 +3,21 @@ gsd_state_version: 1.0
 milestone: v0.2
 milestone_name: 多实例支持
 status: in_progress
+stopped_at: Phase 8 completed
+last_updated: "2026-03-11T02:43:54.719Z"
+last_activity: 2026-03-11 — 08-01 实例协调器完成(InstanceManager,UpdateResult,优雅降级)
+progress:
+  total_phases: 11
+  completed_phases: 9
+  total_plans: 18
+  completed_plans: 18
+---
+
+---
+gsd_state_version: 1.0
+milestone: v0.2
+milestone_name: 多实例支持
+status: in_progress
 stopped_at: Completed 08-01-PLAN.md
 last_updated: "2026-03-11T02:45:00.000Z"
 last_activity: 2026-03-11 — 08-01 实例协调器完成(InstanceManager,UpdateResult,优雅降级)
