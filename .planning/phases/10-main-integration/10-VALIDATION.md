@@ -38,6 +38,7 @@ created: 2026-03-11
 
 | Task ID | Plan | Wave | Requirement | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|-----------|-------------------|-------------|--------|
+| 10-01-00 | 01 | 0 | Wave 0 测试骨架 | unit | `go test -v ./cmd/nanobot-auto-updater -run "Test(Scheduled\|UpdateNow\|LongRunning)"` | ✅ Phase 10 | ⬜ pending |
 | 10-01-01 | 01 | 1 | v0.2 定时任务触发 | integration | `go test -v ./cmd/nanobot-auto-updater -run TestScheduledMultiInstanceUpdate` | ✅ Phase 10 | ⬜ pending |
 | 10-01-02 | 01 | 1 | v0.2 -run-once 模式 | integration | `go test -v ./cmd/nanobot-auto-updater -run TestUpdateNowMultiInstance` | ✅ Phase 10 | ⬜ pending |
 | 10-01-03 | 01 | 1 | v0.2 日志追踪 | unit | `go test -v ./internal/instance -run TestInstanceLifecycleLogging` | ✅ Phase 7 | ⬜ pending |
@@ -50,10 +51,15 @@ created: 2026-03-11
 
 ## Wave 0 Requirements
 
-- [x] `cmd/nanobot-auto-updater/main_test.go` — 添加 TestScheduledMultiInstanceUpdate (集成测试,需要 mock scheduler)
-- [x] `cmd/nanobot-auto-updater/main_test.go` — 添加 TestUpdateNowMultiInstance (集成测试,需要 mock InstanceManager)
-- [x] `cmd/nanobot-auto-updater/main_test.go` — 添加 TestMultiInstanceLongRunning (长期运行测试,模拟多次更新周期)
-- [ ] `docs\test-plan.md` — 手动测试计划:48小时运行 + 内存监控
+- [x] `cmd/nanobot-auto-updater/main_test.go` — TestScheduledMultiInstanceUpdate (Wave 0 骨架,Task 0 创建)
+- [x] `cmd/nanobot-auto-updater/main_test.go` — TestUpdateNowMultiInstance (Wave 0 骨架,Task 0 创建)
+- [x] `cmd/nanobot-auto-updater/main_test.go` — TestMultiInstanceLongRunning (Wave 0 骨架,Task 0 创建)
+- [x] `tmp/test_multi_instance.yaml` — 测试配置文件 (Task 0 创建)
+- [x] `tmp/test_legacy.yaml` — Legacy 配置文件 (Task 0 创建)
+- [x] `docs/test-plan.md` — 手动测试计划 (Task 3 创建,包含 48 小时运行步骤)
+
+**Nyquist Compliance Note:**
+Task 0 在 Wave 0 创建测试骨架 (t.Skip() 占位),Task 2 在 Wave 1 实现测试逻辑。这确保了 Nyquist 采样原则:测试在实现之前预先存在 (即使是骨架形式)。
 
 *Go 标准库 testing 已内置,无需额外安装测试框架*
 
