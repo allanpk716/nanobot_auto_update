@@ -1,0 +1,10 @@
+cron: "*/5 * * * *"
+instances:
+  - name: "gateway"
+    port: 18790
+    start_command: "echo test-gateway"
+    startup_timeout: 5
+  - name: "worker"
+    port: 18791
+    start_command: "echo test-worker"
+    startup_timeout: 5

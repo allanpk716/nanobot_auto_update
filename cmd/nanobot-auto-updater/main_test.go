@@ -178,3 +178,21 @@ func init() {
 		panic("Tests only valid on Windows")
 	}
 }
+
+// TestScheduledMultiInstanceUpdate 验证定时任务调用 InstanceManager.UpdateAll
+// 使用 context.Background(),双层错误检查
+func TestScheduledMultiInstanceUpdate(t *testing.T) {
+	t.Skip("Wave 0 - 骨架创建,实现将在 Task 1 后完成")
+}
+
+// TestUpdateNowMultiInstance 验证 --update-now 调用 InstanceManager.UpdateAll
+// 使用 context.WithTimeout(),双层错误检查
+func TestUpdateNowMultiInstance(t *testing.T) {
+	t.Skip("Wave 0 - 骨架创建,实现将在 Task 1 后完成")
+}
+
+// TestMultiInstanceLongRunning 模拟多次更新周期
+// 验证内存和 goroutine 稳定性
+func TestMultiInstanceLongRunning(t *testing.T) {
+	t.Skip("Wave 0 - 骨架创建,实现将在 Task 1 后完成")
+}

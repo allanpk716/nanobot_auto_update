@@ -1,0 +1,4 @@
+cron: "*/5 * * * *"
+nanobot:
+  port: 18790
+  startup_timeout: 30
