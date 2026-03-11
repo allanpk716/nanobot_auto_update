@@ -79,7 +79,8 @@ func (m *InstanceManager) stopAll(ctx context.Context, result *UpdateResult) {
 				"port", inst.config.Port)
 
 			// 记录失败但不返回,继续停止其他实例
-			result.StopFailed = append(result.StopFailed, err)
+			// Type assertion: StopForUpdate always returns *InstanceError on error
+			result.StopFailed = append(result.StopFailed, err.(*InstanceError))
 		} else {
 			result.Stopped = append(result.Stopped, inst.config.Name)
 		}
@@ -101,7 +102,8 @@ func (m *InstanceManager) startAll(ctx context.Context, result *UpdateResult) {
 				"port", inst.config.Port)
 
 			// 记录失败但不返回,继续启动其他实例
-			result.StartFailed = append(result.StartFailed, err)
+			// Type assertion: StartAfterUpdate always returns *InstanceError on error
+			result.StartFailed = append(result.StartFailed, err.(*InstanceError))
 		} else {
 			result.Started = append(result.Started, inst.config.Name)
 		}
