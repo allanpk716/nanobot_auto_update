@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v0.2
 milestone_name: 多实例支持
 status: in_progress
-stopped_at: Phase 8 completed
-last_updated: "2026-03-11T02:43:54.719Z"
+stopped_at: Completed 09-01-PLAN.md
+last_updated: "2026-03-11T04:11:24.081Z"
 last_activity: 2026-03-11 — 08-01 实例协调器完成(InstanceManager,UpdateResult,优雅降级)
 progress:
   total_phases: 11
-  completed_phases: 9
-  total_plans: 18
-  completed_plans: 18
+  completed_phases: 10
+  total_plans: 19
+  completed_plans: 19
 ---
 
 ---
@@ -134,6 +134,7 @@ Progress: [██████████] 100%
 | Phase 06 P02 | 15min | 2 tasks | 7 files |
 | Phase 07-lifecycle-extension P01 | 4min | 3 tasks | 6 files |
 | Phase 08-instance-coordinator P01 | 5min | 3 tasks | 3 files |
+| Phase 09-notification-extension P01 | 4 | 1 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -176,6 +177,10 @@ Recent decisions affecting current work:
 - [Phase 08-instance-coordinator]: InstanceManager 使用类型断言处理 InstanceError 从 error 接口转换
 - [Phase 08-instance-coordinator]: 所有实例操作采用串行执行,简化实现并保证日志清晰
 - [Phase 08-instance-coordinator]: 停止失败时跳过 UV 更新,避免文件冲突
+- [Phase 09-notification-extension]: 使用 strings.Builder 构建多行消息,避免性能问题
+- [Phase 09-notification-extension]: 使用 Unicode 符号(✗/✓)增强视觉区分
+- [Phase 09-notification-extension]: 所有实例成功时记录 DEBUG 日志而非 INFO,避免日志噪音
+- [Phase 09-notification-extension]: 使用 fmt.Sprintf("%v", err.Err) 而非技术错误码,保持用户友好
 
 ### Pending Todos
 
@@ -187,6 +192,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-11T02:45:00.000Z
-Stopped at: Phase 8 completed
-Resume file: .planning/phases/09-notification-extension/09-CONTEXT.md (待创建)
+Last session: 2026-03-11T04:11:24.077Z
+Stopped at: Completed 09-01-PLAN.md
+Resume file: None

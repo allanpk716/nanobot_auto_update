@@ -79,7 +79,7 @@ Requirements for multi-instance support milestone.
 
 ### Error Handling
 
-- [ ] **ERROR-01**: Per-instance failure notification - Report which instances failed in Pushover message, include instance name, operation type (stop/start), and error details
+- [x] **ERROR-01**: Per-instance failure notification - Report which instances failed in Pushover message, include instance name, operation type (stop/start), and error details
 - [ ] **ERROR-02**: Error aggregation - Collect all instance errors (don't return early on first failure), structured error reporting shows which instances succeeded, which failed, and why
 
 ## v2 Requirements
@@ -161,7 +161,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | LIFECYCLE-01 | Phase 7, Phase 8 | Complete |
 | LIFECYCLE-02 | Phase 7, Phase 8 | Complete |
 | LIFECYCLE-03 | Phase 8 | Pending |
-| ERROR-01 | Phase 9 | Pending |
+| ERROR-01 | Phase 9 | Complete |
 | ERROR-02 | Phase 8 | Pending |
 
 **Coverage:**
