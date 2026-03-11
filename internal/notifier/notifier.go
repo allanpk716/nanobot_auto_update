@@ -4,7 +4,9 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"strings"
 
+	"github.com/HQGroup/nanobot-auto-updater/internal/instance"
 	"github.com/gregdel/pushover"
 )
 
@@ -121,4 +123,64 @@ func (n *Notifier) NotifySuccess(operation, details string) error {
 	title := fmt.Sprintf("Nanobot Update Success: %s", operation)
 	message := fmt.Sprintf("Operation: %s\n\n%s", operation, details)
 	return n.Notify(title, message)
+}
+
+// NotifyUpdateResult sends a notification for multi-instance update results
+// Only sends notification if there are errors (HasErrors() == true)
+// Returns nil if all instances succeeded or if notifications are disabled
+func (n *Notifier) NotifyUpdateResult(result *instance.UpdateResult) error {
+	// 如果没有错误,记录 DEBUG 日志并返回 nil
+	if !result.HasErrors() {
+		n.logger.Debug("All instances succeeded, skipping failure notification",
+			"stopped_count", len(result.Stopped),
+			"started_count", len(result.Started))
+		return nil
+	}
+
+	// 构建格式化消息
+	message := n.formatUpdateResultMessage(result)
+
+	// 发送通知
+	return n.Notify("Nanobot 多实例更新失败", message)
+}
+
+// formatUpdateResultMessage formats UpdateResult into a user-friendly notification message
+func (n *Notifier) formatUpdateResultMessage(result *instance.UpdateResult) string {
+	var msg strings.Builder
+
+	// 计算总失败数
+	totalFailed := len(result.StopFailed) + len(result.StartFailed)
+
+	// 第一部分: 失败摘要
+	msg.WriteString(fmt.Sprintf("更新失败: %d 个实例操作失败\n\n", totalFailed))
+
+	// 第二部分: 停止失败详情
+	if len(result.StopFailed) > 0 {
+		msg.WriteString("停止失败的实例:\n")
+		for _, err := range result.StopFailed {
+			msg.WriteString(fmt.Sprintf("  ✗ %s (端口 %d)\n", err.InstanceName, err.Port))
+			msg.WriteString(fmt.Sprintf("    原因: %v\n", err.Err))
+		}
+		msg.WriteString("\n")
+	}
+
+	// 第三部分: 启动失败详情
+	if len(result.StartFailed) > 0 {
+		msg.WriteString("启动失败的实例:\n")
+		for _, err := range result.StartFailed {
+			msg.WriteString(fmt.Sprintf("  ✗ %s (端口 %d)\n", err.InstanceName, err.Port))
+			msg.WriteString(fmt.Sprintf("    原因: %v\n", err.Err))
+		}
+		msg.WriteString("\n")
+	}
+
+	// 第四部分: 成功启动列表
+	if len(result.Started) > 0 {
+		msg.WriteString(fmt.Sprintf("成功启动的实例 (%d):\n", len(result.Started)))
+		for _, name := range result.Started {
+			msg.WriteString(fmt.Sprintf("  ✓ %s\n", name))
+		}
+	}
+
+	return msg.String()
 }
