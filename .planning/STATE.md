@@ -4,7 +4,7 @@ milestone: v0.2
 milestone_name: 多实例支持
 status: in_progress
 stopped_at: Completed 10-01-PLAN.md
-last_updated: "2026-03-11T07:00:46.601Z"
+last_updated: "2026-03-11T07:10:25.879Z"
 last_activity: 2026-03-11 — 10-01 多实例集成完成(main.go集成,端到端测试,手动测试计划)
 progress:
   total_phases: 11
