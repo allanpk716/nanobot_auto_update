@@ -65,7 +65,7 @@ func (m *Manager) StartAfterUpdate(ctx context.Context) error {
 	m.logger.Info("Starting nanobot after update")
 
 	// Always start regardless of previous state (locked decision)
-	if err := StartNanobot(ctx, m.startupTimeout, m.logger); err != nil {
+	if err := StartNanobot(ctx, "nanobot gateway", m.port, m.startupTimeout, m.logger); err != nil {
 		m.logger.Error("Failed to start nanobot", "error", err)
 		return fmt.Errorf("failed to start nanobot (user can start manually): %w", err)
 	}

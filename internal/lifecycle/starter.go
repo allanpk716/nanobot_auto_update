@@ -14,13 +14,14 @@ import (
 	"golang.org/x/sys/windows"
 )
 
-// StartNanobot starts nanobot gateway in the background with hidden window.
-// Returns error if startup fails or process not running within timeout.
-func StartNanobot(ctx context.Context, startupTimeout time.Duration, logger *slog.Logger) error {
-	logger.Info("Starting nanobot gateway", "startup_timeout", startupTimeout)
+// StartNanobot starts nanobot with the specified command in the background with hidden window.
+// Returns error if startup fails or port not listening within timeout.
+func StartNanobot(ctx context.Context, command string, port uint32, startupTimeout time.Duration, logger *slog.Logger) error {
+	logger.Info("Starting nanobot", "command", command, "port", port, "startup_timeout", startupTimeout)
 
-	// Start nanobot gateway as background process
-	cmd := exec.Command("nanobot", "gateway")
+	// Start nanobot as background process using Windows shell
+	// cmd /c supports pipes, redirections, and complex commands
+	cmd := exec.CommandContext(ctx, "cmd", "/c", command)
 	// Set PYTHONIOENCODING=utf-8 to fix Unicode encoding issues on Windows
 	// (nanobot uses emoji in output which fails with GBK encoding)
 	cmd.Env = append(os.Environ(), "PYTHONIOENCODING=utf-8")
@@ -29,10 +30,10 @@ func StartNanobot(ctx context.Context, startupTimeout time.Duration, logger *slo
 		CreationFlags: windows.CREATE_NO_WINDOW | windows.CREATE_NEW_PROCESS_GROUP,
 	}
 
-	logger.Debug("Executing nanobot gateway command")
+	logger.Debug("Executing command via Windows shell")
 	// Detach from parent - don't wait for completion
 	if err := cmd.Start(); err != nil {
-		logger.Error("Failed to start nanobot process", "error", err)
+		logger.Error("Failed to start nanobot process", "command", command, "error", err)
 		return fmt.Errorf("failed to start nanobot: %w", err)
 	}
 
@@ -44,15 +45,15 @@ func StartNanobot(ctx context.Context, startupTimeout time.Duration, logger *slo
 		return fmt.Errorf("failed to detach nanobot process: %w", err)
 	}
 
-	logger.Debug("Process detached, waiting for process to start running")
+	logger.Debug("Process detached, waiting for port to become available")
 
-	// Verify startup by checking process is running
-	if err := waitForProcessRunning(ctx, "nanobot.exe", startupTimeout, logger); err != nil {
-		logger.Error("Nanobot startup verification failed", "error", err)
+	// Verify startup by checking port is listening
+	if err := waitForPortListening(ctx, port, startupTimeout, logger); err != nil {
+		logger.Error("Nanobot startup verification failed", "port", port, "error", err)
 		return fmt.Errorf("nanobot startup verification failed: %w", err)
 	}
 
-	logger.Info("Nanobot startup verified, process is running")
+	logger.Info("Nanobot startup verified, port is listening", "port", port)
 	return nil
 }
 
