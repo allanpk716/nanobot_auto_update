@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v0.2
 milestone_name: 多实例支持
 status: in_progress
-stopped_at: Completed 09-01-PLAN.md
-last_updated: "2026-03-11T04:16:50.682Z"
-last_activity: 2026-03-11 — 08-01 实例协调器完成(InstanceManager,UpdateResult,优雅降级)
+stopped_at: Completed 10-01-PLAN.md
+last_updated: "2026-03-11T07:00:46.601Z"
+last_activity: 2026-03-11 — 10-01 多实例集成完成(main.go集成,端到端测试,手动测试计划)
 progress:
   total_phases: 11
-  completed_phases: 10
-  total_plans: 19
-  completed_plans: 19
+  completed_phases: 11
+  total_plans: 20
+  completed_plans: 20
 ---
 
 ---
@@ -18,75 +18,14 @@ gsd_state_version: 1.0
 milestone: v0.2
 milestone_name: 多实例支持
 status: in_progress
-stopped_at: Completed 08-01-PLAN.md
-last_updated: "2026-03-11T02:45:00.000Z"
-last_activity: 2026-03-11 — 08-01 实例协调器完成(InstanceManager,UpdateResult,优雅降级)
+stopped_at: Completed 10-01-PLAN.md
+last_updated: "2026-03-11T06:56:05Z"
+last_activity: 2026-03-11 — 10-01 多实例集成完成(main.go集成,端到端测试,手动测试计划)
 progress:
   total_phases: 11
-  completed_phases: 9
-  total_plans: 18
-  completed_plans: 18
----
-
----
-gsd_state_version: 1.0
-milestone: v0.2
-milestone_name: 多实例支持
-status: planning
-stopped_at: Phase 8 plan created
-last_updated: "2026-03-11T02:30:00.000Z"
-last_activity: 2026-03-11 — 08-01 实例协调器计划创建(InstanceManager,UpdateResult,优雅降级)
-progress:
-  total_phases: 11
-  completed_phases: 8
-  total_plans: 17
-  completed_plans: 17
----
-
----
-gsd_state_version: 1.0
-milestone: v0.2
-milestone_name: 多实例支持
-status: planning
-stopped_at: Completed 07-01-PLAN.md
-last_updated: "2026-03-11T00:33:50.316Z"
-last_activity: 2026-03-11 — 07-01 实例生命周期包装器完成(InstanceError,InstanceLifecycle,动态命令)
-progress:
-  total_phases: 11
-  completed_phases: 8
-  total_plans: 17
-  completed_plans: 17
----
-
----
-gsd_state_version: 1.0
-milestone: v0.2
-milestone_name: 多实例支持
-status: planning
-stopped_at: Completed 06-02-PLAN.md
-last_updated: "2026-03-10T14:43:36.037Z"
-last_activity: 2026-03-10 — 06-01 配置扩展完成(InstanceConfig,多实例验证)
-progress:
-  total_phases: 11
-  completed_phases: 7
-  total_plans: 16
-  completed_plans: 16
-  percent: 100
----
-
----
-gsd_state_version: 1.0
-milestone: v0.2
-milestone_name: 多实例支持
-status: planning
-stopped_at: Completed 06-01-PLAN.md
-last_updated: "2026-03-10T14:38:39.341Z"
-last_activity: 2026-03-10 — 06-01 配置扩展完成(InstanceConfig,多实例验证)
-progress:
-  [██████████] 100%
-  completed_phases: 6
-  total_plans: 16
-  completed_plans: 15
+  completed_phases: 10
+  total_plans: 20
+  completed_plans: 20
 ---
 
 # Project State
@@ -96,23 +35,23 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-09)
 
 **Core value:** 自动保持 nanobot 处于最新版本,无需用户手动干预
-**Current focus:** 多实例支持 (v0.2 里程碑) - Phase 7: 生命周期扩展
+**Current focus:** 多实例支持 (v0.2 里程碑) - Phase 10: 主集成
 
 ## Current Position
 
-Phase: 8 of 10 (实例协调器) - ✅ COMPLETED
+Phase: 10 of 10 (主集成) - ✅ COMPLETED
 Plan: 1 of 1 in current phase
-Status: Phase 8 plan completed
-Last activity: 2026-03-11 — 08-01 实例协调器完成(InstanceManager,UpdateResult,优雅降级)
+Status: Phase 10 plan completed
+Last activity: 2026-03-11 — 10-01 多实例集成完成(main.go集成,端到端测试,手动测试计划)
 
 Progress: [██████████] 100%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 13
-- Average duration: 4 min
-- Total execution time: 0.85 hours
+- Total plans completed: 20
+- Average duration: 5 min
+- Total execution time: 1.0 hours
 
 **By Phase:**
 
@@ -124,17 +63,23 @@ Progress: [██████████] 100%
 | 03 - Scheduling and Notifications | 3 | 9 min | 3 min |
 | 04 - Runtime Integration | 1 | 5 min | 5 min |
 | 05 - CLI Immediate Update | 1 | 7 min | 7 min |
+| 06 - Configuration Extension | 2 | 19 min | 9.5 min |
+| 07 - Lifecycle Extension | 1 | 4 min | 4 min |
+| 08 - Instance Coordinator | 1 | 5 min | 5 min |
+| 09 - Notification Extension | 1 | 4 min | 4 min |
+| 10 - Main Integration | 1 | 18 min | 18 min |
 
 **Recent Trend:**
-- Last 5 plans: 5 min, 3 min, 2 min, 5 min, 7 min
-- Trend: Stable
+- Last 5 plans: 4 min, 5 min, 4 min, 18 min
+- Trend: Stable with recent integration spike
 
-*Updated after v0.2 roadmap creation*
-| Phase 06-configuration-extension P01 | 4min | 2 tasks | 4 files |
-| Phase 06 P02 | 15min | 2 tasks | 7 files |
-| Phase 07-lifecycle-extension P01 | 4min | 3 tasks | 6 files |
-| Phase 08-instance-coordinator P01 | 5min | 3 tasks | 3 files |
-| Phase 09-notification-extension P01 | 4 | 1 tasks | 2 files |
+**Phase 10-01 Metrics:**
+- Duration: 18 min
+- Tasks: 4
+- Files: 4
+- Tests added: 6
+- Lines added: 781
+| Phase 10-main-integration P01 | 18min | 4 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -144,6 +89,7 @@ Progress: [██████████] 100%
 - Phase 5 added: CLI Immediate Update - 支持启动参数立即更新
 - v1.0 里程碑完成: 13 个计划全部完成 (2026-02-18)
 - v0.2 里程碑启动: Phases 6-10 规划完成 (2026-03-09)
+- v0.2 里程碑完成: 20 个计划全部完成 (2026-03-11)
 
 ### Decisions
 
@@ -181,6 +127,12 @@ Recent decisions affecting current work:
 - [Phase 09-notification-extension]: 使用 Unicode 符号(✗/✓)增强视觉区分
 - [Phase 09-notification-extension]: 所有实例成功时记录 DEBUG 日志而非 INFO,避免日志噪音
 - [Phase 09-notification-extension]: 使用 fmt.Sprintf("%v", err.Err) 而非技术错误码,保持用户友好
+- [Phase 10-main-integration]: 定时任务使用 context.Background(),立即更新使用 context.WithTimeout()
+- [Phase 10-main-integration]: 双层错误检查 (UV 更新失败 + 实例失败) 用于正确路由通知
+- [Phase 10-main-integration]: 测试容差调整允许 goroutine 增长最多 25 个 (子进程启动)
+- [Phase 10]: 定时任务使用 context.Background(),立即更新使用 context.WithTimeout()
+- [Phase 10]: 双层错误检查 (UV 更新失败 + 实例失败) 用于正确路由通知
+- [Phase 10]: 测试容差调整允许 goroutine 增长最多 25 个 (子进程启动)
 
 ### Pending Todos
 
@@ -192,6 +144,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-11T04:11:24.077Z
-Stopped at: Completed 09-01-PLAN.md
+Last session: 2026-03-11T07:00:46.596Z
+Stopped at: Completed 10-01-PLAN.md
 Resume file: None
