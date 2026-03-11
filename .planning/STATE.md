@@ -4,7 +4,7 @@ milestone: v0.2
 milestone_name: 多实例支持
 status: planning
 stopped_at: Completed 07-01-PLAN.md
-last_updated: "2026-03-11T00:34:30.289Z"
+last_updated: "2026-03-11T00:39:44.520Z"
 last_activity: 2026-03-11 — 07-01 实例生命周期包装器完成(InstanceError,InstanceLifecycle,动态命令)
 progress:
   total_phases: 11
