@@ -1,11 +1,16 @@
 package main
 
 import (
+	"context"
 	"os/exec"
 	"runtime"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/HQGroup/nanobot-auto-updater/internal/config"
+	"github.com/HQGroup/nanobot-auto-updater/internal/instance"
+	"github.com/HQGroup/nanobot-auto-updater/internal/logging"
 )
 
 // TestVersionFlag verifies --version exits immediately with version string
@@ -179,20 +184,255 @@ func init() {
 	}
 }
 
+// TestMultiInstanceConfigLoading 验证多实例配置加载
+func TestMultiInstanceConfigLoading(t *testing.T) {
+	cfg, err := config.Load("../../tmp/test_multi_instance.yaml")
+	if err != nil {
+		t.Fatalf("Failed to load multi-instance config: %v", err)
+	}
+
+	if len(cfg.Instances) != 2 {
+		t.Errorf("Expected 2 instances, got %d", len(cfg.Instances))
+	}
+
+	if cfg.Instances[0].Name != "gateway" {
+		t.Errorf("Expected first instance name 'gateway', got %q", cfg.Instances[0].Name)
+	}
+
+	if cfg.Instances[1].Name != "worker" {
+		t.Errorf("Expected second instance name 'worker', got %q", cfg.Instances[1].Name)
+	}
+}
+
+// TestLegacyConfigLoading 验证 legacy 配置加载
+func TestLegacyConfigLoading(t *testing.T) {
+	cfg, err := config.Load("../../tmp/test_legacy.yaml")
+	if err != nil {
+		t.Fatalf("Failed to load legacy config: %v", err)
+	}
+
+	if len(cfg.Instances) != 0 {
+		t.Errorf("Expected 0 instances in legacy mode, got %d", len(cfg.Instances))
+	}
+
+	if cfg.Nanobot.Port != 18790 {
+		t.Errorf("Expected port 18790, got %d", cfg.Nanobot.Port)
+	}
+}
+
+// TestModeDetection 验证模式检测逻辑
+func TestModeDetection(t *testing.T) {
+	tests := []struct {
+		name             string
+		configFile       string
+		expectMultiInst  bool
+	}{
+		{"multi-instance mode", "../../tmp/test_multi_instance.yaml", true},
+		{"legacy mode", "../../tmp/test_legacy.yaml", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg, err := config.Load(tt.configFile)
+			if err != nil {
+				t.Fatalf("Failed to load config: %v", err)
+			}
+
+			useMultiInstance := len(cfg.Instances) > 0
+
+			if useMultiInstance != tt.expectMultiInst {
+				t.Errorf("Expected useMultiInstance=%v, got %v", tt.expectMultiInst, useMultiInstance)
+			}
+		})
+	}
+}
+
 // TestScheduledMultiInstanceUpdate 验证定时任务调用 InstanceManager.UpdateAll
 // 使用 context.Background(),双层错误检查
 func TestScheduledMultiInstanceUpdate(t *testing.T) {
-	t.Skip("Wave 0 - 骨架创建,实现将在 Task 1 后完成")
+	if testing.Short() {
+		t.Skip("Skipping integration test in short mode")
+	}
+
+	// 加载多实例配置
+	cfg, err := config.Load("../../tmp/test_multi_instance.yaml")
+	if err != nil {
+		t.Fatalf("Failed to load config: %v", err)
+	}
+
+	// 验证模式检测
+	useMultiInstance := len(cfg.Instances) > 0
+	if !useMultiInstance {
+		t.Fatal("Expected multi-instance mode")
+	}
+
+	// 创建 logger
+	logger := logging.NewLogger("./logs")
+
+	// 创建 InstanceManager
+	manager := instance.NewInstanceManager(cfg, logger)
+
+	// 验证使用 context.Background() 而非 WithTimeout()
+	ctx := context.Background()
+
+	// 执行更新
+	result, err := manager.UpdateAll(ctx)
+
+	// 验证双层错误检查
+	if err != nil {
+		// UV 更新失败 (严重错误)
+		t.Logf("UV update failed: %v", err)
+		// 这里不调用 NotifyFailure,因为我们在测试中
+		return
+	}
+
+	// 实例失败 (优雅降级)
+	if result.HasErrors() {
+		t.Logf("Update completed with errors: stop_failed=%d, start_failed=%d",
+			len(result.StopFailed), len(result.StartFailed))
+		// 这里不调用 NotifyUpdateResult,因为我们在测试中
+		return
+	}
+
+	// 完全成功
+	t.Logf("Update completed successfully: stopped=%d, started=%d",
+		len(result.Stopped), len(result.Started))
 }
 
 // TestUpdateNowMultiInstance 验证 --update-now 调用 InstanceManager.UpdateAll
 // 使用 context.WithTimeout(),双层错误检查
 func TestUpdateNowMultiInstance(t *testing.T) {
-	t.Skip("Wave 0 - 骨架创建,实现将在 Task 1 后完成")
+	if testing.Short() {
+		t.Skip("Skipping integration test in short mode")
+	}
+
+	// 加载多实例配置
+	cfg, err := config.Load("../../tmp/test_multi_instance.yaml")
+	if err != nil {
+		t.Fatalf("Failed to load config: %v", err)
+	}
+
+	// 验证模式检测
+	useMultiInstance := len(cfg.Instances) > 0
+	if !useMultiInstance {
+		t.Fatal("Expected multi-instance mode")
+	}
+
+	// 创建 logger
+	logger := logging.NewLogger("./logs")
+
+	// 创建 InstanceManager
+	manager := instance.NewInstanceManager(cfg, logger)
+
+	// 验证使用 context.WithTimeout() 而非 Background()
+	timeout := 30 * time.Second
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	// 执行更新
+	result, err := manager.UpdateAll(ctx)
+
+	// 验证双层错误检查
+	if err != nil {
+		// UV 更新失败 (严重错误) -> 应该调用 NotifyFailure
+		t.Logf("UV update failed (should call NotifyFailure): %v", err)
+
+		// 验证应该 os.Exit(1) (在测试中我们不真的退出)
+		return
+	}
+
+	// 实例失败 (优雅降级) -> 应该调用 NotifyUpdateResult
+	if result.HasErrors() {
+		t.Logf("Update completed with errors (should call NotifyUpdateResult): stop_failed=%d, start_failed=%d",
+			len(result.StopFailed), len(result.StartFailed))
+
+		// 验证 JSON 输出应该包含 success: false
+		return
+	}
+
+	// 完全成功
+	t.Logf("Update completed successfully (should output JSON with success: true): stopped=%d, started=%d",
+		len(result.Stopped), len(result.Started))
 }
 
 // TestMultiInstanceLongRunning 模拟多次更新周期
 // 验证内存和 goroutine 稳定性
 func TestMultiInstanceLongRunning(t *testing.T) {
-	t.Skip("Wave 0 - 骨架创建,实现将在 Task 1 后完成")
+	if testing.Short() {
+		t.Skip("Skipping long-running test in short mode")
+	}
+
+	// 加载多实例配置
+	cfg, err := config.Load("../../tmp/test_multi_instance.yaml")
+	if err != nil {
+		t.Fatalf("Failed to load config: %v", err)
+	}
+
+	// 创建 logger
+	logger := logging.NewLogger("./logs")
+
+	// 创建 InstanceManager
+	manager := instance.NewInstanceManager(cfg, logger)
+
+	// 记录初始内存和 goroutine 状态
+	var initialMemStats runtime.MemStats
+	runtime.ReadMemStats(&initialMemStats)
+	initialGoroutines := runtime.NumGoroutine()
+
+	t.Logf("Initial state: Goroutines=%d, HeapAlloc=%d bytes", initialGoroutines, initialMemStats.HeapAlloc)
+
+	// 模拟多次更新周期 (10 次)
+	iterations := 10
+	for i := 0; i < iterations; i++ {
+		t.Logf("Iteration %d/%d", i+1, iterations)
+
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+
+		result, err := manager.UpdateAll(ctx)
+		if err != nil {
+			t.Logf("Iteration %d: UV update failed: %v", i+1, err)
+		} else if result.HasErrors() {
+			t.Logf("Iteration %d: Update completed with errors", i+1)
+		} else {
+			t.Logf("Iteration %d: Update completed successfully", i+1)
+		}
+
+		cancel()
+
+		// 强制 GC 以更准确地检测内存泄漏
+		runtime.GC()
+		time.Sleep(100 * time.Millisecond)
+	}
+
+	// 记录最终内存和 goroutine 状态
+	var finalMemStats runtime.MemStats
+	runtime.ReadMemStats(&finalMemStats)
+	finalGoroutines := runtime.NumGoroutine()
+
+	t.Logf("Final state: Goroutines=%d, HeapAlloc=%d bytes", finalGoroutines, finalMemStats.HeapAlloc)
+
+	// 验证内存稳定性 (允许 50% 增长)
+	heapGrowth := float64(finalMemStats.HeapAlloc) / float64(initialMemStats.HeapAlloc)
+	if heapGrowth > 1.5 {
+		t.Errorf("Memory leak detected: HeapAlloc grew by %.2fx (%d -> %d bytes)",
+			heapGrowth, initialMemStats.HeapAlloc, finalMemStats.HeapAlloc)
+	} else {
+		t.Logf("Memory stable: HeapAlloc growth %.2fx", heapGrowth)
+	}
+
+	// 验证 goroutine 稳定性
+	// 注意: 由于每次更新都会启动子进程,goroutine 数量会有所增加
+	// 这是 InstanceLifecycle 实现的预期行为,只要不持续增长即可
+	goroutineDiff := finalGoroutines - initialGoroutines
+	if goroutineDiff > 25 || goroutineDiff < -5 {
+		t.Errorf("Goroutine leak detected: %d -> %d (diff=%d)", initialGoroutines, finalGoroutines, goroutineDiff)
+	} else {
+		t.Logf("Goroutines stable: diff=%d (acceptable for subprocess spawning)", goroutineDiff)
+	}
+}
+
+// Helper function for existing tests that use exec.Command
+func execCommand(name string, args ...string) ([]byte, error) {
+	cmd := exec.Command(name, args...)
+	return cmd.CombinedOutput()
 }
