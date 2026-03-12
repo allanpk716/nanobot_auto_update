@@ -140,6 +140,15 @@ func main() {
 
 	if useMultiInstance {
 		logger.Info("Running in multi-instance mode", "instance_count", len(cfg.Instances))
+
+		// Output configuration details for each instance
+		for i, inst := range cfg.Instances {
+			logger.Info("Instance configuration",
+				"instance_number", i+1,
+				"name", inst.Name,
+				"port", inst.Port,
+				"start_command", inst.StartCommand)
+		}
 	} else {
 		logger.Info("Running in legacy single-instance mode", "port", cfg.Nanobot.Port)
 	}
