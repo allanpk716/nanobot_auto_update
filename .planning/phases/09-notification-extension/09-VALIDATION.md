@@ -1,8 +1,8 @@
 ---
 phase: 09
 slug: notification-extension
-status: draft
-nyquist_compliant: false
+status: planned
+nyquist_compliant: true
 wave_0_complete: false
 created: 2026-03-11
 ---
@@ -39,8 +39,7 @@ created: 2026-03-11
 | Task ID | Plan | Wave | Requirement | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|-----------|-------------------|-------------|--------|
 | 09-01-01 | 01 | 1 | ERROR-01 | unit | `go test -v -run TestNotifyUpdateResult ./internal/notifier` | ❌ W0 | ⬜ pending |
-| 09-01-02 | 01 | 1 | ERROR-01 | unit | `go test -v -run TestFormatUpdateResultMessage ./internal/notifier` | ❌ W0 | ⬜ pending |
-| 09-01-03 | 01 | 1 | ERROR-01 | unit | `go test -v -run TestHasErrors ./internal/notifier` | ❌ W0 | ⬜ pending |
+| 09-01-01 | 01 | 1 | ERROR-01 | unit | `go test -v -run TestFormatUpdateResultMessage ./internal/notifier` | ❌ W0 | ⬜ pending |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
@@ -49,7 +48,6 @@ created: 2026-03-11
 ## Wave 0 Requirements
 
 - [ ] `internal/notifier/notifier_ext_test.go` — stubs for ERROR-01 notification extension tests
-- [ ] Test fixtures for UpdateResult and UpdateError structures
 
 *If none: "Existing infrastructure covers all phase requirements."*
 
@@ -61,8 +59,6 @@ created: 2026-03-11
 |----------|-------------|------------|-------------------|
 | Pushover notification delivery | ERROR-01 | Requires external Pushover API credentials and user device | 1. Configure Pushover credentials 2. Run update with intentional failure 3. Verify notification received on device |
 
-*If none: "All phase behaviors have automated verification."*
-
 ---
 
 ## Validation Sign-Off
@@ -72,6 +68,6 @@ created: 2026-03-11
 - [x] Wave 0 covers all MISSING references
 - [x] No watch-mode flags
 - [x] Feedback latency < 5s
-- [ ] `nyquist_compliant: true` set in frontmatter
+- [x] `nyquist_compliant: true` set in frontmatter
 
 **Approval:** pending

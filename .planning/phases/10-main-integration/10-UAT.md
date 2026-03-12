@@ -1,9 +1,9 @@
 ---
-status: complete
+status: diagnosed
 phase: 10-main-integration
 source: .planning/phases/10-main-integration/10-01-SUMMARY.md
 started: 2026-03-12T08:25:00+08:00
-updated: 2026-03-12T08:45:00+08:00
+updated: 2026-03-12T08:50:00+08:00
 ---
 
 ## Current Test
@@ -61,7 +61,12 @@ skipped: 0
   reason: "User reported: 我没有看到实例的名称、每个实例的端口配置、每个实例启动的命令"
   severity: major
   test: 2
-  root_cause: ""
-  artifacts: []
-  missing: []
-  debug_session: ""
+  root_cause: "main.go 第 141-145 行的多实例模式检测代码只输出了实例总数 (instance_count),没有遍历 cfg.Instances 数组输出每个实例的详细信息。数据已正确加载,只需添加日志循环输出即可。"
+  artifacts:
+    - path: "cmd/nanobot-auto-updater/main.go"
+      issue: "第 142 行后缺少实例详细信息的日志循环"
+      line: "141-145"
+  missing:
+    - "在多实例模式检测后添加 for 循环遍历 cfg.Instances"
+    - "为每个实例输出名称、端口、启动命令"
+  debug_session: ".planning/debug/test-2-config-logging.md"
