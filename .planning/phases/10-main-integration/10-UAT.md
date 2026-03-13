@@ -1,9 +1,9 @@
 ---
-status: diagnosed
+status: resolved
 phase: 10-main-integration
 source: .planning/phases/10-main-integration/10-01-SUMMARY.md
 started: 2026-03-12T08:25:00+08:00
-updated: 2026-03-12T08:50:00+08:00
+updated: 2026-03-13T09:25:00+08:00
 ---
 
 ## Current Test
@@ -18,9 +18,8 @@ result: pass
 
 ### 2. 多实例配置加载
 expected: 使用包含 2 个实例(gateway 和 worker)的配置文件启动程序,程序应正确加载并识别两个实例的配置(端口、启动命令、超时等)
-result: issue
-reported: "我没有看到实例的名称、每个实例的端口配置、每个实例启动的命令"
-severity: major
+result: pass
+note: Gap closed via plan 10-02 - added instance detail logging
 
 ### 3. Legacy 配置兼容性
 expected: 使用旧版单实例配置文件启动程序,程序应向后兼容,正确识别为 legacy 模式并使用端口 18790
@@ -49,23 +48,26 @@ result: pass
 ## Summary
 
 total: 8
-passed: 7
-issues: 1
+passed: 8
+issues: 0
 pending: 0
 skipped: 0
 
 ## Gaps
 
 - truth: "多实例配置加载后，日志应显示每个实例的详细信息（名称、端口、启动命令）"
-  status: failed
+  status: resolved
   reason: "User reported: 我没有看到实例的名称、每个实例的端口配置、每个实例启动的命令"
   severity: major
   test: 2
   root_cause: "main.go 第 141-145 行的多实例模式检测代码只输出了实例总数 (instance_count),没有遍历 cfg.Instances 数组输出每个实例的详细信息。数据已正确加载,只需添加日志循环输出即可。"
+  resolved_by: "10-02"
+  resolved_date: "2026-03-13"
   artifacts:
     - path: "cmd/nanobot-auto-updater/main.go"
       issue: "第 142 行后缺少实例详细信息的日志循环"
       line: "141-145"
+      fix: "添加了 for 循环遍历 cfg.Instances，输出每个实例的详细信息"
   missing:
     - "在多实例模式检测后添加 for 循环遍历 cfg.Instances"
     - "为每个实例输出名称、端口、启动命令"
