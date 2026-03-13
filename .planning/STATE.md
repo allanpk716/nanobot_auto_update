@@ -3,29 +3,14 @@ gsd_state_version: 1.0
 milestone: v0.2
 milestone_name: 多实例支持
 status: in_progress
-stopped_at: Completed 10-01-PLAN.md
-last_updated: "2026-03-11T07:10:25.879Z"
-last_activity: 2026-03-11 — 10-01 多实例集成完成(main.go集成,端到端测试,手动测试计划)
+stopped_at: Completed 10-02-PLAN.md
+last_updated: "2026-03-13T08:35:00Z"
+last_activity: 2026-03-13 — 10-02 多实例配置日志增强完成(实例详细信息输出,用户验证通过)
 progress:
   total_phases: 11
   completed_phases: 11
-  total_plans: 20
-  completed_plans: 20
----
-
----
-gsd_state_version: 1.0
-milestone: v0.2
-milestone_name: 多实例支持
-status: in_progress
-stopped_at: Completed 10-01-PLAN.md
-last_updated: "2026-03-11T06:56:05Z"
-last_activity: 2026-03-11 — 10-01 多实例集成完成(main.go集成,端到端测试,手动测试计划)
-progress:
-  total_phases: 11
-  completed_phases: 10
-  total_plans: 20
-  completed_plans: 20
+  total_plans: 21
+  completed_plans: 21
 ---
 
 # Project State
@@ -40,18 +25,18 @@ See: .planning/PROJECT.md (updated 2026-03-09)
 ## Current Position
 
 Phase: 10 of 10 (主集成) - ✅ COMPLETED
-Plan: 1 of 1 in current phase
+Plan: 2 of 2 in current phase
 Status: Phase 10 plan completed
-Last activity: 2026-03-11 — 10-01 多实例集成完成(main.go集成,端到端测试,手动测试计划)
+Last activity: 2026-03-13 — 10-02 多实例配置日志增强完成(实例详细信息输出,用户验证通过)
 
 Progress: [██████████] 100%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 20
+- Total plans completed: 21
 - Average duration: 5 min
-- Total execution time: 1.0 hours
+- Total execution time: 1.1 hours
 
 **By Phase:**
 
@@ -67,10 +52,10 @@ Progress: [██████████] 100%
 | 07 - Lifecycle Extension | 1 | 4 min | 4 min |
 | 08 - Instance Coordinator | 1 | 5 min | 5 min |
 | 09 - Notification Extension | 1 | 4 min | 4 min |
-| 10 - Main Integration | 1 | 18 min | 18 min |
+| 10 - Main Integration | 2 | 23 min | 11.5 min |
 
 **Recent Trend:**
-- Last 5 plans: 4 min, 5 min, 4 min, 18 min
+- Last 5 plans: 5 min, 4 min, 18 min, 5 min
 - Trend: Stable with recent integration spike
 
 **Phase 10-01 Metrics:**
@@ -81,6 +66,12 @@ Progress: [██████████] 100%
 - Lines added: 781
 | Phase 10-main-integration P01 | 18min | 4 tasks | 4 files |
 
+**Phase 10-02 Metrics:**
+- Duration: 5 min
+- Tasks: 2
+- Files: 1
+| Phase 10-main-integration P02 | 5min | 2 tasks | 1 files |
+
 ## Accumulated Context
 
 ### Roadmap Evolution
@@ -89,7 +80,7 @@ Progress: [██████████] 100%
 - Phase 5 added: CLI Immediate Update - 支持启动参数立即更新
 - v1.0 里程碑完成: 13 个计划全部完成 (2026-02-18)
 - v0.2 里程碑启动: Phases 6-10 规划完成 (2026-03-09)
-- v0.2 里程碑完成: 20 个计划全部完成 (2026-03-11)
+- v0.2 里程碑完成: 21 个计划全部完成 (2026-03-13)
 
 ### Decisions
 
@@ -133,6 +124,8 @@ Recent decisions affecting current work:
 - [Phase 10]: 定时任务使用 context.Background(),立即更新使用 context.WithTimeout()
 - [Phase 10]: 双层错误检查 (UV 更新失败 + 实例失败) 用于正确路由通知
 - [Phase 10]: 测试容差调整允许 goroutine 增长最多 25 个 (子进程启动)
+- [Phase 10-02]: 使用 1-based 实例序号（i+1）符合用户直觉
+- [Phase 10-02]: 保持多实例模式日志输出实例总数，其后遍历输出每个实例详细信息
 
 ### Pending Todos
 
@@ -144,6 +137,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-11T07:00:46.596Z
-Stopped at: Completed 10-01-PLAN.md
+Last session: 2026-03-13T08:35:00Z
+Stopped at: Completed 10-02-PLAN.md
 Resume file: None
