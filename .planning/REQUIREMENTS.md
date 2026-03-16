@@ -94,38 +94,38 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| CONF-01 | Phase 1 | Pending |
-| CONF-02 | Phase 1 | Pending |
-| CONF-03 | Phase 1 | Pending |
-| CONF-04 | Phase 1 | Pending |
-| CONF-05 | Phase 1 | Pending |
-| CONF-06 | Phase 1 | Pending |
-| MON-01 | Phase 2 | Pending |
-| MON-04 | Phase 2 | Pending |
-| MON-05 | Phase 2 | Pending |
-| MON-08 | Phase 2 | Pending |
-| API-01 | Phase 3 | Pending |
-| API-02 | Phase 3 | Pending |
-| API-03 | Phase 3 | Pending |
-| API-04 | Phase 3 | Pending |
-| API-08 | Phase 3 | Pending |
-| ARCH-04 | Phase 4 | Pending |
-| API-05 | Phase 4 | Pending |
-| API-06 | Phase 4 | Pending |
-| API-07 | Phase 4 | Pending |
-| API-09 | Phase 4 | Pending |
-| MON-02 | Phase 5 | Pending |
-| MON-03 | Phase 5 | Pending |
-| MON-06 | Phase 5 | Pending |
-| MON-07 | Phase 5 | Pending |
-| ARCH-01 | Phase 7 | Pending |
-| ARCH-02 | Phase 7 | Pending |
-| ARCH-03 | Phase 6 | Pending |
-| ARCH-05 | Phase 6 | Pending |
-| ARCH-06 | Phase 8 | Pending |
-| SEC-01 | Phase 3 | Pending |
-| SEC-02 | Phase 3 | Pending |
-| SEC-03 | Phase 1 | Pending |
+| CONF-01 | Phase 11 | Pending |
+| CONF-02 | Phase 11 | Pending |
+| CONF-03 | Phase 11 | Pending |
+| CONF-04 | Phase 11 | Pending |
+| CONF-05 | Phase 11 | Pending |
+| CONF-06 | Phase 11 | Pending |
+| SEC-03 | Phase 11 | Pending |
+| MON-01 | Phase 12 | Pending |
+| MON-04 | Phase 12 | Pending |
+| MON-05 | Phase 12 | Pending |
+| MON-08 | Phase 12 | Pending |
+| API-01 | Phase 13 | Pending |
+| API-02 | Phase 13 | Pending |
+| API-03 | Phase 13 | Pending |
+| API-04 | Phase 13 | Pending |
+| API-08 | Phase 13 | Pending |
+| SEC-01 | Phase 13 | Pending |
+| SEC-02 | Phase 13 | Pending |
+| ARCH-04 | Phase 14 | Pending |
+| API-05 | Phase 14 | Pending |
+| API-06 | Phase 14 | Pending |
+| API-07 | Phase 14 | Pending |
+| API-09 | Phase 14 | Pending |
+| MON-02 | Phase 15 | Pending |
+| MON-03 | Phase 15 | Pending |
+| MON-06 | Phase 15 | Pending |
+| MON-07 | Phase 15 | Pending |
+| ARCH-03 | Phase 16 | Pending |
+| ARCH-05 | Phase 16 | Pending |
+| ARCH-01 | Phase 17 | Pending |
+| ARCH-02 | Phase 17 | Pending |
+| ARCH-06 | Phase 18 | Pending |
 
 **Coverage:**
 - v0.3 requirements: 31 total
@@ -134,4 +134,4 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 ---
 *Requirements defined: 2026-03-16*
-*Last updated: 2026-03-16 after initial definition*
+*Last updated: 2026-03-16 after roadmap creation*
