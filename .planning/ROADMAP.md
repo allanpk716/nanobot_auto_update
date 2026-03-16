@@ -1,79 +1,157 @@
-# Roadmap: Nanobot Auto Updater v0.3
-**Milestone:** v0.3 监控服务和 HTTP API
+# Roadmap: Nanobot Auto Updater v0.4
+
+**Milestone:** v0.4 实时日志查看
 **Created:** 2026-03-16
 **Granularity:** Standard
 
 ## Overview
 
-v0.3 里程碑将项目从定时更新工具转变为持续运行的监控服务 + HTTP API 触发模式。核心变化包括:
+v0.4 里程碑为现有的 nanobot-auto-updater 应用添加实时日志查看功能。通过三层架构设计（日志捕获层、环形缓冲层、SSE 流式传输层），用户可以通过 HTTP API 和 Web UI 实时查看 nanobot 实例的 stdout/stderr 输出，保留最近 5000 行日志历史。
 
-1. **架构转变**: 移除 cron 定时调度，改为 HTTP API + 后台监控服务双服务并发模式
-2. **配置迁移**: Pushover credentials 从环境变量迁移到 YAML 配置文件
-3. **新增服务**: HTTP API 服务器 (POST /api/v1/trigger-update) + Google 连通性监控服务
-4. **并发控制**: 共享更新锁防止 API 和监控服务并发触发更新
-5. **安全增强**: Bearer Token 认证，常量时间比较，防止时序攻击
+**Requirements Coverage:** 33/33 requirements mapped
 
-**Requirements Coverage:** 31/31 requirements mapped
+## Milestones
+
+- ✅ **v1.0 MVP** - Phases 1-4 (shipped 2026-02-18)
+- ✅ **v0.2 Multi-Instance** - Phases 5-18 (shipped 2026-03-16)
+- 🚧 **v0.4 Real-time Logs** - Phases 19-23 (in progress)
 
 ## Phases
 
-- [x] **Phase 11: Configuration Extension** - 扩展配置支持 API 和监控服务参数 (completed 2026-03-16)
-- [ ] **Phase 12: Monitoring Service** - 实现后台连通性监控 goroutine
-- [ ] **Phase 13: HTTP API Server** - 实现 HTTP API 服务器和认证中间件
-- [ ] **Phase 14: Shared Update Lock** - 实现并发更新控制和集成
-- [ ] **Phase 15: Notification Enhancements** - 扩展通知支持失败/恢复场景
-- [ ] **Phase 16: Main Coordination** - 主函数集成所有服务，实现优雅停机
-- [ ] **Phase 17: Legacy Removal** - 移除 cron 调度和相关命令行参数
-- [ ] **Phase 18: End-to-End Validation** - 完整系统测试和陷阱验证
+<details>
+<summary>✅ v1.0 MVP (Phases 1-4) - SHIPPED 2026-02-18</summary>
 
----
+### Phase 1: 基础配置和日志
+**Goal**: 建立项目基础结构和日志系统
+**Plans**: 3 plans (completed)
+
+### Phase 01.1: Nanobot 生命周期管理
+**Goal**: 实现单个 nanobot 实例的启动和停止
+**Plans**: 2 plans (completed)
+
+### Phase 2: UV 检测和更新逻辑
+**Goal**: 实现 UV 包管理器检测和 nanobot 更新流程
+**Plans**: 2 plans (completed)
+
+### Phase 3: 调度和通知
+**Goal**: 实现 cron 定时调度和 Pushover 失败通知
+**Plans**: 2 plans (completed)
+
+### Phase 4: 运行时集成
+**Goal**: 集成所有组件并实现后台运行模式
+**Plans**: 1 plan (completed)
+
+</details>
+
+<details>
+<summary>✅ v0.2 Multi-Instance (Phases 5-18) - SHIPPED 2026-03-16</summary>
+
+多实例支持里程碑，支持同时管理多个 nanobot 实例的升级和启动。包含 5 个阶段，7 个计划，8 个任务，约 5000 行 Go 代码。
+
+</details>
+
+### 🚧 v0.4 Real-time Logs (In Progress)
+
+**Milestone Goal:** 为 nanobot 实例提供实时日志查看功能，通过 HTTP API 和 Web UI 访问
+
+- [ ] **Phase 19: Log Buffer Core** - 实现线程安全的环形缓冲区和广播机制
+- [ ] **Phase 20: Log Capture Integration** - 捕获 nanobot 进程的 stdout/stderr 输出
+- [ ] **Phase 21: Instance Management Integration** - 将 LogBuffer 集成到实例生命周期管理
+- [ ] **Phase 22: SSE Streaming API** - 实现 SSE 端点用于实时日志流式传输
+- [ ] **Phase 23: Web UI and Error Handling** - 提供内置 Web UI 和错误处理机制
 
 ## Phase Details
 
-### Phase 11: Configuration Extension
-
-**Goal:** 用户可以在 YAML 配置文件中配置所有新增参数，系统在启动时验证配置有效性
-
-**Depends on:** v0.2 (Phase 10)
-
-**Requirements:** CONF-01, CONF-02, CONF-03, CONF-04, CONF-05, CONF-06, SEC-03
-
-**Success Criteria** (what must be TRUE when this phase completes):
-
-1. 用户可以在 config.yaml 中配置 Pushover token/user，无需环境变量
-2. 用户可以在 config.yaml 中配置 API 端口、 Bearer Token、监控间隔、请求超时
-3. 系统在启动时验证 Bearer Token 长度 >= 32 字符，否则拒绝启动
-4. 系统在启动时验证所有必需配置项存在且有效，缺失时返回明确错误信息
-5. 所有配置项有合理的默认值（除 token 外)，应用可以成功启动
-
-**Plans:** 4/4 plans complete
+### Phase 19: Log Buffer Core
+**Goal**: 建立线程安全的环形缓冲区基础设施，支持日志存储和实时广播
+**Depends on**: Phase 18 (v0.2 多实例支持)
+**Requirements**: BUFF-01, BUFF-02, BUFF-03, BUFF-04, BUFF-05
+**Success Criteria** (what must be TRUE):
+  1. 系统可以为每个 nanobot 实例创建独立的环形缓冲区（5000 行容量）
+  2. 系统的环形缓冲区支持并发读写操作，无数据竞态（通过 go test -race 验证）
+  3. 系统在缓冲区满时自动覆盖最旧的日志行（FIFO 行为）
+  4. 每条日志保留时间戳、来源（stdout/stderr）和内容三要素
+  5. 系统提供订阅机制，支持多个客户端同时接收实时日志更新
+**Plans**: TBD
 
 Plans:
-- [x] 11-01a-PLAN.md — Create Wave 0 unit test scaffolding for API and Monitor validation
-- [x] 11-01b-PLAN.md — Create Wave 0 test data files and integration test stubs
-- [x] 11-02-PLAN.md — Implement APIConfig and MonitorConfig validation with TDD
-- [x] 11-03-PLAN.md — Integrate new configs into main Config struct and startup validation
+- [ ] TBD
 
----
-
-### Phase 12: Monitoring Service
-
-**Goal:** 系统每 15 分钟自动检查 Google 连通性，记录日志，失败时继续运行
-
-**Depends on:** Phase 11
-
-**Requirements:** MON-01, MON-04, MON-05, MON-08
-
-**Success Criteria** (what must be TRUE when this phase completes):
-1. 系统每 15 分钟自动发起 HTTP GET 请求到 https://www.google.com
-2. 系统在每次检查时记录日志（包含时间、结果、连通性状态)
-3. 系统使用 10 秒超时防止 HTTP 请求挂起，超时后继续运行
-4. 系统在检查失败时不会崩溃或中断监控服务，继续等待下次周期
-5. 监控服务响应 Ctrl+C 信号，优雅停止 ticker 和 goroutine
-
-**Plans:** 2 plans
+### Phase 20: Log Capture Integration
+**Goal**: 修改进程启动逻辑，捕获 nanobot 进程的 stdout/stderr 输出并写入 LogBuffer
+**Depends on**: Phase 19
+**Requirements**: CAPT-01, CAPT-02, CAPT-03, CAPT-04, CAPT-05
+**Success Criteria** (what must be TRUE):
+  1. 系统在 nanobot 进程启动时自动开始捕获 stdout 和 stderr 输出流
+  2. 系统并发读取 stdout 和 stderr 管道，无死锁风险（即使输出量超过 10MB）
+  3. 捕获的日志行实时写入对应的 LogBuffer
+  4. 系统在 nanobot 进程停止时自动停止捕获输出
+  5. 进程捕获逻辑不影响 nanobot 进程的正常启动和运行
+**Plans**: TBD
 
 Plans:
-- [ ] 12-01-PLAN.md — Checker: HTTP 连通性检查器实现
-- [ ] 12-02-PLAN.md — Service: 监控服务主体实现
+- [ ] TBD
 
+### Phase 21: Instance Management Integration
+**Goal**: 将 LogBuffer 集成到现有的实例生命周期管理系统，为每个实例提供独立的日志缓冲
+**Depends on**: Phase 19, Phase 20
+**Requirements**: INST-01, INST-02, INST-03, INST-04, INST-05
+**Success Criteria** (what must be TRUE):
+  1. 每个 nanobot 实例在启动时自动创建对应的 LogBuffer
+  2. 用户可以通过 InstanceManager 按名称访问任意实例的 LogBuffer
+  3. 实例停止时 LogBuffer 保留（用户仍可查看历史日志）
+  4. 实例重启时 LogBuffer 被清空（重新开始缓冲）
+  5. 现有的实例更新流程（stop→update→start）工作不变，向后兼容
+**Plans**: TBD
+
+Plans:
+- [ ] TBD
+
+### Phase 22: SSE Streaming API
+**Goal**: 提供 HTTP 端点，通过 Server-Sent Events 协议实时推送日志流
+**Depends on**: Phase 19, Phase 21, v0.3 HTTP API 服务器
+**Requirements**: SSE-01, SSE-02, SSE-03, SSE-04, SSE-05, SSE-06, SSE-07
+**Success Criteria** (what must be TRUE):
+  1. 用户可以通过 `/api/v1/logs/:instance/stream` SSE 端点实时接收日志流
+  2. SSE 连接建立后，客户端接收缓冲区中的历史日志，然后实时接收新日志
+  3. 系统每 30 秒发送 SSE 心跳注释，防止连接超时
+  4. 系统检测客户端断开连接并停止发送事件（无 goroutine 泄漏）
+  5. stdout 和 stderr 分别标记为不同的事件类型（便于客户端区分）
+  6. SSE 端点支持 HTTP 长连接（WriteTimeout 设置为 0）
+  7. 请求不存在的实例日志时返回 HTTP 404 Not Found
+**Plans**: TBD
+
+Plans:
+- [ ] TBD
+
+### Phase 23: Web UI and Error Handling
+**Goal**: 提供内置 Web UI 页面查看日志，并实现全面的错误处理机制
+**Depends on**: Phase 22
+**Requirements**: UI-01, UI-02, UI-03, UI-04, UI-05, UI-06, UI-07, ERR-01, ERR-02, ERR-03, ERR-04
+**Success Criteria** (what must be TRUE):
+  1. 用户可以通过 `/logs/:instance` HTML 页面查看日志（单文件部署，静态资源嵌入二进制）
+  2. Web 页面自动滚动到最新日志（类似 tail -f 行为）
+  3. 用户可以通过按钮暂停和恢复自动滚动
+  4. stdout 和 stderr 使用不同颜色区分（视觉差异明显）
+  5. 页面显示 SSE 连接状态（连接中/已连接/已断开）
+  6. 用户可以通过实例选择下拉菜单切换查看不同实例的日志
+  7. 系统在进程管道读取失败时记录错误日志并继续运行（不影响整体服务）
+  8. 系统在 SSE 客户端连接失败时记录警告日志并继续运行
+  9. 系统在 LogBuffer 写入失败时记录错误日志并丢弃日志行（不阻塞进程）
+**Plans**: TBD
+
+Plans:
+- [ ] TBD
+
+## Progress
+
+**Execution Order:**
+Phases execute in numeric order: 19 → 20 → 21 → 22 → 23
+
+| Phase | Plans Complete | Status | Completed |
+|-------|----------------|--------|-----------|
+| 19. Log Buffer Core | 0/TBD | Not started | - |
+| 20. Log Capture Integration | 0/TBD | Not started | - |
+| 21. Instance Management Integration | 0/TBD | Not started | - |
+| 22. SSE Streaming API | 0/TBD | Not started | - |
+| 23. Web UI and Error Handling | 0/TBD | Not started | - |

@@ -95,35 +95,35 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| CAPT-01 | Phase 19 | Pending |
-| CAPT-02 | Phase 19 | Pending |
-| CAPT-03 | Phase 19 | Pending |
-| CAPT-04 | Phase 19 | Pending |
-| CAPT-05 | Phase 19 | Pending |
 | BUFF-01 | Phase 19 | Pending |
 | BUFF-02 | Phase 19 | Pending |
 | BUFF-03 | Phase 19 | Pending |
 | BUFF-04 | Phase 19 | Pending |
 | BUFF-05 | Phase 19 | Pending |
-| SSE-01 | Phase 20 | Pending |
-| SSE-02 | Phase 20 | Pending |
-| SSE-03 | Phase 20 | Pending |
-| SSE-04 | Phase 20 | Pending |
-| SSE-05 | Phase 20 | Pending |
-| SSE-06 | Phase 20 | Pending |
-| SSE-07 | Phase 20 | Pending |
-| UI-01 | Phase 21 | Pending |
-| UI-02 | Phase 21 | Pending |
-| UI-03 | Phase 21 | Pending |
-| UI-04 | Phase 21 | Pending |
-| UI-05 | Phase 21 | Pending |
-| UI-06 | Phase 21 | Pending |
-| UI-07 | Phase 21 | Pending |
-| INST-01 | Phase 22 | Pending |
-| INST-02 | Phase 22 | Pending |
-| INST-03 | Phase 22 | Pending |
-| INST-04 | Phase 22 | Pending |
-| INST-05 | Phase 22 | Pending |
+| CAPT-01 | Phase 20 | Pending |
+| CAPT-02 | Phase 20 | Pending |
+| CAPT-03 | Phase 20 | Pending |
+| CAPT-04 | Phase 20 | Pending |
+| CAPT-05 | Phase 20 | Pending |
+| INST-01 | Phase 21 | Pending |
+| INST-02 | Phase 21 | Pending |
+| INST-03 | Phase 21 | Pending |
+| INST-04 | Phase 21 | Pending |
+| INST-05 | Phase 21 | Pending |
+| SSE-01 | Phase 22 | Pending |
+| SSE-02 | Phase 22 | Pending |
+| SSE-03 | Phase 22 | Pending |
+| SSE-04 | Phase 22 | Pending |
+| SSE-05 | Phase 22 | Pending |
+| SSE-06 | Phase 22 | Pending |
+| SSE-07 | Phase 22 | Pending |
+| UI-01 | Phase 23 | Pending |
+| UI-02 | Phase 23 | Pending |
+| UI-03 | Phase 23 | Pending |
+| UI-04 | Phase 23 | Pending |
+| UI-05 | Phase 23 | Pending |
+| UI-06 | Phase 23 | Pending |
+| UI-07 | Phase 23 | Pending |
 | ERR-01 | Phase 23 | Pending |
 | ERR-02 | Phase 23 | Pending |
 | ERR-03 | Phase 23 | Pending |
@@ -136,4 +136,4 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 ---
 *Requirements defined: 2026-03-16*
-*Last updated: 2026-03-16 after requirements definition*
+*Last updated: 2026-03-16 after roadmap creation*
