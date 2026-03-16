@@ -7,24 +7,43 @@ import (
 )
 
 // TestMonitorConfigValidate tests the validation logic for MonitorConfig.
-// These are test stubs that will be implemented after monitor.go is created.
 func TestMonitorConfigValidate(t *testing.T) {
 	t.Run("valid config", func(t *testing.T) {
-		// TODO: Implement after monitor.go created
-		// Test case: Interval: 15m, Timeout: 10s
-		t.Skip("Waiting for monitor.go implementation")
+		cfg := MonitorConfig{
+			Interval: 15 * time.Minute,
+			Timeout:  10 * time.Second,
+		}
+		if err := cfg.Validate(); err != nil {
+			t.Errorf("expected valid config, got error: %v", err)
+		}
 	})
 
 	t.Run("interval too short", func(t *testing.T) {
-		// TODO: Interval minimum validation (1 minute)
-		// Test case: Interval < 1m should fail validation
-		t.Skip("Waiting for monitor.go implementation")
+		cfg := MonitorConfig{
+			Interval: 30 * time.Second,
+			Timeout:  10 * time.Second,
+		}
+		err := cfg.Validate()
+		if err == nil {
+			t.Error("expected error for short interval, got nil")
+		}
+		if !strings.Contains(err.Error(), "monitor.interval must be at least 1 minute") {
+			t.Errorf("error message should contain interval validation, got: %v", err)
+		}
 	})
 
 	t.Run("timeout too short", func(t *testing.T) {
-		// TODO: Timeout minimum validation (1 second)
-		// Test case: Timeout < 1s should fail validation
-		t.Skip("Waiting for monitor.go implementation")
+		cfg := MonitorConfig{
+			Interval: 15 * time.Minute,
+			Timeout:  500 * time.Millisecond,
+		}
+		err := cfg.Validate()
+		if err == nil {
+			t.Error("expected error for short timeout, got nil")
+		}
+		if !strings.Contains(err.Error(), "monitor.timeout must be at least 1 second") {
+			t.Errorf("error message should contain timeout validation, got: %v", err)
+		}
 	})
 }
 
@@ -88,24 +107,22 @@ func TestMonitorConfigIntervalValidation(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// TODO: Implement after monitor.go created
-			// cfg := MonitorConfig{
-			//     Interval: tt.interval,
-			//     Timeout:  10 * time.Second,
-			// }
-			// err := cfg.Validate()
-			// if tt.expectError {
-			//     if err == nil {
-			//         t.Errorf("expected error containing %q, got nil", tt.errorMsg)
-			//     } else if !strings.Contains(err.Error(), tt.errorMsg) {
-			//         t.Errorf("expected error containing %q, got %q", tt.errorMsg, err.Error())
-			//     }
-			// } else {
-			//     if err != nil {
-			//         t.Errorf("expected no error, got %v", err)
-			//     }
-			// }
-			t.Skip("Waiting for monitor.go implementation")
+			cfg := MonitorConfig{
+				Interval: tt.interval,
+				Timeout:  10 * time.Second,
+			}
+			err := cfg.Validate()
+			if tt.expectError {
+				if err == nil {
+					t.Errorf("expected error containing %q, got nil", tt.errorMsg)
+				} else if !strings.Contains(err.Error(), tt.errorMsg) {
+					t.Errorf("expected error containing %q, got %q", tt.errorMsg, err.Error())
+				}
+			} else {
+				if err != nil {
+					t.Errorf("expected no error, got %v", err)
+				}
+			}
 		})
 	}
 }
@@ -170,24 +187,22 @@ func TestMonitorConfigTimeoutValidation(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// TODO: Implement after monitor.go created
-			// cfg := MonitorConfig{
-			//     Interval: 15 * time.Minute,
-			//     Timeout:  tt.timeout,
-			// }
-			// err := cfg.Validate()
-			// if tt.expectError {
-			//     if err == nil {
-			//         t.Errorf("expected error containing %q, got nil", tt.errorMsg)
-			//     } else if !strings.Contains(err.Error(), tt.errorMsg) {
-			//         t.Errorf("expected error containing %q, got %q", tt.errorMsg, err.Error())
-			//     }
-			// } else {
-			//     if err != nil {
-			//         t.Errorf("expected no error, got %v", err)
-			//     }
-			// }
-			t.Skip("Waiting for monitor.go implementation")
+			cfg := MonitorConfig{
+				Interval: 15 * time.Minute,
+				Timeout:  tt.timeout,
+			}
+			err := cfg.Validate()
+			if tt.expectError {
+				if err == nil {
+					t.Errorf("expected error containing %q, got nil", tt.errorMsg)
+				} else if !strings.Contains(err.Error(), tt.errorMsg) {
+					t.Errorf("expected error containing %q, got %q", tt.errorMsg, err.Error())
+				}
+			} else {
+				if err != nil {
+					t.Errorf("expected no error, got %v", err)
+				}
+			}
 		})
 	}
 }
@@ -195,16 +210,24 @@ func TestMonitorConfigTimeoutValidation(t *testing.T) {
 // TestMonitorConfigDurationParsing tests that duration values can be parsed from YAML.
 func TestMonitorConfigDurationParsing(t *testing.T) {
 	t.Run("parse interval from string", func(t *testing.T) {
-		// TODO: Test that YAML strings like "15m" are correctly parsed to time.Duration
-		t.Skip("Waiting for monitor.go implementation")
+		// time.Duration can parse strings like "15m"
+		interval, err := time.ParseDuration("15m")
+		if err != nil {
+			t.Errorf("failed to parse interval: %v", err)
+		}
+		if interval != 15*time.Minute {
+			t.Errorf("expected 15m, got %v", interval)
+		}
 	})
 
 	t.Run("parse timeout from string", func(t *testing.T) {
-		// TODO: Test that YAML strings like "10s" are correctly parsed to time.Duration
-		t.Skip("Waiting for monitor.go implementation")
+		// time.Duration can parse strings like "10s"
+		timeout, err := time.ParseDuration("10s")
+		if err != nil {
+			t.Errorf("failed to parse timeout: %v", err)
+		}
+		if timeout != 10*time.Second {
+			t.Errorf("expected 10s, got %v", timeout)
+		}
 	})
 }
-
-// Note: strings import is used in the TODO sections above.
-// This is intentional to match the existing test pattern.
-var _ = strings.Contains("", "")
