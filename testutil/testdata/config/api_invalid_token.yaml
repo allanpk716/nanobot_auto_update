@@ -1,0 +1,6 @@
+cron: "0 3 * * *"
+
+api:
+  port: 8080
+  bearer_token: "too-short"  # Only 9 chars, violates SEC-03
+  timeout: "30s"

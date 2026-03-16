@@ -1,0 +1,6 @@
+cron: "0 3 * * *"
+
+api:
+  port: 70000  # Exceeds 65535
+  bearer_token: "this-is-a-secure-token-with-at-least-32-characters"
+  timeout: "30s"
