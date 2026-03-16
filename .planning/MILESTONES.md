@@ -1,4 +1,13 @@
 # Milestones
+## v0.2 多实例支持 (Shipped: 2026-03-16)
+
+**Phases completed:** 10 phases, 18 plans, 8 tasks
+
+**Key accomplishments:**
+- (none recorded)
+
+---
+
 
 ## v1.0 - Single Instance Auto-Update
 

@@ -4,7 +4,7 @@ milestone: v0.2
 milestone_name: 多实例支持
 status: in_progress
 stopped_at: Completed 10-02-PLAN.md
-last_updated: "2026-03-13T08:58:40.890Z"
+last_updated: "2026-03-16T03:07:00.857Z"
 last_activity: 2026-03-13 — 10-02 多实例配置日志增强完成(实例详细信息输出,用户验证通过)
 progress:
   total_phases: 10
