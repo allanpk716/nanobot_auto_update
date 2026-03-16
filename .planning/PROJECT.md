@@ -2,7 +2,7 @@
 
 ## What This Is
 
-一个 Windows 后台程序，使用 Golang 开发，用于自动更新 nanobot 工具。程序通过 cron 定时任务检查并更新 nanobot，支持失败通知和回退机制。**v0.2 新增多实例支持**，可以同时管理多个 nanobot 实例的升级和启动。无界面运行，通过配置文件和命令行参数控制行为。
+一个 Windows 后台监控服务，使用 Golang 开发，用于监控网络连通性并通过 HTTP API 触发 nanobot 工具的更新。**v0.3 重大架构变更**：从定时更新工具转变为监控服务 + HTTP API 触发更新模式。支持 Google 连通性监控，失败/恢复时自动通知。多实例管理保持不变。通过配置文件和 HTTP API 控制行为。
 
 ## Core Value
 
@@ -34,7 +34,12 @@
 
 ### Active
 
-(无 — 规划下一个里程碑时添加)
+**v0.3 监控服务和 HTTP API** — 正在构建:
+- [ ] Pushover 配置从环境变量迁移到配置文件
+- [ ] Google 连通性监控服务 (HTTP GET)
+- [ ] HTTP API 触发 nanobot 更新
+- [ ] 移除 cron 定时更新，改为仅 HTTP API 触发
+- [ ] 监控失败/恢复通知机制
 
 ### Out of Scope
 
@@ -130,4 +135,17 @@ instances:
 **注意**: 旧的 `-run-once` 参数已在 v1.0 中移除,替换为 `--update-now`
 
 ---
-*Last updated: 2026-03-16 after v0.2 milestone completion*
+
+## Current Milestone: v0.3 监控服务和 HTTP API
+
+**Goal:** 从定时更新工具转变为监控服务 + HTTP API 触发更新模式
+
+**Target features:**
+- Pushover 配置从环境变量迁移到配置文件
+- Google 连通性监控 (HTTP GET https://www.google.com)
+- HTTP API 触发更新 (POST /api/v1/trigger-update)
+- 移除 cron 定时更新，改为仅 HTTP API 触发
+- 监控失败/恢复通知机制
+
+---
+*Last updated: 2026-03-16 after v0.3 milestone start*
