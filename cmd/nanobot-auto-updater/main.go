@@ -72,10 +72,20 @@ func main() {
 		os.Exit(0)
 	}
 
-	// Load configuration
+	// Load configuration with validation (CONF-06)
 	cfg, err := config.Load(*configFile)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error loading config: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Configuration error: %v\n", err)
+		fmt.Fprintf(os.Stderr, "\nPlease check your config.yaml file.\n")
+		fmt.Fprintf(os.Stderr, "Required fields:\n")
+		fmt.Fprintf(os.Stderr, "  - api.bearer_token (at least 32 characters for security)\n")
+		fmt.Fprintf(os.Stderr, "Optional fields (have defaults):\n")
+		fmt.Fprintf(os.Stderr, "  - api.port (default: 8080)\n")
+		fmt.Fprintf(os.Stderr, "  - api.timeout (default: 30s)\n")
+		fmt.Fprintf(os.Stderr, "  - monitor.interval (default: 15m)\n")
+		fmt.Fprintf(os.Stderr, "  - monitor.timeout (default: 10s)\n")
+		fmt.Fprintf(os.Stderr, "  - pushover.api_token (optional, for notifications)\n")
+		fmt.Fprintf(os.Stderr, "  - pushover.user_key (optional, for notifications)\n")
 		os.Exit(1)
 	}
 
@@ -110,6 +120,17 @@ func main() {
 	// Initialize logger
 	logger := logging.NewLogger("./logs")
 	slog.SetDefault(logger) // Set as default logger
+
+	// Log configuration loaded (CONF-06, SEC-02)
+	// Note: Do NOT log full Bearer Token for security
+	slog.Info("Configuration loaded and validated",
+		"api_port", cfg.API.Port,
+		"api_timeout", cfg.API.Timeout,
+		"monitor_interval", cfg.Monitor.Interval,
+		"monitor_timeout", cfg.Monitor.Timeout,
+		"bearer_token_configured", cfg.API.BearerToken != "",
+		"bearer_token_length", len(cfg.API.BearerToken),
+	)
 
 	// Check UV installation
 	logger.Info("Checking uv installation")
