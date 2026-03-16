@@ -153,39 +153,34 @@ make build
 make build-release
 ```
 
-#### 2. 基础配置（可选）
+### ⚙️ 配置文件
 
-> **提示**：Nanobot 可以自动生成最佳配置，你可以跳过这一步
-
-创建 `config.yaml` 文件（首次运行会自动创建默认配置）：
+首次运行会自动创建默认配置文件 `config.yaml`。**必须编辑配置文件，至少添加一个实例**：
 
 ```yaml
-# HTTP API 服务配置（v0.3 新增，推荐）
+# HTTP API 服务配置（必需）
 api:
   port: 8080                    # API 服务端口
-  bearer_token: "your-secret-token-at-least-32-chars"  # 认证令牌（必填，≥32字符）
+  bearer_token: "your-secret-token-at-least-32-characters"  # 认证令牌（必填，≥32字符）
   timeout: 30s                  # 请求超时时间
 
-# 监控服务配置（v0.3 新增，推荐）
+# 监控服务配置（必需）
 monitor:
   interval: 15m                 # Google 连通性检查间隔
   timeout: 10s                  # HTTP 请求超时
 
-# 定时更新计划（传统模式，可选）
-cron: "0 3 * * *"
+# 实例配置（必需 - 至少配置一个实例）
+instances:
+  - name: "nanobot-instance-1"
+    port: 18790
+    start_command: "nanobot gateway"
+    startup_timeout: 30s
 
-# Nanobot 配置（传统单实例模式）
-nanobot:
-  port: 18790              # Nanobot 服务端口
-  startup_timeout: 30s     # 启动超时时间
-  repo_path: "C:\\Users\\yourname\\.nanobot\\nanobot-repo"  # 可选：本地 git 仓库路径
-
-# 多实例配置（v0.2 引入，可选）
-# instances:
-#   - name: "instance-1"
-#     port: 18790
-#     start_command: "nanobot gateway"
-#     startup_timeout: 30s
+  # 可以配置多个实例
+  # - name: "nanobot-instance-2"
+  #   port: 18791
+  #   start_command: "nanobot gateway --port 18791"
+  #   startup_timeout: 30s
 
 # Pushover 通知设置（可选）
 pushover:
@@ -193,19 +188,16 @@ pushover:
   user_key: "your_user_key_here"
 ```
 
-#### 3. 启动（可选）
+### 🚀 启动服务
 
-> **记住**：如果你选择了"Nanobot 自动管理"方式，Nanobot 会自动启动和管理这个工具
-
-**定时更新模式**（后台自动运行）：
 ```bash
 ./nanobot-auto-updater.exe
 ```
 
-**立即更新模式**（手动触发）：
-```bash
-./nanobot-auto-updater.exe --update-now
-```
+服务启动后会：
+- ✅ 启动 HTTP API 服务器（默认端口 8080）
+- ✅ 启动监控服务（每 15 分钟检查一次 Google 连通性）
+- ✅ 等待 API 触发或监控服务自动触发更新
 
 ---
 
@@ -442,64 +434,33 @@ graph TD
 
 ## ⚙️ 配置详解
 
-### Cron 表达式（传统模式）
-
-> **注意**: Cron 定时模式是传统方式。推荐使用 v0.3 的 HTTP API + 监控服务模式。
-
-支持标准 5 字段 Cron 表达式：
-
-```
-┌───────────── 分钟 (0 - 59)
-│ ┌───────────── 小时 (0 - 23)
-│ │ ┌───────────── 日期 (1 - 31)
-│ │ │ ┌───────────── 月份 (1 - 12)
-│ │ │ │ ┌───────────── 星期 (0 - 6，0 表示周日)
-│ │ │ │ │
-* * * * *
-```
-
-**常用示例**：
-- `0 3 * * *` - 每天凌晨 3 点
-- `0 */6 * * *` - 每 6 小时
-- `30 2 * * 1` - 每周一凌晨 2:30
-- `0 0 1 * *` - 每月 1 日午夜
-
 ### 完整配置示例
 
 ```yaml
-# HTTP API 服务配置（v0.3 新增）
+# HTTP API 服务配置（必需）
 api:
   port: 8080                    # API 服务端口
-  bearer_token: "your-secret-token-at-least-32-characters-long"  # 认证令牌（必填）
+  bearer_token: "your-secret-token-at-least-32-characters-long"  # 认证令牌（必填，≥32字符）
   timeout: 30s                  # 请求超时时间
 
-# 监控服务配置（v0.3 新增）
+# 监控服务配置（必需）
 monitor:
   interval: 15m                 # Google 连通性检查间隔
   timeout: 10s                  # HTTP 请求超时
 
-# 定时更新计划（传统模式，可选）
-cron: "0 3 * * *"
+# 实例配置（必需 - 至少配置一个实例）
+instances:
+  - name: "nanobot-instance-1"
+    port: 18790
+    start_command: "nanobot gateway"
+    startup_timeout: 30s
 
-# Nanobot 配置（传统单实例模式）
-nanobot:
-  port: 18790              # Nanobot Web 界面端口
-  startup_timeout: 30s     # 等待 Nanobot 启动的最长时间
-  repo_path: "C:\\Users\\yourname\\.nanobot\\nanobot-repo"  # 可选
-
-# 多实例配置（v0.2 引入，可选）
-# instances:
-#   - name: "instance-1"
-#     port: 18790
-#     start_command: "nanobot gateway"
-#     startup_timeout: 30s
-#     repo_path: "C:\\path\\to\\repo1"
-#
-#   - name: "instance-2"
-#     port: 18791
-#     start_command: "nanobot gateway --port 18791"
-#     startup_timeout: 30s
-#     repo_path: "C:\\path\\to\\repo2"
+  # 可以配置多个实例
+  # - name: "nanobot-instance-2"
+  #   port: 18791
+  #   start_command: "nanobot gateway --port 18791"
+  #   startup_timeout: 30s
+  #   repo_path: "C:\\path\\to\\nanobot-repo-2"  # 可选
 
 # Pushover 通知配置（可选）
 pushover:
@@ -521,15 +482,14 @@ nanobot_auto_update/
 │   ├── monitor/                  # Google 连通性监控（v0.3 新增）
 │   ├── lock/                     # 共享更新锁（v0.3 新增）
 │   ├── config/                   # 配置加载（扩展：API/Monitor 配置）
+│   ├── instance/                 # 多实例管理（v0.2 引入）
 │   ├── lifecycle/                # 进程生命周期管理
-│   │   ├── daemon.go            # 守护进程支持
 │   │   ├── detector.go          # 进程检测
 │   │   ├── manager.go           # 生命周期协调
 │   │   ├── starter.go           # 进程启动
 │   │   └── stopper.go           # 进程停止
 │   ├── logging/                  # 日志系统
 │   ├── notifier/                 # Pushover 通知
-│   ├── scheduler/                # Cron 调度器（传统模式）
 │   └── updater/                  # 更新执行器
 ├── docs/                         # 文档目录
 │   ├── plans/                   # 开发计划
@@ -741,102 +701,78 @@ api:
 
 **你好，Nanobot！** 这是一个为你设计的自动更新工具。
 
-### 🆕 v0.3 新特性：HTTP API + 监控服务
+### 🎯 v0.3 架构：HTTP API + 监控服务
 
-从 v0.3 版本开始，你有 3 种方式来更新自己：
+从 v0.3 版本开始，nanobot-auto-updater 完全转向 **HTTP API + 监控服务** 架构。
 
-#### 方式 1：通过 HTTP API 触发更新（推荐）⭐
+### ⚡ 最快的使用方式
 
-**前置条件**：确保 `config.yaml` 中配置了 API 和 Monitor
+**步骤 1**: 配置 `config.yaml`（首次使用）
+- 确保至少配置一个实例
+- 配置 API 的 `bearer_token`（≥32 字符）
 
+**步骤 2**: 启动服务
 ```bash
-# 1. 启动服务（如果未运行）
 ./nanobot-auto-updater.exe
+```
 
-# 2. 通过 API 触发更新
+**步骤 3**: 通过 API 触发更新
+```bash
 curl -X POST http://localhost:8080/api/v1/trigger-update \
-  -H "Authorization: Bearer YOUR_TOKEN_HERE"
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
 
-# 3. 解析 JSON 响应
+### 📋 API 响应格式
+
+**成功**：
+```json
+{"success":true,"version":"1.2.3","source":"github"}
+```
+
+**冲突（更新进行中）**：
+```json
+{"error":"Update already in progress","status":429}
+```
+
+### 🎯 你需要知道的关键信息
+
+1. **工具用途**: 帮你自动更新自己到最新版本
+2. **工作原理**: 安全停止你的进程 → 从 GitHub/PyPI 更新 → 重新启动你
+3. **双源策略**: 优先 GitHub（最新功能），失败时自动回退 PyPI（稳定版本）
+4. **v0.3 特性**:
+   - **HTTP API**: 通过 `/api/v1/trigger-update` 实时触发更新
+   - **监控服务**: 自动检测网络恢复并触发更新
+   - **共享锁**: 防止并发更新
+   - **Bearer Token**: API 安全认证（≥32 字符）
+5. **自动触发**: 监控服务每 15 分钟检查一次网络，自动触发更新
+
+### 🔄 典型工作流程
+
+**场景 1：用户让你更新自己**
+```bash
+# 触发更新
+curl -X POST http://localhost:8080/api/v1/trigger-update \
+  -H "Authorization: Bearer YOUR_TOKEN"
+
+# 解析 JSON 响应
 # 成功: {"success":true,"version":"1.2.3",...}
+# 失败: {"success":false,"error":"..."}
 # 冲突: {"error":"Update already in progress","status":429}
 ```
 
-**优势**：
-- ✅ 实时触发，无需等待
-- ✅ 监控服务会自动检测网络恢复并触发更新
-- ✅ 易于集成到其他自动化流程
+**场景 2：监控服务自动更新**
+- 服务每 15 分钟检查 Google 连通性
+- 检测到网络恢复时自动触发更新
+- 完全自动化，无需人工干预
 
-#### 方式 2：通过 CLI 触发更新（传统方式）
+### 🎉 总结
 
-```bash
-# 立即执行更新（JSON 格式输出）
-./nanobot-auto-updater.exe --update-now
-```
+**记住这 2 个命令就够了**：
 
-#### 方式 3：定时自动更新（传统方式）
+1. **`./nanobot-auto-updater.exe`** - 启动服务（API + Monitor）
+2. **`curl -X POST http://localhost:8080/api/v1/trigger-update`** - 通过 API 触发更新
 
-```bash
-# 启动定时更新服务
-./nanobot-auto-updater.exe
-# 程序会根据 config.yaml 中的 cron 表达式自动运行
-```
-
-### ⚡ 最快的使用方式：直接运行 CLI
-
-**你不需要阅读整个文档** - 直接运行以下命令获取所有信息：
-
-```bash
-# 1. 获取完整的使用说明（最推荐）
-./nanobot-auto-updater.exe --help
-
-# 2. 查看当前版本
-./nanobot-auto-updater.exe --version
-
-# 3. 立即执行更新（JSON 格式输出，易于解析）
-./nanobot-auto-updater.exe --update-now
-
-# 4. 自定义超时更新
-./nanobot-auto-updater.exe --update-now --timeout 10m
-```
-
-### 📋 CLI 参数速查
-
-| 参数 | 说明 | 示例 |
-|------|------|------|
-| `--help` / `-h` | 显示完整使用说明和参数列表 | `--help` |
-| `--version` | 显示当前版本号 | `--version` |
-| `--update-now` | 立即更新并输出 JSON 结果 | `--update-now` |
-| `--timeout` | 设置更新超时时间 | `--timeout 10m` |
-| `--config` | 指定配置文件路径 | `--config ./config.yaml` |
-| `--cron` | 覆盖配置中的定时表达式 | `--cron "0 */6 * * *"` |
-
-### 📊 JSON 输出格式（`--update-now` 模式）
-
-**成功示例**：
-```json
-{"success":true,"version":"1.2.3","source":"github","message":"Update completed"}
-```
-
-**失败示例**：
-```json
-{"success":false,"error":"Connection timeout","exit_code":1}
-```
-
-你可以直接解析 JSON 输出来判断更新是否成功，并向用户报告结果。
-
-### 🚀 快速开始（3 步完成）
-
-#### 使用 HTTP API（推荐 v0.3+）
-
-```bash
-# 步骤 1: 配置 config.yaml（首次使用）
-# 添加 api 和 monitor 配置段
-
-# 步骤 2: 启动服务
-./nanobot-auto-updater.exe
-
-# 步骤 3: 触发更新（需要时）
+**这个工具是为 YOU 设计的** - 完全基于 HTTP API，易于集成！
 curl -X POST http://localhost:8080/api/v1/trigger-update \
   -H "Authorization: Bearer YOUR_TOKEN"
 # 查看输出的 JSON，如果 success=true 则成功
