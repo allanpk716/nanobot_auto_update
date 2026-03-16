@@ -55,6 +55,8 @@ func TestValidateCronInvalid(t *testing.T) {
 func TestConfigValidation(t *testing.T) {
 	t.Run("valid config", func(t *testing.T) {
 		cfg := New()
+		// Set required fields for validation
+		cfg.API.BearerToken = "this-is-a-secure-token-with-at-least-32-characters"
 		if err := cfg.Validate(); err != nil {
 			t.Errorf("expected valid config to pass validation, got error: %v", err)
 		}
@@ -63,6 +65,7 @@ func TestConfigValidation(t *testing.T) {
 	t.Run("invalid cron", func(t *testing.T) {
 		cfg := New()
 		cfg.Cron = "invalid"
+		cfg.API.BearerToken = "this-is-a-secure-token-with-at-least-32-characters"
 		if err := cfg.Validate(); err == nil {
 			t.Error("expected config with invalid cron to fail validation")
 		}
@@ -184,30 +187,79 @@ func TestLoadMixedMode(t *testing.T) {
 // These tests will be implemented after Config.API and Config.Monitor fields are added
 
 func TestLoadAPIConfigFromYAML(t *testing.T) {
-	// TODO: Implement after Config.API field added
-	// This test should:
-	// - Load testutil/testdata/config/api_valid.yaml
-	// - Verify cfg.API.Port == 8080
-	// - Verify cfg.API.BearerToken == "this-is-a-secure-token-with-at-least-32-characters"
-	// - Verify cfg.API.Timeout == 30*time.Second
-	t.Skip("Waiting for Config.API integration")
+	cfg, err := Load("../../testutil/testdata/config/api_valid.yaml")
+	if err != nil {
+		t.Fatalf("Load failed: %v", err)
+	}
+
+	// Verify API config loaded
+	if cfg.API.Port != 8080 {
+		t.Errorf("expected API.Port 8080, got %d", cfg.API.Port)
+	}
+	if len(cfg.API.BearerToken) < 32 {
+		t.Errorf("expected BearerToken length >= 32, got %d", len(cfg.API.BearerToken))
+	}
+	if cfg.API.Timeout != 30*time.Second {
+		t.Errorf("expected API.Timeout 30s, got %v", cfg.API.Timeout)
+	}
 }
 
 func TestLoadMonitorConfigFromYAML(t *testing.T) {
-	// TODO: Implement after Config.Monitor field added
-	// This test should:
-	// - Load testutil/testdata/config/monitor_valid.yaml
-	// - Verify cfg.Monitor.Interval == 15*time.Minute
-	// - Verify cfg.Monitor.Timeout == 10*time.Second
-	t.Skip("Waiting for Config.Monitor integration")
+	cfg, err := Load("../../testutil/testdata/config/monitor_valid.yaml")
+	if err != nil {
+		t.Fatalf("Load failed: %v", err)
+	}
+
+	// Verify Monitor config loaded
+	if cfg.Monitor.Interval != 15*time.Minute {
+		t.Errorf("expected Monitor.Interval 15m, got %v", cfg.Monitor.Interval)
+	}
+	if cfg.Monitor.Timeout != 10*time.Second {
+		t.Errorf("expected Monitor.Timeout 10s, got %v", cfg.Monitor.Timeout)
+	}
 }
 
 func TestConfigValidationWithNewFields(t *testing.T) {
-	// TODO: Test CONF-06 startup validation with all new fields
-	// This test should:
-	// - Load api_invalid_token.yaml and expect validation error about token length
-	// - Load api_invalid_port.yaml and expect validation error about port range
-	// - Load monitor_invalid_interval.yaml and expect validation error about interval minimum
-	t.Skip("Waiting for full integration")
+	t.Run("invalid API config rejected", func(t *testing.T) {
+		_, err := Load("../../testutil/testdata/config/api_invalid_token.yaml")
+		if err == nil {
+			t.Fatal("expected error for invalid token, got nil")
+		}
+		if !strings.Contains(err.Error(), "bearer_token must be at least 32 characters") {
+			t.Errorf("error should mention token length, got: %v", err)
+		}
+	})
+
+	t.Run("invalid Monitor config rejected", func(t *testing.T) {
+		_, err := Load("../../testutil/testdata/config/monitor_invalid_interval.yaml")
+		if err == nil {
+			t.Fatal("expected error for invalid interval, got nil")
+		}
+		if !strings.Contains(err.Error(), "monitor.interval must be at least 1 minute") {
+			t.Errorf("error should mention interval minimum, got: %v", err)
+		}
+	})
+
+	t.Run("multiple errors aggregated", func(t *testing.T) {
+		cfg := New()
+		// Set valid port but invalid token to isolate token error
+		cfg.API.Port = 8080              // Valid port
+		cfg.API.BearerToken = "short"    // Invalid token
+		cfg.Monitor.Interval = 30 * time.Second // Invalid interval
+
+		err := cfg.Validate()
+		if err == nil {
+			t.Fatal("expected multiple validation errors, got nil")
+		}
+
+		// Verify both API and Monitor errors are present (aggregated by Config.Validate)
+		errMsg := err.Error()
+		if !strings.Contains(errMsg, "bearer_token") {
+			t.Errorf("error should mention bearer_token, got: %s", errMsg)
+		}
+		if !strings.Contains(errMsg, "monitor.interval") {
+			t.Errorf("error should mention monitor.interval, got: %s", errMsg)
+		}
+	})
 }
 

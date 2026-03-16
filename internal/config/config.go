@@ -28,6 +28,8 @@ type Config struct {
 	Nanobot   NanobotConfig    `yaml:"nanobot" mapstructure:"nanobot"`
 	Instances []InstanceConfig `yaml:"instances" mapstructure:"instances"`
 	Pushover  PushoverConfig   `yaml:"pushover" mapstructure:"pushover"`
+	API       APIConfig        `yaml:"api" mapstructure:"api"`         // HTTP API server config (CONF-02, CONF-03)
+	Monitor   MonitorConfig    `yaml:"monitor" mapstructure:"monitor"` // Monitoring service config (CONF-04, CONF-05)
 }
 
 // defaults sets the default values for the configuration.
@@ -37,6 +39,15 @@ func (c *Config) defaults() {
 	c.Nanobot.RepoPath = ""
 	c.Pushover.ApiToken = ""
 	c.Pushover.UserKey = ""
+
+	// API defaults (CONF-01, CONF-02, CONF-03)
+	c.API.Port = 8080
+	c.API.BearerToken = "" // Required, no default (SEC-03)
+	c.API.Timeout = 30 * time.Second
+
+	// Monitor defaults (CONF-04, CONF-05)
+	c.Monitor.Interval = 15 * time.Minute
+	c.Monitor.Timeout = 10 * time.Second
 }
 
 // Validate validates the NanobotConfig values.
@@ -128,6 +139,16 @@ func (c *Config) Validate() error {
 		}
 	}
 
+	// Validate API config (CONF-06, SEC-03)
+	if err := c.API.Validate(); err != nil {
+		errs = append(errs, err)
+	}
+
+	// Validate Monitor config (CONF-06)
+	if err := c.Monitor.Validate(); err != nil {
+		errs = append(errs, err)
+	}
+
 	return errors.Join(errs...)
 }
 
@@ -171,6 +192,15 @@ func Load(configPath string) (*Config, error) {
 	v.SetDefault("nanobot.repo_path", cfg.Nanobot.RepoPath)
 	v.SetDefault("pushover.api_token", cfg.Pushover.ApiToken)
 	v.SetDefault("pushover.user_key", cfg.Pushover.UserKey)
+
+	// Set defaults for API config (CONF-01, CONF-02, CONF-03)
+	v.SetDefault("api.port", cfg.API.Port)
+	v.SetDefault("api.timeout", cfg.API.Timeout)
+	// Note: api.bearer_token has no default - it's required (SEC-03)
+
+	// Set defaults for Monitor config (CONF-04, CONF-05)
+	v.SetDefault("monitor.interval", cfg.Monitor.Interval)
+	v.SetDefault("monitor.timeout", cfg.Monitor.Timeout)
 
 	// Read config file (optional - use defaults if missing)
 	if err := v.ReadInConfig(); err != nil {

@@ -226,6 +226,15 @@ func TestConfigValidateWithInstances(t *testing.T) {
 						StartupTimeout: 30 * time.Second,
 					},
 				},
+				API: APIConfig{
+					Port:        8080,
+					BearerToken: "this-is-a-secure-token-with-at-least-32-characters",
+					Timeout:     30 * time.Second,
+				},
+				Monitor: MonitorConfig{
+					Interval: 15 * time.Minute,
+					Timeout:  10 * time.Second,
+				},
 			},
 			expectError: false,
 		},
@@ -236,6 +245,15 @@ func TestConfigValidateWithInstances(t *testing.T) {
 				Nanobot: NanobotConfig{
 					Port:           18790,
 					StartupTimeout: 30 * time.Second,
+				},
+				API: APIConfig{
+					Port:        8080,
+					BearerToken: "this-is-a-secure-token-with-at-least-32-characters",
+					Timeout:     30 * time.Second,
+				},
+				Monitor: MonitorConfig{
+					Interval: 15 * time.Minute,
+					Timeout:  10 * time.Second,
 				},
 			},
 			expectError: false,
@@ -258,6 +276,15 @@ func TestConfigValidateWithInstances(t *testing.T) {
 						StartupTimeout: 30 * time.Second,
 					},
 				},
+				API: APIConfig{
+					Port:        8080,
+					BearerToken: "this-is-a-secure-token-with-at-least-32-characters",
+					Timeout:     30 * time.Second,
+				},
+				Monitor: MonitorConfig{
+					Interval: 15 * time.Minute,
+					Timeout:  10 * time.Second,
+				},
 			},
 			expectError: true,
 			errorContains: []string{"实例名称重复", "端口重复"},
@@ -273,6 +300,15 @@ func TestConfigValidateWithInstances(t *testing.T) {
 						StartCommand:   "nanobot.exe",
 						StartupTimeout: 30 * time.Second,
 					},
+				},
+				API: APIConfig{
+					Port:        8080,
+					BearerToken: "this-is-a-secure-token-with-at-least-32-characters",
+					Timeout:     30 * time.Second,
+				},
+				Monitor: MonitorConfig{
+					Interval: 15 * time.Minute,
+					Timeout:  10 * time.Second,
 				},
 			},
 			expectError: true,

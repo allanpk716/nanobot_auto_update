@@ -8,3 +8,6 @@ nanobot:
 pushover:
   api_token: "test_token"
   user_key: "test_user"
+
+api:
+  bearer_token: "this-is-a-secure-token-with-at-least-32-characters"

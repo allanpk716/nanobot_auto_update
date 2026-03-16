@@ -3,3 +3,6 @@ cron: "0 3 * * *"
 monitor:
   interval: "15m"
   timeout: "10s"
+
+api:
+  bearer_token: "this-is-a-secure-token-with-at-least-32-characters"
