@@ -47,7 +47,12 @@ v0.3 里程碑将项目从定时更新工具转变为持续运行的监控服务
 4. 系统在启动时验证所有必需配置项存在且有效，缺失时返回明确错误信息
 5. 所有配置项有合理的默认值（除 token 外），应用可以成功启动
 
-**Plans:** TBD
+**Plans:** 3 plans (Wave 0: test scaffolding, Wave 1: config structs, Wave 2: integration)
+
+Plans:
+- [ ] 11-01-PLAN.md — Create Wave 0 test scaffolding for configuration validation
+- [ ] 11-02-PLAN.md — Implement APIConfig and MonitorConfig validation with TDD
+- [ ] 11-03-PLAN.md — Integrate new configs into main Config struct and startup validation
 
 ---
 
@@ -191,7 +196,7 @@ v0.3 里程碑将项目从定时更新工具转变为持续运行的监控服务
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 11. Configuration Extension | 0/0 | Not started | - |
+| 11. Configuration Extension | 0/3 | Planned | - |
 | 12. Monitoring Service | 0/0 | Not started | - |
 | 13. HTTP API Server | 0/0 | Not started | - |
 | 14. Shared Update Lock | 0/0 | Not started | - |
@@ -310,4 +315,5 @@ See `research/SUMMARY.md` for detailed research findings:
 ---
 
 *Roadmap created: 2026-03-16*
-*Next step: `/gsd:plan-phase 11`*
+*Phase 11 planned: 2026-03-16*
+*Next step: `/gsd:execute-phase 11`*
