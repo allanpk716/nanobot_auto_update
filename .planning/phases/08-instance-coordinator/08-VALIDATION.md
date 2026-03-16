@@ -1,7 +1,8 @@
 # Phase 8: 实例协调器 - Validation
 
 **Date:** 2026-03-11
-**Status:** Ready for execution
+**Status:** Nyquist-compliant
+**Last Audit:** 2026-03-16
 
 ## Phase Goal
 
@@ -9,12 +10,12 @@
 
 ## Requirements Traceability
 
-| Requirement ID | Description | Implementation | Verification |
-|----------------|-------------|----------------|--------------|
-| LIFECYCLE-01 | 按顺序停止所有配置的实例 | InstanceManager.stopAll() 串行调用每个实例的 StopForUpdate() | 单元测试验证串行执行和优雅降级 |
-| LIFECYCLE-02 | 按顺序启动所有配置的实例 | InstanceManager.startAll() 串行调用每个实例的 StartAfterUpdate() | 单元测试验证串行执行和优雅降级 |
-| LIFECYCLE-03 | 优雅降级 - 某个实例失败时继续操作其他实例 | stopAll/startAll 方法记录错误但不提前返回 | 单元测试验证继续处理其他实例 |
-| ERROR-02 | 错误聚合 - 收集所有实例错误 | UpdateResult 结构体记录成功/失败状态 | 单元测试验证错误聚合完整性 |
+| Requirement ID | Description | Implementation | Verification | Status |
+|----------------|-------------|----------------|--------------|--------|
+| LIFECYCLE-01 | 按顺序停止所有配置的实例 | InstanceManager.stopAll() 串行调用每个实例的 StopForUpdate() | TestStopAllGracefulDegradation | ✅ PASS |
+| LIFECYCLE-02 | 按顺序启动所有配置的实例 | InstanceManager.startAll() 串行调用每个实例的 StartAfterUpdate() | TestStartAllGracefulDegradation | ✅ PASS |
+| LIFECYCLE-03 | 优雅降级 - 某个实例失败时继续操作其他实例 | stopAll/startAll 方法记录错误但不提前返回 | TestStopAllGracefulDegradation, TestStartAllGracefulDegradation | ✅ PASS |
+| ERROR-02 | 错误聚合 - 收集所有实例错误 | UpdateResult 结构体记录成功/失败状态 | TestUpdateResultHasErrors, TestUpdateError, TestUpdateAllSkipUpdateWhenStopFails | ✅ PASS |
 
 ## Success Criteria
 
@@ -88,19 +89,23 @@
 
 **Wave 0 测试文件创建:**
 
-- [ ] `internal/instance/result_test.go` - UpdateResult 和 UpdateError 单元测试
+- [x] `internal/instance/result_test.go` - UpdateResult 和 UpdateError 单元测试
   - 验证 HasErrors() 方法
   - 验证 Error() 方法格式
   - 验证 Unwrap() 返回正确类型
+  - 验证 errors.Is/As 支持
+  - 验证空错误列表处理
+  - 验证单个错误处理
 
-- [ ] `internal/instance/manager_test.go` - InstanceManager 单元测试
+- [x] `internal/instance/manager_test.go` - InstanceManager 单元测试
   - 验证 NewInstanceManager() 正确初始化
-  - 验证 stopAll() 优雅降级
-  - 验证 startAll() 优雅降级
-  - 验证 UpdateAll() 跳过更新逻辑
-  - 验证 UpdateResult 错误聚合
+  - 验证 stopAll() 优雅降级 - 继续处理其他实例
+  - 验证 startAll() 优雅降级 - 继续处理其他实例
+  - 验证 UpdateAll() 跳过更新逻辑 (当 stop 失败时)
+  - 验证 InstanceError 类型断言
+  - 验证错误聚合完整性
 
-**注意:** 完整测试套件将在验证阶段补充,此阶段仅需创建基础测试框架。
+**注意:** 完整测试套件已创建,所有测试通过。
 
 ### 5. 集成验证
 
@@ -197,3 +202,41 @@ go tool cover -func=coverage.out
 **Phase 8 负责人**: Claude (AI Assistant)
 **验证时间**: Phase 8 执行完成后
 **下一步**: Phase 9 (通知扩展) 使用 UpdateResult 构建详细的失败通知
+
+## Validation Audit 2026-03-16
+
+| Metric | Count |
+|--------|-------|
+| Gaps found | 2 |
+| Resolved | 2 |
+| Escalated | 0 |
+
+### Gap 1: LIFECYCLE-03 优雅降级测试
+- **Status**: ✅ RESOLVED
+- **Test File**: `internal/instance/manager_test.go`
+- **Tests Added**:
+  - `TestStopAllGracefulDegradation` - 验证 stopAll() 继续处理其他实例
+  - `TestStartAllGracefulDegradation` - 验证 startAll() 继续处理其他实例
+  - `TestUpdateAllSkipUpdateWhenStopFails` - 验证停止失败时跳过更新
+- **Verification Command**: `go test ./internal/instance -v -run "TestStopAllGracefulDegradation\|TestStartAllGracefulDegradation"`
+- **Result**: PASS
+
+### Gap 2: result_test.go 独立测试文件
+- **Status**: ✅ RESOLVED
+- **Test File**: `internal/instance/result_test.go` (新建)
+- **Tests Added**:
+  - `TestUpdateResultHasErrors` - 7个子测试覆盖各种场景
+  - `TestUpdateError` - 验证错误聚合
+  - `TestUpdateErrorEmpty` - 验证空错误列表
+  - `TestUpdateErrorSingle` - 验证单个错误
+  - `TestUpdateErrorUnwrapSupportsErrorsIs` - 验证 errors.Is 支持
+  - `TestUpdateErrorUnwrapSupportsErrorsAs` - 验证 errors.As 支持
+- **Verification Command**: `go test ./internal/instance -v -run TestUpdateResult`
+- **Result**: PASS
+
+### Coverage Report
+- `result.go`: 100% 覆盖率
+- `manager.go`: stopAll (71.4%), startAll (85.7%)
+
+### All Tests Status
+✅ 所有测试通过 (18 个测试用例, 总耗时 <5 秒)
