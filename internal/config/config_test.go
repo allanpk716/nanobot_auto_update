@@ -180,3 +180,34 @@ func TestLoadMixedMode(t *testing.T) {
 	}
 }
 
+// Integration test stubs for API and Monitor configuration
+// These tests will be implemented after Config.API and Config.Monitor fields are added
+
+func TestLoadAPIConfigFromYAML(t *testing.T) {
+	// TODO: Implement after Config.API field added
+	// This test should:
+	// - Load testutil/testdata/config/api_valid.yaml
+	// - Verify cfg.API.Port == 8080
+	// - Verify cfg.API.BearerToken == "this-is-a-secure-token-with-at-least-32-characters"
+	// - Verify cfg.API.Timeout == 30*time.Second
+	t.Skip("Waiting for Config.API integration")
+}
+
+func TestLoadMonitorConfigFromYAML(t *testing.T) {
+	// TODO: Implement after Config.Monitor field added
+	// This test should:
+	// - Load testutil/testdata/config/monitor_valid.yaml
+	// - Verify cfg.Monitor.Interval == 15*time.Minute
+	// - Verify cfg.Monitor.Timeout == 10*time.Second
+	t.Skip("Waiting for Config.Monitor integration")
+}
+
+func TestConfigValidationWithNewFields(t *testing.T) {
+	// TODO: Test CONF-06 startup validation with all new fields
+	// This test should:
+	// - Load api_invalid_token.yaml and expect validation error about token length
+	// - Load api_invalid_port.yaml and expect validation error about port range
+	// - Load monitor_invalid_interval.yaml and expect validation error about interval minimum
+	t.Skip("Waiting for full integration")
+}
+
