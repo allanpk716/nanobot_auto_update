@@ -47,7 +47,7 @@ v0.3 里程碑将项目从定时更新工具转变为持续运行的监控服务
 4. 系统在启动时验证所有必需配置项存在且有效，缺失时返回明确错误信息
 5. 所有配置项有合理的默认值（除 token 外），应用可以成功启动
 
-**Plans:** 1/4 plans executed
+**Plans:** 2/4 plans executed
 
 Plans:
 - [ ] 11-01a-PLAN.md — Create Wave 0 unit test scaffolding for API and Monitor validation
@@ -197,7 +197,7 @@ Plans:
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 11. Configuration Extension | 1/4 | In Progress|  |
+| 11. Configuration Extension | 2/4 | In Progress|  |
 | 12. Monitoring Service | 0/0 | Not started | - |
 | 13. HTTP API Server | 0/0 | Not started | - |
 | 14. Shared Update Lock | 0/0 | Not started | - |
