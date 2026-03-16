@@ -218,67 +218,47 @@ pushover:
 | 参数 | 默认值 | 说明 |
 |------|--------|------|
 | `--config` | `./config.yaml` | 配置文件路径 |
-| `--api-port` | - | 覆盖配置文件中的 API 端口（v0.3 新增） |
-| `--skip-monitor` | `false` | 禁用监控服务，仅使用 API 触发（v0.3 新增） |
-| `--update-now` | `false` | 立即执行更新并退出（JSON 输出） |
-| `--timeout` | `5m` | 更新超时时间（例如：`5m`、`300s`） |
-| `--cron` | - | 覆盖配置文件中的 Cron 表达式（传统模式） |
+| `--api-port` | 8080 | 覆盖配置文件中的 API 端口 |
+| `--skip-monitor` | `false` | 禁用监控服务（仅使用 API 触发） |
 | `--version` | `false` | 显示版本信息 |
 | `-h, --help` | - | 显示帮助信息 |
 
 ### 使用场景
 
-#### 场景 1：HTTP API 触发更新（推荐 v0.3+）
+#### 场景 1：HTTP API 手动触发
 ```bash
 # 触发更新
 curl -X POST http://localhost:8080/api/v1/trigger-update \
   -H "Authorization: Bearer YOUR_TOKEN_HERE"
 
-# 成功响应示例
-# {"success":true,"version":"1.2.3","source":"github","message":"Update completed"}
+# 成功响应
+# {"success":true,"version":"1.2.3","source":"github"}
 
-# 更新进行中（429 冲突）
+# 更新进行中
 # {"error":"Update already in progress","status":429}
 ```
 
 #### 场景 2：监控服务自动触发
-配置监控服务后，程序会自动检测网络连通性：
-- 每 15 分钟检查一次 Google 连通性
-- 检测到网络从不可用恢复时自动触发更新
-- 无需人工干预，完全自动化
+- 每 15 分钟自动检查 Google 连通性
+- 检测到网络恢复时自动触发更新
+- 无需人工干预
 
-#### 场景 3：传统定时更新（向后兼容）
+#### 场景 3：自定义配置
 ```bash
-# 使用默认配置（每天凌晨 3 点）
-./nanobot-auto-updater.exe
+# 自定义 API 端口
+./nanobot-auto-updater.exe --api-port 9090
 
-# 自定义更新时间（每天上午 10 点）
-./nanobot-auto-updater.exe --cron "0 10 * * *"
+# 禁用监控服务（仅 API 模式）
+./nanobot-auto-updater.exe --skip-monitor
+
+# 使用自定义配置文件
+./nanobot-auto-updater.exe --config /path/to/config.yaml
 ```
 
-#### 场景 4：手动触发更新（CLI 模式）
-```bash
-# 立即更新并查看 JSON 输出
-./nanobot-auto-updater.exe --update-now
-
-# 输出示例（成功）
-# {"success":true,"version":"1.2.3","source":"github","message":"Update completed"}
-
-# 输出示例（失败）
-# {"success":false,"error":"Connection timeout","exit_code":1}
-```
-
-#### 场景 5：调试模式
+#### 场景 4：调试模式
 ```powershell
-# 设置环境变量禁用守护进程（保留控制台输出）
-$env:NO_DAEMON = "1"
-./nanobot-auto-updater.exe --update-now
-```
-
-#### 场景 6：自定义超时
-```bash
-# 设置 10 分钟超时
-./nanobot-auto-updater.exe --update-now --timeout 10m
+# 查看实时日志
+Get-Content logs\app-2026-03-16.log -Wait
 ```
 
 ### 配置 Pushover 通知
