@@ -18,7 +18,7 @@ v0.3 里程碑将项目从定时更新工具转变为持续运行的监控服务
 
 ## Phases
 
-- [ ] **Phase 11: Configuration Extension** - 扩展配置支持 API 和监控服务参数
+- [x] **Phase 11: Configuration Extension** - 扩展配置支持 API 和监控服务参数 (completed 2026-03-16)
 - [ ] **Phase 12: Monitoring Service** - 实现后台连通性监控 goroutine
 - [ ] **Phase 13: HTTP API Server** - 实现 HTTP API 服务器和认证中间件
 - [ ] **Phase 14: Shared Update Lock** - 实现并发更新控制和集成
@@ -47,7 +47,7 @@ v0.3 里程碑将项目从定时更新工具转变为持续运行的监控服务
 4. 系统在启动时验证所有必需配置项存在且有效，缺失时返回明确错误信息
 5. 所有配置项有合理的默认值（除 token 外），应用可以成功启动
 
-**Plans:** 3/4 plans executed
+**Plans:** 4/4 plans complete
 
 Plans:
 - [ ] 11-01a-PLAN.md — Create Wave 0 unit test scaffolding for API and Monitor validation
@@ -197,7 +197,7 @@ Plans:
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 11. Configuration Extension | 3/4 | In Progress|  |
+| 11. Configuration Extension | 4/4 | Complete   | 2026-03-16 |
 | 12. Monitoring Service | 0/0 | Not started | - |
 | 13. HTTP API Server | 0/0 | Not started | - |
 | 14. Shared Update Lock | 0/0 | Not started | - |
