@@ -1,683 +1,927 @@
-# Architecture Research: Multi-Instance Management
+# Architecture Research
 
-**Domain:** Multi-instance process management for Windows auto-updater
-**Researched:** 2026-03-09
+**Domain:** HTTP API Service + Monitoring Service Integration
+**Researched:** 2026-03-16
 **Confidence:** HIGH
 
 ## Executive Summary
 
-This research addresses **extending the existing single-instance nanobot auto-updater to support multiple instances**. The current architecture has clean separation between lifecycle management, updating, and scheduling, making it straightforward to add multi-instance orchestration.
+This research covers the integration of HTTP API and monitoring services with the existing nanobot-auto-updater architecture. The system will evolve from a cron-scheduled tool to a continuously running service with two concurrent components: an HTTP API server for on-demand update triggers, and a background monitoring service for Google connectivity checks. Both services will coordinate with the existing `InstanceManager` for update operations.
 
-**Key Recommendation:** Add a new `internal/instance` package with an `InstanceManager` orchestrator that coordinates stop-all → update → start-all workflows, while preserving the existing single-instance lifecycle logic in `internal/lifecycle`.
-
-## Current Architecture Analysis
-
-### Existing System Structure
+## Existing Architecture Overview
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                    cmd/nanobot-auto-updater                 │
-│                    (Main Entry Point)                       │
+│                     Main Application                         │
+│  (cmd/nanobot-auto-updater/main.go)                         │
 ├─────────────────────────────────────────────────────────────┤
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐      │
-│  │   scheduler  │  │   updater    │  │   notifier   │      │
-│  │  (cron jobs) │  │  (UV logic)  │  │  (Pushover)  │      │
-│  └──────┬───────┘  └──────┬───────┘  └──────────────┘      │
-│         │                 │                                  │
-├─────────┴─────────────────┴──────────────────────────────────┤
-│                    internal/config                           │
-│              (Single-instance configuration)                 │
+│  ┌──────────────┐          ┌──────────────────────┐        │
+│  │   Scheduler  │──────>   │  InstanceManager     │        │
+│  │  (cron-based)│          │  (internal/instance) │        │
+│  └──────────────┘          └──────────┬───────────┘        │
+│                                        │                     │
+│                             ┌──────────┴──────────┐        │
+│                             │                     │        │
+│                    ┌────────▼──────┐    ┌────────▼──────┐ │
+│                    │ InstanceLife  │    │ InstanceLife  │ │
+│                    │ (instance #1) │    │ (instance #2) │ │
+│                    └───────────────┘    └───────────────┘ │
 ├─────────────────────────────────────────────────────────────┤
-│                    internal/lifecycle                        │
-│              (Single-instance management)                    │
-│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐    │
-│  │ detector │  │ stopper  │  │ starter  │  │ manager  │    │
-│  └──────────┘  └──────────┘  └──────────┘  └──────────┘    │
+│  Supporting Services:                                        │
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐                  │
+│  │ Updater  │  │ Notifier │  │ Logging  │                  │
+│  │(internal)│  │(internal)│  │(internal)│                  │
+│  └──────────┘  └──────────┘  └──────────┘                  │
 └─────────────────────────────────────────────────────────────┘
 ```
 
-### Current Component Responsibilities
-
-| Component | Responsibility | Current Implementation |
-|-----------|----------------|------------------------|
-| config | Configuration loading, validation | Single `NanobotConfig` (port, timeout, repo_path) |
-| lifecycle.Manager | Orchestrates stop/start for single instance | `StopForUpdate()`, `StartAfterUpdate()` methods |
-| lifecycle.detector | Process detection | Port-based and process name detection |
-| lifecycle.stopper | Process termination | Graceful → force kill with timeout |
-| lifecycle.starter | Process startup | Background spawn with verification |
-| updater | UV-based update logic | GitHub main → PyPI fallback |
-| scheduler | Cron job management | Single update job with overlap prevention |
-| notifier | Failure/success notifications | Pushover integration |
-
-## Recommended Multi-Instance Architecture
+## Proposed Architecture (v0.3)
 
 ### System Overview
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                    cmd/nanobot-auto-updater                 │
-│                    (Main Entry Point)                       │
-├─────────────────────────────────────────────────────────────┤
-│  ┌──────────────────────────────────────────────────────┐   │
-│  │           internal/instance (NEW PACKAGE)             │   │
-│  │                  InstanceManager                       │   │
-│  │  ┌────────────────────────────────────────────────┐   │   │
-│  │  │  Instance Orchestrator (supervisor pattern)    │   │   │
-│  │  │  - Manage all nanobot instances                │   │   │
-│  │  │  - Coordinate stop all → update → start all    │   │   │
-│  │  │  - Collect results and failures                │   │   │
-│  │  └────────────────────────────────────────────────┘   │   │
-│  └──────────────────────────────────────────────────────┘   │
-├─────────────────────────────────────────────────────────────┤
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐      │
-│  │   scheduler  │  │   updater    │  │   notifier   │      │
-│  │  (unchanged) │  │  (unchanged) │  │  (enhanced)  │      │
-│  └──────┬───────┘  └──────┬───────┘  └──────┬───────┘      │
-│         │                 │                 │               │
-├─────────┴─────────────────┴─────────────────┴───────────────┤
-│                    internal/config (EXTENDED)                │
-│  ┌──────────────────────────────────────────────────────┐   │
-│  │  Config struct with Instances []InstanceConfig       │   │
-│  │  Each InstanceConfig: Name, Port, StartupTimeout,    │   │
-│  │                       RepoPath                       │   │
-│  └──────────────────────────────────────────────────────┘   │
-├─────────────────────────────────────────────────────────────┤
-│              internal/lifecycle (EXTENDED)                   │
+│                     Main Application                         │
+│  (cmd/nanobot-auto-updater/main.go)                         │
+│                                                              │
 │  ┌───────────────────────────────────────────────────────┐  │
-│  │  InstanceLifecycle (per-instance lifecycle manager)   │  │
-│  │  - StopForUpdate(ctx) → error                         │  │
-│  │  - StartAfterUpdate(ctx) → error                      │  │
-│  │  - Uses existing detector/stopper/starter logic       │  │
-│  └───────────────────────────────────────────────────────┘  │
-│  ┌───────────────────────────────────────────────────────┐  │
-│  │  Existing detector/stopper/starter (unchanged)        │  │
-│  └───────────────────────────────────────────────────────┘  │
+│  │         Context + Signal Handler (Root)                │  │
+│  │  - Creates root context with cancellation              │  │
+│  │  - Handles SIGINT/SIGTERM                              │  │
+│  │  - Coordinates graceful shutdown                       │  │
+│  └───────────────────────┬───────────────────────────────┘  │
+│                          │                                   │
+│         ┌────────────────┼────────────────┐                │
+│         │                │                │                │
+│  ┌──────▼─────┐   ┌─────▼──────┐  ┌─────▼──────┐        │
+│  │ HTTP API   │   │ Monitoring │  │ Instance   │        │
+│  │ Server     │   │ Service    │  │ Manager    │        │
+│  │ (NEW)      │   │ (NEW)      │  │ (EXISTING) │        │
+│  └──────┬─────┘   └─────┬──────┘  └─────┬──────┘        │
+│         │               │                │                │
+│         │               │                │                │
+│         └───────────────┴────────────────┘                │
+│                         │                                   │
+│                  Shared Coordination                        │
+│                  - Update Lock (sync.Mutex)                 │
+│                  - InstanceManager                          │
 └─────────────────────────────────────────────────────────────┘
 ```
 
-### Component Responsibilities (Multi-Instance)
+### Component Responsibilities
 
-| Component | Responsibility | Changes Required |
-|-----------|----------------|------------------|
-| **config** | Load instance list from YAML | **EXTEND:** Add `Instances []InstanceConfig` field, validation for unique names/ports |
-| **instance** (NEW) | Coordinate multi-instance operations | **CREATE:** New package with `InstanceManager` orchestrator |
-| **lifecycle** | Per-instance lifecycle operations | **EXTEND:** Add `InstanceLifecycle` wrapper that uses instance name for logging context |
-| **updater** | UV update logic | **UNCHANGED:** Already global operation (updates nanobot binary) |
-| **scheduler** | Cron job management | **MINIMAL:** Update job function to call `InstanceManager.UpdateAll()` |
-| **notifier** | Pushover notifications | **EXTEND:** Add `NotifyInstanceFailure(name, operation, err)` method |
+| Component | Responsibility | Implementation |
+|-----------|----------------|----------------|
+| **HTTP API Server** (NEW) | Exposes `/api/v1/trigger-update` endpoint, authenticates requests via Bearer token | `internal/api/server.go` - `net/http.Server` with custom handlers |
+| **Monitoring Service** (NEW) | Checks Google connectivity every 15 min, sends notifications on failure/recovery | `internal/monitor/service.go` - goroutine with `time.Ticker` |
+| **Instance Manager** (EXISTING) | Coordinates stop→update→start lifecycle for all nanobot instances | `internal/instance/manager.go` - unchanged |
+| **Update Lock** (NEW) | Prevents concurrent updates from API and monitoring triggers | `sync.Mutex` in main or shared coordinator |
+| **Config** (MODIFIED) | Adds API port, Bearer token, monitoring interval fields | `internal/config/config.go` - new fields added |
+| **Notifier** (EXISTING) | Sends Pushover notifications for failures and recovery | `internal/notifier/notifier.go` - add recovery notification method |
 
-## Recommended Project Structure
+### New Components Detail
 
+#### 1. HTTP API Server (`internal/api/`)
+
+**Structure:**
 ```
-internal/
-├── config/
-│   ├── config.go              # EXTEND: Add InstanceConfig struct, Instances slice
-│   └── config_test.go         # EXTEND: Add multi-instance validation tests
-│
-├── instance/                  # NEW PACKAGE
-│   ├── manager.go             # InstanceManager - orchestrates all instances
-│   ├── manager_test.go        # Unit tests for InstanceManager
-│   └── types.go               # Result types (InstanceResult, UpdateAllResult)
-│
-├── lifecycle/
-│   ├── detector.go            # UNCHANGED
-│   ├── stopper.go             # UNCHANGED
-│   ├── starter.go             # UNCHANGED
-│   ├── manager.go             # EXTEND: Add InstanceLifecycle wrapper
-│   └── manager_test.go        # EXTEND: Add InstanceLifecycle tests
-│
-├── updater/
-│   ├── updater.go             # UNCHANGED (global nanobot update)
-│   └── checker.go             # UNCHANGED
-│
-├── scheduler/
-│   └── scheduler.go           # MINIMAL CHANGE (update job function)
-│
-└── notifier/
-    └── notifier.go            # EXTEND: Add instance-specific notification methods
-
-cmd/
-└── nanobot-auto-updater/
-    └── main.go                # MODIFY: Initialize InstanceManager, update job logic
+internal/api/
+├── server.go          # HTTP server setup and lifecycle
+├── handlers.go        # Request handlers (trigger-update, health)
+├── middleware.go      # Authentication, logging middleware
+└── server_test.go     # Unit tests
 ```
 
-### Structure Rationale
+**Key Responsibilities:**
+- Start HTTP server on configured port (default: 8080)
+- Validate Bearer token via middleware
+- Acquire update lock before triggering update
+- Return JSON responses (success/error)
+- Graceful shutdown on context cancellation
 
-- **internal/instance/**: New package for multi-instance coordination logic (single responsibility: orchestration)
-- **internal/config/**: Extended in-place because instance configuration is natural extension of app config
-- **internal/lifecycle/**: Extended minimally with `InstanceLifecycle` wrapper to preserve existing single-instance logic
-- **internal/updater/**: Unchanged because UV updates the global nanobot binary (not instance-specific)
-- **internal/scheduler/**: Minimal changes because scheduling is unchanged (only job function calls new orchestrator)
-
-## Architectural Patterns
-
-### Pattern 1: Supervisor/Orchestrator Pattern
-
-**What:** A central `InstanceManager` coordinates lifecycle operations across multiple instances, similar to Erlang supervisor trees or process managers.
-
-**When to use:** When managing multiple related processes that need coordinated start/stop/update operations.
-
-**Trade-offs:**
-- ✅ Clear separation of concerns (orchestration vs. individual lifecycle)
-- ✅ Easy to add per-instance error handling and continuation
-- ✅ Simple to aggregate results for notification
-- ❌ Adds one layer of indirection
-- ❌ Requires careful error aggregation design
-
-**Example:**
-
+**Integration Pattern:**
 ```go
-// internal/instance/manager.go
-package instance
-
-import (
-    "context"
-    "fmt"
-    "log/slog"
-
-    "github.com/HQGroup/nanobot-auto-updater/internal/config"
-    "github.com/HQGroup/nanobot-auto-updater/internal/lifecycle"
-)
-
-// InstanceManager coordinates multi-instance operations
-type InstanceManager struct {
-    instances map[string]*lifecycle.InstanceLifecycle // keyed by instance name
-    logger    *slog.Logger
+// Server wraps http.Server with lifecycle management
+type Server struct {
+    httpServer *http.Server
+    manager    *instance.Manager
+    logger     *slog.Logger
+    mu         *sync.Mutex  // Shared update lock
 }
 
-func NewInstanceManager(cfg *config.Config, logger *slog.Logger) *InstanceManager {
-    instances := make(map[string]*lifecycle.InstanceLifecycle)
-    for _, instCfg := range cfg.Instances {
-        instances[instCfg.Name] = lifecycle.NewInstanceLifecycle(instCfg, logger)
-    }
-    return &InstanceManager{
-        instances: instances,
-        logger:    logger,
-    }
-}
-
-// StopAllInstances stops all instances, collecting errors but continuing on failure
-func (m *InstanceManager) StopAllInstances(ctx context.Context) []InstanceResult {
-    m.logger.Info("Stopping all instances", "count", len(m.instances))
-
-    var results []InstanceResult
-    for name, lc := range m.instances {
-        m.logger.Info("Stopping instance", "name", name)
-        err := lc.StopForUpdate(ctx)
-        results = append(results, InstanceResult{
-            Name:      name,
-            Operation: "stop",
-            Success:   err == nil,
-            Error:     err,
-        })
-        if err != nil {
-            m.logger.Error("Failed to stop instance", "name", name, "error", err)
-            // Continue with other instances (don't return early)
+func (s *Server) Start(ctx context.Context) error {
+    // Start HTTP server in goroutine
+    go func() {
+        if err := s.httpServer.ListenAndServe(); err != http.ErrServerClosed {
+            s.logger.Error("HTTP server error", "error", err)
         }
-    }
+    }()
 
-    return results
-}
+    // Wait for context cancellation
+    <-ctx.Done()
 
-// StartAllInstances starts all instances, continuing on failure
-func (m *InstanceManager) StartAllInstances(ctx context.Context) []InstanceResult {
-    m.logger.Info("Starting all instances", "count", len(m.instances))
-
-    var results []InstanceResult
-    for name, lc := range m.instances {
-        m.logger.Info("Starting instance", "name", name)
-        err := lc.StartAfterUpdate(ctx)
-        results = append(results, InstanceResult{
-            Name:      name,
-            Operation: "start",
-            Success:   err == nil,
-            Error:     err,
-        })
-        if err != nil {
-            m.logger.Error("Failed to start instance", "name", name, "error", err)
-            // Continue with other instances
-        }
-    }
-
-    return results
+    // Graceful shutdown with timeout
+    shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+    defer cancel()
+    return s.httpServer.Shutdown(shutdownCtx)
 }
 ```
 
-### Pattern 2: Configuration Extension Pattern
+#### 2. Monitoring Service (`internal/monitor/`)
 
-**What:** Extend existing configuration structures with slice of instance configs, maintaining backward compatibility.
+**Structure:**
+```
+internal/monitor/
+├── service.go         # Monitoring goroutine with ticker
+├── checker.go         # HTTP connectivity checker
+├── state.go           # State tracking (last status, failure count)
+└── service_test.go    # Unit tests
+```
 
-**When to use:** When adding multi-instance support to a single-instance system.
+**Key Responsibilities:**
+- Check Google connectivity every 15 minutes (configurable)
+- Track consecutive failures (state machine)
+- Trigger update on connectivity failure
+- Send recovery notification when connectivity restored
+- Coordinate with update lock to avoid conflicts
 
-**Trade-offs:**
-- ✅ Maintains backward compatibility (old configs still work)
-- ✅ Natural YAML structure (`instances:` list)
-- ✅ Validation logic stays centralized in config package
-- ❌ Slightly more complex validation (unique names, ports)
+**Integration Pattern:**
+```go
+type Service struct {
+    interval     time.Duration
+    checker      *ConnectivityChecker
+    manager      *instance.Manager
+    notifier     *notifier.Notifier
+    logger       *slog.Logger
+    mu           *sync.Mutex  // Shared update lock
+    lastStatus   ConnectivityStatus
+}
 
-**Example:**
+func (s *Service) Run(ctx context.Context) error {
+    ticker := time.NewTicker(s.interval)
+    defer ticker.Stop()
+
+    for {
+        select {
+        case <-ctx.Done():
+            return ctx.Err()
+        case <-ticker.C:
+            s.checkAndAct(ctx)
+        }
+    }
+}
+
+func (s *Service) checkAndAct(ctx context.Context) {
+    status := s.checker.Check(ctx)
+
+    // State transitions
+    if status == Failed && s.lastStatus == Connected {
+        // Trigger update on first failure
+        s.triggerUpdate(ctx)
+        s.notifier.NotifyFailure("Connectivity Lost", ...)
+    } else if status == Connected && s.lastStatus == Failed {
+        // Send recovery notification
+        s.notifier.NotifyRecovery(...)
+    }
+
+    s.lastStatus = status
+}
+```
+
+#### 3. Shared Update Lock
+
+**Purpose:** Prevent race condition when both monitoring service and API try to trigger update simultaneously.
+
+**Pattern:**
+```go
+// In main.go or coordinator
+var updateMu sync.Mutex
+
+// In HTTP handler
+func (h *Handler) TriggerUpdate(w http.ResponseWriter, r *http.Request) {
+    if !h.updateMu.TryLock() {
+        // Update already in progress
+        respondError(w, http.StatusConflict, "Update already in progress")
+        return
+    }
+    defer h.updateMu.Unlock()
+
+    // Proceed with update
+    result, err := h.manager.UpdateAll(r.Context())
+    ...
+}
+
+// In monitoring service (similar pattern)
+func (s *Service) triggerUpdate(ctx context.Context) {
+    if !s.updateMu.TryLock() {
+        s.logger.Info("Update already in progress, skipping")
+        return
+    }
+    defer s.updateMu.Unlock()
+
+    result, err := s.manager.UpdateAll(ctx)
+    ...
+}
+```
+
+## Configuration Changes
+
+### Modified Config Structure
+
+```yaml
+# config.yaml
+
+# REMOVED: cron - no longer used
+# cron: "0 3 * * *"
+
+# NEW: API Server configuration
+api:
+  enabled: true
+  port: 8080
+  bearer_token: "your-secret-token-here"
+
+# NEW: Monitoring configuration
+monitoring:
+  enabled: true
+  check_interval: 15m
+  target_url: "https://www.google.com"
+
+# EXISTING: Pushover configuration (moved from env vars)
+pushover:
+  api_token: "..."
+  user_key: "..."
+
+# EXISTING: Instance configuration
+instances:
+  - name: "gateway"
+    port: 18790
+    start_command: "python -m nanobot.gateway"
+    startup_timeout: 30s
+```
+
+### Config Struct Changes
 
 ```go
 // internal/config/config.go
-package config
 
-// InstanceConfig holds configuration for a single nanobot instance
-type InstanceConfig struct {
-    Name           string        `yaml:"name" mapstructure:"name"`
-    Port           uint32        `yaml:"port" mapstructure:"port"`
-    StartupTimeout time.Duration `yaml:"startup_timeout" mapstructure:"startup_timeout"`
-    RepoPath       string        `yaml:"repo_path" mapstructure:"repo_path"`
-}
-
-// Config holds the main application configuration (EXTENDED)
 type Config struct {
-    Cron      string           `yaml:"cron" mapstructure:"cron"`
-    Instances []InstanceConfig `yaml:"instances" mapstructure:"instances"` // NEW
-    Pushover  PushoverConfig   `yaml:"pushover" mapstructure:"pushover"`
+    // REMOVED: Cron string - no longer needed
+
+    // NEW
+    Api        ApiConfig        `yaml:"api" mapstructure:"api"`
+    Monitoring MonitoringConfig `yaml:"monitoring" mapstructure:"monitoring"`
+
+    // EXISTING
+    Instances  []InstanceConfig `yaml:"instances" mapstructure:"instances"`
+    Pushover   PushoverConfig   `yaml:"pushover" mapstructure:"pushover"`
 }
 
-// Validate validates the entire Config (EXTENDED)
-func (c *Config) Validate() error {
-    if err := ValidateCron(c.Cron); err != nil {
-        return err
-    }
-
-    // Validate unique instance names
-    names := make(map[string]bool)
-    ports := make(map[uint32]bool)
-
-    for _, inst := range c.Instances {
-        if names[inst.Name] {
-            return fmt.Errorf("duplicate instance name: %s", inst.Name)
-        }
-        if ports[inst.Port] {
-            return fmt.Errorf("duplicate port %d in instance %s", inst.Port, inst.Name)
-        }
-        names[inst.Name] = true
-        ports[inst.Port] = true
-
-        if err := inst.Validate(); err != nil {
-            return fmt.Errorf("instance %s: %w", inst.Name, err)
-        }
-    }
-
-    return nil
-}
-```
-
-### Pattern 3: Context-Aware Logging Pattern
-
-**What:** Each instance lifecycle operation includes instance name in all log messages for traceability.
-
-**When to use:** When managing multiple concurrent processes in logs.
-
-**Trade-offs:**
-- ✅ Easy to trace which instance an operation belongs to
-- ✅ Simple to implement with logger.With("instance", name)
-- ✅ Helps debugging multi-instance issues
-- ❌ Slightly more verbose logs
-
-**Example:**
-
-```go
-// internal/lifecycle/manager.go (EXTENDED)
-package lifecycle
-
-// InstanceLifecycle wraps Manager with instance-specific context
-type InstanceLifecycle struct {
-    manager *Manager
-    name    string
-    logger  *slog.Logger // Pre-configured with instance name
+type ApiConfig struct {
+    Enabled    bool   `yaml:"enabled" mapstructure:"enabled"`
+    Port       int    `yaml:"port" mapstructure:"port"`
+    BearerToken string `yaml:"bearer_token" mapstructure:"bearer_token"`
 }
 
-func NewInstanceLifecycle(cfg InstanceConfig, logger *slog.Logger) *InstanceLifecycle {
-    instanceLogger := logger.With("instance", cfg.Name)
-
-    managerCfg := Config{
-        Port:           cfg.Port,
-        StartupTimeout: cfg.StartupTimeout,
-    }
-
-    return &InstanceLifecycle{
-        manager: NewManager(managerCfg, instanceLogger),
-        name:    cfg.Name,
-        logger:  instanceLogger,
-    }
+type MonitoringConfig struct {
+    Enabled      bool          `yaml:"enabled" mapstructure:"enabled"`
+    CheckInterval time.Duration `yaml:"check_interval" mapstructure:"check_interval"`
+    TargetURL    string        `yaml:"target_url" mapstructure:"target_url"`
 }
 
-func (il *InstanceLifecycle) StopForUpdate(ctx context.Context) error {
-    il.logger.Info("Stopping instance for update")
-    return il.manager.StopForUpdate(ctx)
-}
-
-func (il *InstanceLifecycle) StartAfterUpdate(ctx context.Context) error {
-    il.logger.Info("Starting instance after update")
-    return il.manager.StartAfterUpdate(ctx)
-}
+// Validate() adds:
+// - ApiConfig: port range validation, token not empty if enabled
+// - MonitoringConfig: interval >= 1 minute, valid URL
 ```
 
 ## Data Flow
 
-### Multi-Instance Update Flow
+### HTTP API Update Trigger Flow
 
 ```
-[Cron Trigger / --update-now]
+[Client Request]
+POST /api/v1/trigger-update
+Authorization: Bearer <token>
     ↓
-[main.go] → [InstanceManager.UpdateAll()]
+[Auth Middleware] → Validate Bearer token
+    ↓ (invalid)
+    → 401 Unauthorized
+    ↓ (valid)
+[Handler] → TryLock(updateMu)
+    ↓ (locked)
+    → 409 Conflict "Update in progress"
+    ↓ (acquired)
+    → InstanceManager.UpdateAll(ctx)
     ↓
-┌─────────────────────────────────────────┐
-│  Phase 1: Stop All Instances            │
-│  ┌──────────────────────────────────┐   │
-│  │ for each instance:               │   │
-│  │   - detector.IsNanobotRunning()  │   │
-│  │   - stopper.StopNanobot()        │   │
-│  │   - collect result               │   │
-│  │   - continue on failure          │   │
-│  └──────────────────────────────────┘   │
-└─────────────────────────────────────────┘
+[InstanceManager]
+    → Stop all instances
+    → UV update
+    → Start all instances
     ↓
-[Check if any instances stopped successfully]
+[Handler] → Unlock(updateMu)
     ↓
-┌─────────────────────────────────────────┐
-│  Phase 2: Update Binary (ONCE)          │
-│  ┌──────────────────────────────────┐   │
-│  │ updater.Update()                 │   │
-│  │   - GitHub main → PyPI fallback  │   │
-│  └──────────────────────────────────┘   │
-└─────────────────────────────────────────┘
-    ↓
-[If update succeeded]
-    ↓
-┌─────────────────────────────────────────┐
-│  Phase 3: Start All Instances           │
-│  ┌──────────────────────────────────┐   │
-│  │ for each instance:               │   │
-│  │   - starter.StartNanobot()       │   │
-│  │   - collect result               │   │
-│  │   - continue on failure          │   │
-│  └──────────────────────────────────┘   │
-└─────────────────────────────────────────┘
-    ↓
-[Aggregate results]
-    ↓
-┌─────────────────────────────────────────┐
-│  Phase 4: Notifications                 │
-│  ┌──────────────────────────────────┐   │
-│  │ if any failures:                 │   │
-│  │   - notifier.NotifyFailures()    │   │
-│  │     with instance names/details  │   │
-│  │ if all success:                  │   │
-│  │   - notifier.NotifySuccess()     │   │
-│  └──────────────────────────────────┘   │
-└─────────────────────────────────────────┘
-    ↓
-[Return UpdateAllResult (JSON for --update-now)]
+[Response] → JSON result (200 or 500)
 ```
 
-### Configuration Loading Flow
+### Monitoring Service Flow
 
 ```
-[config.yaml]
-    ↓
-[viper.ReadInConfig()]
-    ↓
-┌─────────────────────────────────────────┐
-│  instances:                              │
-│    - name: "instance1"                   │
-│      port: 18790                         │
-│      startup_timeout: 30s                │
-│    - name: "instance2"                   │
-│      port: 18791                         │
-│      startup_timeout: 30s                │
-└─────────────────────────────────────────┘
-    ↓
-[config.Load()]
-    ↓
-┌─────────────────────────────────────────┐
-│  Validation:                             │
-│  - Unique names?                        │
-│  - Unique ports?                        │
-│  - Each instance valid?                 │
-└─────────────────────────────────────────┘
-    ↓
-[Config struct with Instances slice]
-    ↓
-[InstanceManager initialization]
-    ↓
-┌─────────────────────────────────────────┐
-│  for each InstanceConfig:               │
-│    - Create InstanceLifecycle           │
-│    - Add to map by name                 │
-└─────────────────────────────────────────┘
+[Monitoring Goroutine]
+    ↓ (every 15 min)
+[ConnectivityChecker.Check()]
+    → HTTP GET https://www.google.com
+    ↓ (timeout 10s)
+[Status Determination]
+    ↓ (success)
+    → Update lastStatus = Connected
+    → If previous was Failed: NotifyRecovery()
+    ↓ (failure)
+    → Update lastStatus = Failed
+    → If previous was Connected:
+        → TryLock(updateMu)
+        → If acquired: triggerUpdate()
+        → NotifyFailure("Connectivity Lost")
 ```
 
-### Key Data Flows
+### Graceful Shutdown Flow
 
-1. **Instance Configuration Flow:** YAML → viper → Config.Instances[] → InstanceManager.instances map (keyed by name)
-2. **Stop-All Flow:** InstanceManager.StopAll() → sequential stop attempts → collect InstanceResult[] → continue on errors
-3. **Start-All Flow:** InstanceManager.StartAll() → sequential start attempts → collect InstanceResult[] → continue on errors
-4. **Notification Flow:** InstanceResult[] aggregation → filter failures → NotifyFailures(failedInstances) with instance names
+```
+[SIGINT/SIGTERM Received]
+    ↓
+[Signal Handler]
+    → Call cancel() on root context
+    ↓
+[Concurrent Shutdown]
+    ├─> [HTTP Server]
+    │       → Stop accepting new connections
+    │       → Wait for in-flight requests (5s timeout)
+    │       → Close all connections
+    │
+    ├─> [Monitoring Service]
+    │       → <-ctx.Done()
+    │       → Stop ticker
+    │       → Exit goroutine
+    │
+    └─> [Instance Manager]
+            → (No active coordination needed)
+            → Existing operations complete naturally
+    ↓
+[Main] → All services stopped → Exit
+```
+
+## Goroutine Lifecycle Management
+
+### Pattern: errgroup with Context
+
+**Use `golang.org/x/sync/errgroup`** to coordinate HTTP server and monitoring service:
+
+```go
+// main.go
+func main() {
+    // ... config, logger setup ...
+
+    ctx, cancel := context.WithCancel(context.Background())
+    defer cancel()
+
+    // Signal handler
+    sigChan := make(chan os.Signal, 1)
+    signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+    go func() {
+        <-sigChan
+        logger.Info("Shutdown signal received")
+        cancel()
+    }()
+
+    // Shared resources
+    var updateMu sync.Mutex
+    manager := instance.NewInstanceManager(cfg, logger)
+
+    // Use errgroup for coordination
+    g, ctx := errgroup.WithContext(ctx)
+
+    // Start HTTP API server
+    if cfg.Api.Enabled {
+        apiServer := api.NewServer(cfg.Api, manager, &updateMu, logger)
+        g.Go(func() error {
+            return apiServer.Start(ctx)
+        })
+    }
+
+    // Start monitoring service
+    if cfg.Monitoring.Enabled {
+        monitorSvc := monitor.NewService(cfg.Monitoring, manager, notif, &updateMu, logger)
+        g.Go(func() error {
+            return monitorSvc.Run(ctx)
+        })
+    }
+
+    // Wait for all goroutines
+    if err := g.Wait(); err != nil {
+        logger.Error("Service error", "error", err)
+        os.Exit(1)
+    }
+
+    logger.Info("Application shutdown complete")
+}
+```
+
+**Benefits:**
+- Automatic cancellation: when any goroutine returns error, all others receive cancellation
+- Clean shutdown coordination
+- No goroutine leaks
+
+## Project Structure
+
+```
+nanobot-auto-updater/
+├── cmd/
+│   └── nanobot-auto-updater/
+│       └── main.go              # MODIFIED: Add errgroup coordination
+├── internal/
+│   ├── api/                     # NEW PACKAGE
+│   │   ├── server.go            # HTTP server lifecycle
+│   │   ├── handlers.go          # /api/v1/trigger-update
+│   │   ├── middleware.go        # Bearer token auth
+│   │   └── server_test.go
+│   ├── monitor/                 # NEW PACKAGE
+│   │   ├── service.go           # Monitoring goroutine + ticker
+│   │   ├── checker.go           # HTTP connectivity check
+│   │   ├── state.go             # Connectivity state tracking
+│   │   └── service_test.go
+│   ├── config/
+│   │   └── config.go            # MODIFIED: Add ApiConfig, MonitoringConfig
+│   ├── instance/                # EXISTING - UNCHANGED
+│   │   ├── manager.go
+│   │   ├── lifecycle.go
+│   │   └── errors.go
+│   ├── notifier/                # MODIFIED
+│   │   └── notifier.go          # Add NotifyRecovery() method
+│   ├── updater/                 # EXISTING - UNCHANGED
+│   ├── lifecycle/               # EXISTING - UNCHANGED
+│   └── logging/                 # EXISTING - UNCHANGED
+└── config.yaml                  # MODIFIED: Add api, monitoring sections
+```
+
+## Build Order (Suggested Implementation Phases)
+
+### Phase 1: Configuration Foundation
+**Goal:** Extend config to support new services
+
+**Changes:**
+1. Add `ApiConfig` and `MonitoringConfig` structs to `internal/config/config.go`
+2. Add validation for new config fields
+3. Update `config.yaml` with new sections (disabled by default)
+4. Add config tests for new fields
+
+**Dependencies:** None (standalone)
+
+**Validation:** Unit tests pass, config loads correctly
+
+---
+
+### Phase 2: Monitoring Service Core
+**Goal:** Implement connectivity monitoring without triggering updates
+
+**Changes:**
+1. Create `internal/monitor/` package
+2. Implement `ConnectivityChecker` with HTTP GET to Google
+3. Implement `Service` with ticker-based goroutine
+4. Add state tracking (Connected/Failed transitions)
+5. Add logger integration
+6. Unit tests with mocked HTTP client
+
+**Dependencies:** Phase 1 (config)
+
+**Validation:** Monitoring logs connectivity status every 15 min, no update triggers yet
+
+---
+
+### Phase 3: HTTP API Server
+**Goal:** Implement HTTP API with authentication
+
+**Changes:**
+1. Create `internal/api/` package
+2. Implement `Server` with `net/http.Server`
+3. Implement `/api/v1/trigger-update` handler (stub for now)
+4. Implement Bearer token authentication middleware
+5. Implement `/health` endpoint for health checks
+6. Add graceful shutdown logic
+7. Unit tests for handlers and middleware
+
+**Dependencies:** Phase 1 (config)
+
+**Validation:** HTTP server starts, rejects requests without valid token, returns 200 on health check
+
+---
+
+### Phase 4: Shared Update Lock + Integration
+**Goal:** Connect services to InstanceManager with coordination
+
+**Changes:**
+1. Add `sync.Mutex` update lock in main.go
+2. Wire HTTP API handler to call `InstanceManager.UpdateAll()`
+3. Wire monitoring service to call `InstanceManager.UpdateAll()` on failure
+4. Implement `TryLock()` pattern in both services
+5. Integration tests for concurrent trigger attempts
+
+**Dependencies:** Phase 2, Phase 3
+
+**Validation:**
+- HTTP trigger starts update
+- Monitoring failure triggers update
+- Concurrent triggers handled correctly (409 Conflict)
+
+---
+
+### Phase 5: Notification Enhancements
+**Goal:** Add recovery notifications
+
+**Changes:**
+1. Add `NotifyRecovery()` method to `internal/notifier/notifier.go`
+2. Wire monitoring service to send recovery notification
+3. Add tests for new notification path
+
+**Dependencies:** Phase 2 (monitoring)
+
+**Validation:** Recovery notification sent when connectivity restores after failure
+
+---
+
+### Phase 6: Main Application Coordination
+**Goal:** Wire everything together in main.go
+
+**Changes:**
+1. Import `golang.org/x/sync/errgroup`
+2. Create root context with cancellation
+3. Initialize HTTP server and monitoring service conditionally
+4. Use errgroup to coordinate goroutines
+5. Update signal handler to cancel context
+6. Integration tests
+
+**Dependencies:** Phase 1-5
+
+**Validation:**
+- Both services start and run
+- Graceful shutdown on SIGINT
+- No goroutine leaks
+
+---
+
+### Phase 7: Remove Legacy Cron
+**Goal:** Clean up old scheduler code
+
+**Changes:**
+1. Remove `internal/scheduler/` package (no longer used)
+2. Remove `Cron` field from Config struct
+3. Update main.go to remove scheduler initialization
+4. Update documentation
+
+**Dependencies:** Phase 6 (all new functionality working)
+
+**Validation:** Application runs without cron, only API + monitoring
+
+---
+
+### Phase 8: End-to-End Testing
+**Goal:** Validate entire system
+
+**Tests:**
+1. Start application with both services enabled
+2. Test HTTP trigger via curl with Bearer token
+3. Simulate connectivity failure (mock) → verify update triggered
+4. Simulate connectivity recovery → verify notification sent
+5. Test concurrent triggers → verify lock behavior
+6. Test graceful shutdown → verify no goroutine leaks
+
+**Dependencies:** All phases
+
+**Validation:** All E2E tests pass
+
+## Architectural Patterns
+
+### Pattern 1: Context-Based Cancellation
+
+**What:** Use `context.Context` for all long-running operations and goroutine coordination.
+
+**When:** HTTP server, monitoring ticker, update operations.
+
+**Example:**
+```go
+func (s *Server) Start(ctx context.Context) error {
+    // Start server in goroutine
+    errCh := make(chan error, 1)
+    go func() {
+        if err := s.httpServer.ListenAndServe(); err != http.ErrServerClosed {
+            errCh <- err
+        }
+    }()
+
+    // Wait for cancellation or error
+    select {
+    case <-ctx.Done():
+        // Graceful shutdown
+        shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+        defer cancel()
+        return s.httpServer.Shutdown(shutdownCtx)
+    case err := <-errCh:
+        return err
+    }
+}
+```
+
+**Trade-offs:**
+- ✅ Clean shutdown without dangling goroutines
+- ✅ Propagates cancellation automatically
+- ❌ Requires all code to respect context
+
+---
+
+### Pattern 2: TryLock for Non-Blocking Coordination
+
+**What:** Use `sync.Mutex.TryLock()` to avoid blocking when update is already in progress.
+
+**When:** HTTP handler and monitoring trigger both try to start update.
+
+**Example:**
+```go
+func (h *Handler) TriggerUpdate(w http.ResponseWriter, r *http.Request) {
+    if !h.updateMu.TryLock() {
+        respondJSON(w, http.StatusConflict, map[string]string{
+            "error": "Update already in progress",
+        })
+        return
+    }
+    defer h.updateMu.Unlock()
+
+    // Proceed with update
+    result, err := h.manager.UpdateAll(r.Context())
+    ...
+}
+```
+
+**Trade-offs:**
+- ✅ Non-blocking, immediate feedback
+- ✅ Simple coordination mechanism
+- ❌ Clients must retry if needed
+
+---
+
+### Pattern 3: errgroup for Goroutine Coordination
+
+**What:** Use `golang.org/x/sync/errgroup` to coordinate multiple goroutines with error propagation.
+
+**When:** Main function coordinating HTTP server and monitoring service.
+
+**Example:**
+```go
+g, ctx := errgroup.WithContext(ctx)
+
+// Start HTTP server
+g.Go(func() error {
+    return apiServer.Start(ctx)
+})
+
+// Start monitoring service
+g.Go(func() error {
+    return monitorSvc.Run(ctx)
+})
+
+// Wait for all goroutines
+if err := g.Wait(); err != nil {
+    logger.Error("Service error", "error", err)
+    os.Exit(1)
+}
+```
+
+**Trade-offs:**
+- ✅ Automatic error propagation
+- ✅ Context cancellation to all goroutines
+- ✅ No goroutine leaks
+- ❌ Requires external dependency (x/sync)
+
+---
+
+### Pattern 4: Middleware Chain for Authentication
+
+**What:** Chain middleware functions for authentication and logging.
+
+**When:** HTTP API authentication.
+
+**Example:**
+```go
+func AuthMiddleware(token string, logger *slog.Logger) func(http.Handler) http.Handler {
+    return func(next http.Handler) http.Handler {
+        return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+            authHeader := r.Header.Get("Authorization")
+            if authHeader == "" {
+                respondError(w, http.StatusUnauthorized, "Missing Authorization header")
+                return
+            }
+
+            if !strings.HasPrefix(authHeader, "Bearer ") {
+                respondError(w, http.StatusUnauthorized, "Invalid Authorization header format")
+                return
+            }
+
+            providedToken := strings.TrimPrefix(authHeader, "Bearer ")
+            if providedToken != token {
+                respondError(w, http.StatusUnauthorized, "Invalid token")
+                return
+            }
+
+            next.ServeHTTP(w, r)
+        })
+    }
+}
+
+// Usage
+mux := http.NewServeMux()
+mux.HandleFunc("/api/v1/trigger-update", handlers.TriggerUpdate)
+authenticated := AuthMiddleware(cfg.BearerToken, logger)(mux)
+```
+
+**Trade-offs:**
+- ✅ Separates auth logic from business logic
+- ✅ Reusable across endpoints
+- ❌ Slight complexity increase
+
+## Anti-Patterns to Avoid
+
+### Anti-Pattern 1: Blocking Update Lock
+
+**What people do:** Use `sync.Mutex.Lock()` in HTTP handler, causing long wait times.
+
+**Why it's wrong:** HTTP client times out while waiting for lock, poor UX.
+
+**Do this instead:** Use `TryLock()` and return HTTP 409 Conflict immediately if update in progress.
+
+---
+
+### Anti-Pattern 2: Goroutine Leak from Ticker
+
+**What people do:** Create `time.Ticker` without `Stop()` in goroutine.
+
+**Why it's wrong:** Ticker goroutine continues running after context cancellation, causing memory leak.
+
+**Do this instead:**
+```go
+func (s *Service) Run(ctx context.Context) error {
+    ticker := time.NewTicker(s.interval)
+    defer ticker.Stop()  // ALWAYS defer Stop()
+
+    for {
+        select {
+        case <-ctx.Done():
+            return ctx.Err()
+        case <-ticker.C:
+            s.checkAndAct(ctx)
+        }
+    }
+}
+```
+
+---
+
+### Anti-Pattern 3: Ignoring Context in HTTP Client
+
+**What people do:** Use `http.Get()` without context timeout for connectivity checks.
+
+**Why it's wrong:** Request hangs indefinitely, monitoring service stalls.
+
+**Do this instead:**
+```go
+func (c *Checker) Check(ctx context.Context) ConnectivityStatus {
+    req, err := http.NewRequestWithContext(ctx, "GET", c.targetURL, nil)
+    if err != nil {
+        return Failed
+    }
+
+    resp, err := c.client.Do(req)
+    if err != nil {
+        return Failed
+    }
+    defer resp.Body.Close()
+
+    if resp.StatusCode == 200 {
+        return Connected
+    }
+    return Failed
+}
+```
+
+---
+
+### Anti-Pattern 4: Shared Global State
+
+**What people do:** Use global variables for update lock or last monitoring status.
+
+**Why it's wrong:** Hard to test, makes dependencies implicit, causes race conditions.
+
+**Do this instead:** Pass dependencies explicitly via struct fields or constructor parameters.
+
+```go
+// BAD
+var updateMu sync.Mutex  // Global variable
+
+// GOOD
+type Server struct {
+    updateMu *sync.Mutex  // Explicit dependency
+}
+
+func NewServer(updateMu *sync.Mutex) *Server {
+    return &Server{updateMu: updateMu}
+}
+```
+
+---
+
+### Anti-Pattern 5: HTTP Server Without Graceful Shutdown
+
+**What people do:** Call `httpServer.Close()` immediately on shutdown signal.
+
+**Why it's wrong:** In-flight requests are abruptly terminated, clients receive connection errors.
+
+**Do this instead:** Use `httpServer.Shutdown(ctx)` with timeout:
+```go
+shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+defer cancel()
+if err := s.httpServer.Shutdown(shutdownCtx); err != nil {
+    s.logger.Error("Graceful shutdown failed, forcing close", "error", err)
+    s.httpServer.Close()
+}
+```
+
+## Scaling Considerations
+
+| Scale | Architecture Adjustments |
+|-------|--------------------------|
+| **Single user (current)** | Current architecture is optimal - single process, in-memory lock |
+| **10 concurrent users** | Add rate limiting middleware, queue update requests instead of rejecting with 409 |
+| **100 concurrent users** | Consider external lock service (Redis), separate API and worker processes |
+| **1000+ users** | Not applicable - this is a personal tool, not SaaS |
+
+### Scaling Priorities
+
+1. **First bottleneck:** Concurrent update requests - solve with queue + worker pattern
+2. **Second bottleneck:** Long-running updates blocking new requests - solve with separate worker process
+
+**Note:** These scaling considerations are theoretical. Current design is optimized for single-user personal tool.
 
 ## Integration Points
 
-### Existing Code Integration
+### External Services
 
-| Component | Integration Pattern | Notes |
-|-----------|---------------------|-------|
-| **config** | Direct extension | Add `Instances []InstanceConfig` to existing `Config` struct |
-| **lifecycle.Manager** | Wrapped by InstanceLifecycle | Existing single-instance logic preserved, InstanceLifecycle adds context |
-| **updater.Updater** | Called once by InstanceManager | Update remains global (updates nanobot binary for all instances) |
-| **scheduler** | Update job function modified | Replace direct update call with `instanceManager.UpdateAll()` |
-| **notifier** | Extended with instance methods | Add `NotifyInstanceFailures(results []InstanceResult)` |
-| **main.go** | Initialization changes | Create InstanceManager, pass to scheduler job function |
+| Service | Integration Pattern | Notes |
+|---------|---------------------|-------|
+| Google (monitoring target) | HTTP GET with context timeout | Use `http.Client` with 10s timeout |
+| Pushover (notifications) | Existing `Notifier` abstraction | Add new `NotifyRecovery()` method |
+| UV package manager | Existing `Updater` abstraction | No changes needed |
 
 ### Internal Boundaries
 
 | Boundary | Communication | Notes |
 |----------|---------------|-------|
-| **instance ↔ lifecycle** | Method calls | InstanceManager calls InstanceLifecycle methods |
-| **instance ↔ updater** | Method calls | InstanceManager calls Updater.Update() once |
-| **instance ↔ notifier** | Method calls | InstanceManager calls Notifier with aggregated results |
-| **lifecycle ↔ detector/stopper/starter** | Function calls | InstanceLifecycle delegates to existing functions |
+| HTTP API ↔ InstanceManager | Direct method call | Synchronous, returns `UpdateResult` |
+| Monitoring ↔ InstanceManager | Direct method call | Synchronous, called from ticker goroutine |
+| Monitoring ↔ Notifier | Direct method call | Async notification sending |
+| All components ↔ Logger | Slog logger injection | Pre-injected via constructor |
 
-## Build Order and Dependencies
+## Testing Strategy
 
-### Phase 1: Configuration Extension (NO DEPENDENCIES)
-**Files to modify:**
-- `internal/config/config.go` — Add `InstanceConfig` struct, extend `Config` with `Instances []InstanceConfig`, add validation
-- `internal/config/config_test.go` — Add multi-instance validation tests
+### Unit Tests
+- **Config:** Validate new fields, validation logic
+- **API:** Handler logic with mocked InstanceManager
+- **Monitoring:** Connectivity checker with mocked HTTP client, state transitions
+- **Notifier:** New `NotifyRecovery()` method
 
-**Why first:** No other code depends on this, can be tested independently
+### Integration Tests
+- HTTP server + authentication middleware
+- Monitoring service + ticker + state tracking
+- Update lock coordination between API and monitoring
 
-**Estimated effort:** 1-2 hours (includes tests)
-
-### Phase 2: Lifecycle Extension (DEPENDS ON: Phase 1)
-**Files to modify:**
-- `internal/lifecycle/manager.go` — Add `InstanceLifecycle` wrapper struct, `NewInstanceLifecycle()` constructor
-- `internal/lifecycle/manager_test.go` — Add InstanceLifecycle tests
-
-**Why second:** Needs `InstanceConfig` from Phase 1, wraps existing Manager
-
-**Estimated effort:** 1-2 hours (includes tests)
-
-### Phase 3: Instance Package Creation (DEPENDS ON: Phases 1-2)
-**Files to create:**
-- `internal/instance/types.go` — Define `InstanceResult`, `UpdateAllResult` structs
-- `internal/instance/manager.go` — Implement `InstanceManager` with `StopAllInstances()`, `StartAllInstances()`, `UpdateAll()`
-- `internal/instance/manager_test.go` — Unit tests for InstanceManager
-
-**Why third:** Needs `InstanceLifecycle` from Phase 2 and config from Phase 1
-
-**Estimated effort:** 3-4 hours (includes tests and result aggregation logic)
-
-### Phase 4: Notifier Extension (DEPENDS ON: Phase 3)
-**Files to modify:**
-- `internal/notifier/notifier.go` — Add `NotifyInstanceFailures(results []InstanceResult)` method
-
-**Why fourth:** Needs `InstanceResult` type from Phase 3
-
-**Estimated effort:** 30 minutes - 1 hour
-
-### Phase 5: Main Integration (DEPENDS ON: Phases 1-4)
-**Files to modify:**
-- `cmd/nanobot-auto-updater/main.go` — Initialize InstanceManager, modify update job function, modify --update-now logic
-
-**Why last:** Integrates all components, end-to-end testing
-
-**Estimated effort:** 2-3 hours (includes integration testing)
-
-### Total Estimated Effort
-**7.5 - 12 hours** across all phases
-
-## Anti-Patterns
-
-### Anti-Pattern 1: Parallel Instance Operations (Premature Optimization)
-
-**What people do:** Use goroutines + sync.WaitGroup to stop/start instances in parallel
-
-**Why it's wrong:**
-- Adds unnecessary complexity for managing 2-3 instances
-- Windows process management is not CPU-bound
-- Error handling becomes more complex with concurrent operations
-- Logging becomes harder to trace without careful coordination
-
-**Do this instead:** Sequential loop with continue-on-error. Simple, easy to debug, fast enough for small N instances.
-
-**Code to avoid:**
-```go
-// DON'T DO THIS - Premature parallelization
-var wg sync.WaitGroup
-var mu sync.Mutex
-results := []InstanceResult{}
-
-for name, lc := range m.instances {
-    wg.Add(1)
-    go func(name string, lc *lifecycle.InstanceLifecycle) {
-        defer wg.Done()
-        err := lc.StopForUpdate(ctx)
-        mu.Lock()
-        results = append(results, InstanceResult{Name: name, Error: err})
-        mu.Unlock()
-    }(name, lc)
-}
-wg.Wait()
-```
-
-**Do this instead:**
-```go
-// DO THIS - Simple sequential processing
-var results []InstanceResult
-for name, lc := range m.instances {
-    if err := lc.StopForUpdate(ctx); err != nil {
-        m.logger.Error("Failed to stop instance", "name", name, "error", err)
-        results = append(results, InstanceResult{Name: name, Error: err})
-        // Continue with next instance
-    }
-}
-```
-
-### Anti-Pattern 2: Global Instance Registry
-
-**What people do:** Create a global map/slice of instances accessible from anywhere
-
-**Why it's wrong:**
-- Makes testing difficult (global state)
-- Unclear ownership (who modifies the registry?)
-- Hard to reason about lifecycle (when is registry populated?)
-- Violates dependency injection principles
-
-**Do this instead:** Pass InstanceManager explicitly through constructor/function parameters
-
-### Anti-Pattern 3: Per-Instance Updater Instances
-
-**What people do:** Create a separate `updater.Updater` instance for each nanobot instance
-
-**Why it's wrong:**
-- UV updates the global nanobot binary (not instance-specific)
-- Multiple updater instances would duplicate work
-- No benefit since update is not instance-specific
-
-**Do this instead:** Single `updater.Updater` instance, called once by InstanceManager before starting instances
-
-### Anti-Pattern 4: Port-Based Instance Identification
-
-**What people do:** Use port number as instance identifier in logs/errors
-
-**Why it's wrong:**
-- Users configure instance by name, not port
-- Ports are implementation details, not user-facing identifiers
-- Hard to understand errors like "Failed to stop instance on port 18790"
-
-**Do this instead:** Always use instance name for identification, include port only in debug logs
-
-## Scaling Considerations
-
-| Concern | 2-3 Instances | 10+ Instances | 50+ Instances |
-|---------|---------------|---------------|---------------|
-| **Stop/Start time** | Sequential is fine (< 10 seconds) | Sequential still OK (< 30 seconds) | Consider parallelization with worker pool |
-| **Error aggregation** | Simple slice | Group by error type for readability | Consider error summarization (failed: 5/50) |
-| **Notification noise** | Send all failures | Group failures in single notification | Only notify on critical failures, log rest |
-| **Log volume** | Manageable | Consider log sampling | Centralized logging with filtering |
-
-### When to Parallelize
-
-**Threshold:** Consider parallel stop/start when:
-1. Managing 10+ instances
-2. Total sequential time exceeds 30 seconds
-3. User feedback indicates slowness
-
-**How to parallelize safely:**
-```go
-// Worker pool pattern for N > 10 instances
-func (m *InstanceManager) StopAllInstancesParallel(ctx context.Context, maxWorkers int) []InstanceResult {
-    jobs := make(chan string, len(m.instances))
-    results := make(chan InstanceResult, len(m.instances))
-
-    // Start workers
-    var wg sync.WaitGroup
-    for i := 0; i < maxWorkers; i++ {
-        wg.Add(1)
-        go func() {
-            defer wg.Done()
-            for name := range jobs {
-                err := m.instances[name].StopForUpdate(ctx)
-                results <- InstanceResult{Name: name, Error: err}
-            }
-        }()
-    }
-
-    // Send jobs
-    for name := range m.instances {
-        jobs <- name
-    }
-    close(jobs)
-
-    // Wait and collect results
-    go func() {
-        wg.Wait()
-        close(results)
-    }()
-
-    var allResults []InstanceResult
-    for result := range results {
-        allResults = append(allResults, result)
-    }
-
-    return allResults
-}
-```
+### End-to-End Tests
+- Start full application with both services
+- Trigger update via API → verify update runs
+- Simulate connectivity failure → verify update triggered
+- Test graceful shutdown → verify no goroutine leaks
 
 ## Sources
 
-- [Reddit: Process Monitoring/Control Design Patterns in Go](https://www.reddit.com/r/golang/comments/mk7zfm/which_design_pattern_for_process_monitoringcontrol/) — Community discussion on process lifecycle management
-- [Medium: Goroutine Management Strategies and Patterns](https://dsysd-dev.medium.com/mastering-goroutine-management-in-go-strategies-and-patterns-20645b113851) — Comprehensive guide on goroutine lifecycle patterns
-- [Level Up: Context-Based Goroutine Management](https://levelup.gitconnected.com/how-to-use-context-to-manage-your-goroutines-like-a-boss-ef1e478919e6) — Using context.Context for lifecycle control
-- [Suture: Supervisor Trees for Go](https://www.jerf.org/iri/post/2930/) — Erlang-style supervisor tree implementation in Go (reference for pattern, but overkill for this use case)
-- [Go Design Patterns GitHub Repository](https://github.com/tmrts/go-patterns) — Curated collection of idiomatic Go patterns
-- [Dependency Lifecycle Management in Go](https://www.jacoelho.com/blog/2025/05/dependency-lifecycle-management-in-go/) — Patterns for managing component initialization and startup ordering
-- [GitHub Issue: Windows Job Objects for Process Groups](https://github.com/golang/go/issues/17608) — Discussion on Windows process group management (not needed for this use case)
-- [GitHub Gist: Managing Child Processes on Windows](https://gist.github.com/hallazzang/76f3970bfc949831808bbebc8ca15209) — Practical examples of Windows process lifecycle management
+### Official Documentation
+- [Go net/http package](https://pkg.go.dev/net/http) - Server.Shutdown() for graceful shutdown
+- [Go sync package](https://pkg.go.dev/sync) - Mutex.TryLock() for non-blocking coordination
+- [golang.org/x/sync/errgroup](https://pkg.go.dev/golang.org/x/sync/errgroup) - Goroutine coordination
+
+### Architecture Patterns
+- [How to Use Graceful Shutdown in a Go Cloud Run Service with Context Cancellation](https://oneuptime.com/blog/post/2026-02-17-how-to-implement-graceful-shutdown-in-a-go-cloud-run-service-with-context-cancellation/view) - Context-based shutdown pattern (HIGH confidence)
+- [Go Channel Patterns: A Complete Guide](https://oneuptime.com/blog/post/2026-01-23-go-channel-patterns/view) - Ticker and context usage (HIGH confidence)
+- [How to Use errgroup for Parallel Operations in Go](https://oneuptime.com/blog/post/2026-01-07-go-errgroup/view) - errgroup coordination pattern (HIGH confidence)
+- [How to Implement Middleware in Go Web Applications](https://oneuptime.com/blog/post/2026-01-26-go-middleware/view) - Authentication middleware pattern (HIGH confidence)
+- [How to Implement Background Job Processing in Go](https://oneuptime.com/blog/post/2026-01-30-go-background-job-processing/view) - Worker coordination (HIGH confidence)
+
+### Community Resources
+- [Golang Ticker Best Practices](https://www.reddit.com/r/golang/comments/hpw4q9/golang_ticker_best_practices_using_tickers_in_a/) - Ticker cleanup patterns (MEDIUM confidence)
+- [Standards for user authentication for REST APIs?](https://www.reddit.com/r/golang/comments/axou3k/standards_for_user_authentication_for_rest_apis/) - Bearer token usage (MEDIUM confidence)
 
 ---
-*Architecture research for: Multi-instance nanobot management integration*
-*Researched: 2026-03-09*
+*Architecture research for: HTTP API + Monitoring Service Integration*
+*Researched: 2026-03-16*

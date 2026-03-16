@@ -1,398 +1,693 @@
 # Pitfalls Research
 
-**Domain:** Multi-instance nanobot process management for existing auto-updater
-**Researched:** 2026-03-09 (Updated for v0.2 Multi-Instance Support)
-**Confidence:** MEDIUM (WebSearch-based, verified across multiple sources)
-
----
+**Domain:** Adding HTTP API service and monitoring to existing Go application
+**Researched:** 2026-03-16
+**Confidence:** HIGH
 
 ## Executive Summary
 
-本文档记录了为现有单实例自动更新器添加多实例支持时的常见陷阱。v0.2 里程碑的核心挑战在于:从管理单个 nanobot 进程扩展到同时管理多个实例,同时保持系统的可靠性和可维护性。
+本文档记录了为现有 nanobot-auto-updater 添加 HTTP API 服务和监控功能时的常见陷阱。v0.3 里程碑的核心挑战在于:从定时更新工具转变为监控服务 + HTTP API 触发更新模式,同时保持与现有实例管理系统的集成。
 
 **关键发现:**
-- 多进程管理的竞态条件是最高危陷阱,可能导致资源冲突和启动失败
-- 错误聚合和通知去重是用户体验的关键,处理不当会导致 alert fatigue
-- 配置复杂度需严格控制,过度设计会导致维护困难
-- 进程标识和日志关联是调试的基础,必须在 Phase 1 就正确实现
+- Goroutine 泄漏是最高危陷阱,监控 ticker 和 HTTP 服务器都需要严格的清理机制
+- 并发更新触发会导致资源冲突和状态不一致,必须在 API 层面实现互斥控制
+- 优雅停机实现不当会导致操作中断和数据不一致,需要分阶段停机策略
+- HTTP 客户端超时配置不当会导致资源耗尽和重试风暴
+- Bearer token 认证的安全细节容易被忽视,需要使用常量时间比较和完整验证
 
 ---
 
-## Critical Pitfalls (v0.2 Multi-Instance Specific)
+## Critical Pitfalls
 
-### Pitfall M1: Race Conditions During Stop/Start Sequences
-
-**What goes wrong:**
-当停止多个进程时,如果采用并行停止但未正确等待所有进程完全退出,可能导致:
-- 旧进程仍占用端口/资源时新进程启动失败
-- 进程状态不一致(部分停止,部分运行)
-- 更新过程中文件被锁定导致升级失败
-
-**Why it happens:**
-开发者倾向于使用并行操作提高效率,但低估了进程完全退出所需的时间。Windows 进程可能需要额外时间清理资源,特别是在处理信号时。
-
-**How to avoid:**
-1. 实现严格的串行停止→等待→更新→串行启动流程
-2. 每个进程停止后添加明确的等待确认(检查进程是否真正退出)
-3. 使用带超时的等待机制(例如:等待最多 10 秒,超时后强制终止)
-4. 在启动新进程前验证资源已释放(端口、文件锁等)
-
-**Warning signs:**
-- 日志中出现"地址已被占用"或"文件被锁定"错误
-- 间歇性的进程启动失败(时好时坏)
-- 更新后部分实例运行的是旧版本
-
-**Phase to address:**
-Phase 1 (Multi-Instance Process Management) - 核心进程管理逻辑实现阶段
-
-**Sources:**
-- [Golang Concurrency Mistakes](https://medium.com/@puneetpm/5-golang-concurrency-mistakes-that-are-silently-killing-your-performance-updated-for-go-1-25-5f54d88e71be) (MEDIUM)
-- [Race Condition Scenarios](https://stackoverflow.com/questions/78934496/different-behaviors-in-go-race-condition-scenarios) (MEDIUM)
-
----
-
-### Pitfall M2: Resource Leaks from Failed Process Handles
+### Pitfall 1: Goroutine Leaks from Monitoring Ticker
 
 **What goes wrong:**
-当进程启动失败或异常退出时,如果未正确清理:
-- 进程句柄未释放导致内存泄漏
-- 僵尸进程累积占用系统资源
-- 长期运行后导致系统资源耗尽
+监控 goroutine 使用 `time.NewTicker()` 启动但从未调用 `ticker.Stop()`。Ticker 永远触发,goroutine 永不退出,无限期消耗内存和 CPU。随着时间推移,goroutine 数量增长,最终导致 OOM 或性能下降。
 
 **Why it happens:**
-错误处理路径常被忽视。开发者专注于"快乐路径"(happy path),忘记在失败场景中释放资源。特别是在 Go 中,`os/exec` 进程对象需要显式管理。
+开发者记得使用 `defer` 关闭文件和 HTTP body,但忘记 ticker 也需要清理。`for range ticker.C` 模式看起来简单正确,但如果没有关闭机制,它会永远阻塞。
 
 **How to avoid:**
-1. 使用 defer 确保进程句柄始终被清理
-2. 实现进程健康检查机制,定期清理僵尸进程
-3. 为每个进程维护生命周期状态机(running/stopped/failed)
-4. 使用 context.Context 管理进程超时和取消
-
-**Warning signs:**
-- 系统运行一段时间后内存持续增长
-- 任务管理器中发现多个已"停止"的 nanobot 进程
-- 长期运行后新进程启动变慢或失败
-
-**Phase to address:**
-Phase 1 (Multi-Instance Process Management) - 进程生命周期管理
-
-**Sources:**
-- [Multiprocessing Memory Leak](https://stackoverflow.com/questions/55092139/gracefully-terminate-a-process-on-windows) (MEDIUM)
-- [Zombie/Orphan Processes on Windows](https://github.com/mem0ai/mem0/issues/15423) (MEDIUM)
-
----
-
-### Pitfall M3: Configuration Schema Over-Engineering
-
-**What goes wrong:**
-设计过于复杂的实例配置结构:
-- 嵌套层次过深导致难以理解和维护
-- 过多的可选参数导致验证逻辑复杂
-- 配置文件变更时向后兼容性差
-
-**Why it happens:**
-试图一次性解决所有可能的未来需求,而非聚焦当前需求。多实例配置容易引入不必要的抽象和层次。
-
-**How to avoid:**
-1. 保持配置结构扁平化 - 实例列表包含必要的启动参数即可
-2. 只添加当前里程碑所需字段,避免过度设计
-3. 配置验证应简单明确:必填项检查 + 类型检查 + 基本逻辑验证
-4. 为配置变更设计明确的迁移路径
-
-**Example minimal config structure:**
-```yaml
-instances:
-  - name: "bot-1"           # 唯一标识符
-    command: "nanobot run"  # 启动命令
-    workdir: "./bot1"       # 工作目录
-  - name: "bot-2"
-    command: "nanobot run --port 8081"
-    workdir: "./bot2"
-```
-
-**Warning signs:**
-- 单个配置项需要 3 层以上嵌套
-- 配置验证代码比业务逻辑还长
-- 用户需要文档才能理解配置结构
-
-**Phase to address:**
-Phase 1 (Multi-Instance Process Management) - 配置解析和验证
-
-**Sources:**
-- [YAML Configuration Mistakes](https://comate.baidu.com/zh/page/xe9q3bn4gmz) (LOW)
-- [Go Config Silent Bug](https://buildsoftwaresystems.com/post/go-config-yaml-safer-mapstructure-fix/) (MEDIUM)
-
----
-
-### Pitfall M4: Silent Failures and Incomplete Error Aggregation
-
-**What goes wrong:**
-在多实例场景中,当部分实例启动失败时:
-- 只报告第一个错误,丢失其他实例的失败信息
-- 错误被吞掉,用户不知道哪些实例失败
-- 日志中有错误但未触发通知
-
-**Why it happens:**
-单实例思维模式的延续 - 遇到错误立即返回。在多实例场景中,应该收集所有错误后再报告,而不是遇到第一个失败就停止。
-
-**How to avoid:**
-1. 实现错误聚合模式 - 收集所有实例的错误,而非遇到第一个失败就返回
-2. 结构化错误报告 - 区分"哪些成功,哪些失败,失败原因是什么"
-3. 日志和通知分离 - 日志记录所有详细信息,通知只发送摘要
-4. 失败实例列表明确包含实例名称和具体错误
-
-**Example error aggregation pattern:**
 ```go
-type UpdateResult struct {
-    Successful []string     // 成功的实例名称
-    Failed     []InstanceError // 失败实例及错误
+// 错误 - Goroutine 泄漏
+func startMonitoring() {
+    ticker := time.NewTicker(15 * time.Minute)
+    go func() {
+        for range ticker.C {
+            checkGoogleConnectivity()
+        }
+    }()
 }
 
-type InstanceError struct {
-    InstanceName string
-    Error       error
+// 正确 - 使用 context 进行清理
+func startMonitoring(ctx context.Context) {
+    ticker := time.NewTicker(15 * time.Minute)
+    go func() {
+        defer ticker.Stop() // 始终清理 ticker
+        for {
+            select {
+            case <-ticker.C:
+                checkGoogleConnectivity()
+            case <-ctx.Done():
+                log.Info("Monitoring goroutine shutting down")
+                return
+            }
+        }
+    }()
 }
 ```
 
 **Warning signs:**
-- 日志显示多个错误但通知只提到一个
-- 用户无法定位具体哪个实例失败
-- 重试时反复失败但不清楚失败范围
+- `runtime.NumGoroutine()` 随时间持续增长
+- 即使在空闲期间内存使用也缓慢增加
+- pprof 显示 goroutine 卡在 `time.Sleep` 或 channel 操作
+- 运行数天/数周后,应用程序变得迟缓
 
 **Phase to address:**
-Phase 2 (Error Handling and Notifications) - 错误收集和报告
+**Phase 2 (Monitoring Service Implementation)** - 实现监控服务时,确保每个 ticker 都有 `defer ticker.Stop()`,每个监控 goroutine 都尊重 context 取消。
 
 **Sources:**
-- [Silent Failures Detection](https://www.stacksync.com/blog/detect-silent-failures-mulesoft) (MEDIUM)
-- [AggregateException Pattern](https://www.reddit.com/r/dotnet/comments/17huhdh/what_is_your_preferred_way_of_returning_multiple/) (LOW)
+- [How to Avoid Common Goroutine Leaks in Go](https://oneuptime.com/blog/post/2026-01-07-go-goroutine-leaks/view) - HIGH confidence, 全面模式
+- [Go Goroutines: 7 Critical Pitfalls](https://medium.com/@harshithgowdakt/go-goroutines-7-critical-pitfalls-every-developer-must-avoid-with-real-world-solutions-a436ac0fb4bb) - MEDIUM confidence
 
 ---
 
-### Pitfall M5: Notification Spam from Multiple Instance Failures
+### Pitfall 2: Concurrent Update Triggers via HTTP API
 
 **What goes wrong:**
-当更新导致多个实例失败时:
-- 每个实例失败都发送一条通知,造成通知风暴
-- 用户收到大量重复或相似的通知,导致 alert fatigue
-- 重要信息淹没在噪音中
+多个 HTTP API 请求同时到达 `/api/v1/trigger-update`。每个都触发完整的更新流程。这会导致:
+1. 资源竞争(多个 `uv` 进程同时运行)
+2. 启动 nanobot 实例时端口冲突
+3. 实例状态跟踪中的竞态条件
+4. 相同失败重复发送 Pushover 通知
+5. 在冗余操作上浪费 CPU/带宽
 
 **Why it happens:**
-简单的"失败就通知"逻辑在单实例场景合理,但在多实例场景中,批量操作可能导致大量同时失败,触发大量通知。
-
-**How to avoid:**
-1. 实现通知去重和聚合 - 同一批次操作的失败合并为一条通知
-2. 添加速率限制 - 限制单位时间内的通知数量
-3. 智能分组 - 按失败类型或时间窗口分组通知
-4. 通知分级 - 单实例失败 vs 批量失败使用不同通知策略
-
-**Example notification strategy:**
-```
-# 聚合通知示例
-Update completed: 3/5 instances successful
-Failed instances:
-- bot-2: Port 8081 already in use
-- bot-5: Working directory not found
-```
-
-**Warning signs:**
-- 用户开始忽略 Pushover 通知
-- 短时间内收到 5+ 条相似通知
-- 用户关闭通知功能以避免干扰
-
-**Phase to address:**
-Phase 2 (Error Handling and Notifications) - 通知策略
-
-**Sources:**
-- [Alert Fatigue Prevention](https://oneuptime.com/blog/post/2026-01-30-alert-fatigue-prevention/view) (MEDIUM)
-- [Prometheus Alertmanager Patterns](https://last9.io/blog/prometheus-alertmanager/) (MEDIUM)
-
----
-
-### Pitfall M6: Process Identification Confusion
-
-**What goes wrong:**
-当实例失败时无法准确识别:
-- 错误日志中只有"实例启动失败",未指明是哪个实例
-- 多个实例使用相同配置导致无法区分
-- 进程名称相同,任务管理器中难以区分
-
-**Why it happens:**
-日志和错误消息设计时未考虑多实例场景。默认的日志格式缺少实例标识符。
-
-**How to avoid:**
-1. 每个实例必须有唯一标识符(名称或 ID)
-2. 所有日志和错误消息包含实例标识符
-3. 考虑在进程名称中包含实例标识(如果 nanobot 支持)
-4. 维护实例 ID → 配置的映射,便于故障排查
-
-**Example structured logging:**
-```go
-log.WithFields(log.Fields{
-    "instance": instanceName,
-    "phase": "startup",
-}).Info("Starting nanobot process")
-```
-
-**Warning signs:**
-- 用户报告"nanobot 启动失败",但无法指明哪个
-- 日志中有多条错误但无法关联到具体实例
-- 需要查看配置文件才能理解错误上下文
-
-**Phase to address:**
-Phase 1 (Multi-Instance Process Management) - 日志和错误消息设计
-
-**Sources:**
-- [Process Instance Monitoring](https://docs.oracle.com/cd/E13214_01/wli/docs81/manage/processmonitoring.html) (LOW)
-- [Process Identification Patterns](https://docs.celonis.com/en/monitoring-running-process-instances.html) (LOW)
-
----
-
-## Critical Pitfalls (v0.1 - Still Relevant)
-
-以下陷阱来自 v0.1,在多实例场景中仍然适用,需要特别注意。
-
-### Pitfall 1: Cannot Replace Running Binary on Windows
-
-**What goes wrong:**
-尝试替换正在运行的可执行文件导致"Access Denied"错误。Windows 锁定正在运行的可执行文件。
-
-**How to avoid:**
-1. 下载新二进制到临时位置
-2. 移动/重命名旧二进制到备份位置(即使被锁定也可行)
-3. 移动新二进制到目标位置
-4. 下次启动时清理旧的备份文件
-
-**Phase to address:**
-Phase 1 (Core Update Logic)
-
-**Multi-instance consideration:** 所有实例停止后才能执行二进制替换
-
----
-
-### Pitfall 2: Service Control Manager (SCM) Recovery Actions Don't Work as Expected
-
-**What goes wrong:**
-Windows 服务恢复设置(失败时重启)不如预期工作,或导致系统挂起。
-
-**How to avoid:**
-1. 设置适当的 `WaitHint` 和 `CheckPoint` 值
-2. 永远不要将重置周期设置为 0
-3. 实现应用级健康检查而非仅依赖 SCM 恢复
-
-**Phase to address:**
-Phase 1 (Core Service Setup)
-
-**Multi-instance consideration:** 服务级恢复与实例级恢复需分离设计
-
----
-
-### Pitfall 3: Cron Scheduler Job Overlap and Pile-up
-
-**What goes wrong:**
-当定时任务执行时间超过间隔时,多个实例堆积并依次运行,导致资源耗尽。
-
-**How to avoid:**
-1. 实现互斥锁或标志防止并发任务执行
-2. 使用 `SkipIfStillRunning` 选项(如果调度器支持)
-3. 设计任务为幂等和自我限制
-
-**Phase to address:**
-Phase 1 (Scheduling Logic)
-
-**Multi-instance consideration:** 多实例管理操作本身可能耗时,需防止重叠
-
----
-
-### Pitfall 4: Command Prompt Window Flashes on Background Execution
-
-**What goes wrong:**
-即使作为后台服务运行,生成子进程(如 `uv` 命令)时仍会短暂显示命令提示符窗口。
+HTTP API 天生是并发的。没有显式同步,每个请求都生成自己的 goroutine。开发者经常忘记"罕见"的并发事件在规模上或重试风暴期间会变得常见。
 
 **How to avoid:**
 ```go
-cmd := exec.Command("uv", "pip", "install", "nanobot")
-cmd.SysProcAttr = &syscall.SysProcAttr{
-    HideWindow: true,
-    CreationFlags: syscall.CREATE_NO_WINDOW,
+type UpdateService struct {
+    mu               sync.Mutex
+    updateInProgress bool
+}
+
+func (s *UpdateService) TriggerUpdate(w http.ResponseWriter, r *http.Request) {
+    // 原子检查和设置
+    s.mu.Lock()
+    if s.updateInProgress {
+        s.mu.Unlock()
+        http.Error(w, "Update already in progress", http.StatusConflict)
+        return
+    }
+    s.updateInProgress = true
+    s.mu.Unlock()
+
+    // 确保完成时清除标志
+    defer func() {
+        s.mu.Lock()
+        s.updateInProgress = false
+        s.mu.Unlock()
+    }()
+
+    // 执行更新
+    if err := s.performUpdate(r.Context()); err != nil {
+        http.Error(w, err.Error(), http.StatusInternalServerError)
+        return
+    }
+
+    w.WriteHeader(http.StatusOK)
+    json.NewEncoder(w).Encode(map[string]string{"status": "update completed"})
 }
 ```
 
-**Phase to address:**
-Phase 1 (Core Update Logic)
+**更好的方法 - 带任务队列的单个 worker:**
+```go
+type UpdateService struct {
+    updateCh chan struct{}
+}
 
-**Multi-instance consideration:** 所有子进程(包括多个 nanobot 实例)都需隐藏窗口
+func NewUpdateService() *UpdateService {
+    s := &UpdateService{
+        updateCh: make(chan struct{}, 1), // 缓冲 - 只有 1 个待处理
+    }
+    go s.worker()
+    return s
+}
+
+func (s *UpdateService) worker() {
+    for range s.updateCh {
+        s.performUpdate(context.Background())
+    }
+}
+
+func (s *UpdateService) TriggerUpdate(w http.ResponseWriter, r *http.Request) {
+    select {
+    case s.updateCh <- struct{}{}:
+        w.WriteHeader(http.StatusAccepted)
+        json.NewEncoder(w).Encode(map[string]string{"status": "update triggered"})
+    default:
+        http.Error(w, "Update already queued", http.StatusConflict)
+    }
+}
+```
+
+**Warning signs:**
+- 同时收到多个相同的失败通知
+- 日志显示来自不同请求的交错更新操作
+- `uv` 进程报告锁定文件或目录错误
+- Nanobot 实例启动失败,提示"端口已被占用"
+
+**Phase to address:**
+**Phase 3 (HTTP API Implementation)** - 实现 trigger endpoint 时,在任何测试之前添加 mutex 或 worker 模式。这从一开始就防止竞态条件。
+
+**Sources:**
+- [How to Prevent Duplicate API Requests with Deduplication](https://oneuptime.com/blog/post/2026-01-25-prevent-duplicate-api-requests-deduplication-go/view) - MEDIUM confidence
 
 ---
 
-### Pitfall 5: Log Rotation Breaks Logging Mid-Flight
+### Pitfall 3: HTTP Client Timeout Causing Retry Storms
 
 **What goes wrong:**
-当日志文件轮转时,部分日志条目丢失,或 logger 继续写入旧的(已轮转的)文件句柄。
+监控服务检查 Google 连通性时没有超时或超时很长。当网络挂起时:
+1. 监控 goroutine 无限期阻塞
+2. 多次检查尝试堆积
+3. 网络恢复时,所有阻塞的请求同时完成
+4. 产生流量峰值,可能触发速率限制
+5. 对于更新:没有指数退避的重试会导致级联故障
 
-**How to avoid:**
-1. 使用轮转感知的日志库(lumberjack,或 zap with lumberjack sink)
-2. 配置适当的轮转阈值
-3. 在负载下测试轮转
-
-**Phase to address:**
-Phase 1 (Logging Setup)
-
-**Multi-instance consideration:** 多实例日志量大,轮转频率可能更高
-
----
-
-### Pitfall 6: Configuration Zero-Value Bugs (Silent Failures)
-
-**What goes wrong:**
-配置解析静默接受无效值并使用 Go 的零值,导致难以调试的意外行为。
-
-**How to avoid:**
-1. 使用 `mapstructure` 的严格解析
-2. 解析后实现显式验证
-3. 添加"debug config"命令转储解析后的配置
-
-**Phase to address:**
-Phase 1 (Configuration)
-
-**Multi-instance consideration:** 实例列表为空、实例名称重复等需要验证
-
----
-
-### Pitfall 7: HTTP Client Default Timeout is None
-
-**What goes wrong:**
-HTTP 请求在服务器无响应时无限期挂起,阻塞更新过程。
+**Why it happens:**
+默认 `http.Client` 没有超时。开发者忘记配置超时,或设置得太长,认为"更多时间 = 更高可靠性"。但长超时会在中断期间导致资源积累。
 
 **How to avoid:**
 ```go
-client := &http.Client{
-    Timeout: 30 * time.Second,
+// 配置合理的超时
+var httpClient = &http.Client{
+    Timeout: 10 * time.Second, // 总请求超时
     Transport: &http.Transport{
-        ResponseHeaderTimeout: 10 * time.Second,
+        DialContext: (&net.Dialer{
+            Timeout:   5 * time.Second, // 连接建立
+        }).DialContext,
+        TLSHandshakeTimeout:   5 * time.Second,
+        ResponseHeaderTimeout: 5 * time.Second,
     },
 }
+
+// 对于重试,使用带 jitter 的指数退避
+func checkWithRetry(ctx context.Context) error {
+    maxAttempts := 3
+    baseDelay := 1 * time.Second
+
+    for attempt := 0; attempt < maxAttempts; attempt++ {
+        if attempt > 0 {
+            // 带 jitter 的指数退避
+            delay := baseDelay * time.Duration(1<<uint(attempt-1))
+            jitter := time.Duration(rand.Int63n(int64(delay / 2)))
+            time.Sleep(delay + jitter)
+        }
+
+        err := checkGoogleConnectivity(ctx)
+        if err == nil {
+            return nil
+        }
+
+        // context 取消时不重试
+        if ctx.Err() != nil {
+            return ctx.Err()
+        }
+    }
+
+    return errors.New("max retry attempts exceeded")
+}
 ```
 
-**Phase to address:**
-Phase 1 (Network Operations)
+**Warning signs:**
+- 监控 goroutines 卡在 HTTP 请求中数分钟
+- 网络中断期间内存激增
+- 网络恢复后,巨大的 CPU 峰值
+- 外部服务报告来自你的应用程序的速率限制
+- 记录了重试尝试,但它们之间没有退避延迟
 
-**Multi-instance consideration:** 多实例场景下网络操作更多,超时影响更大
+**Phase to address:**
+**Phase 2 (Monitoring Service Implementation)** - 在所有 HTTP 客户端上设置显式超时。如果实现重试,立即添加指数退避。
+
+**Sources:**
+- [Timeout Budgets & Retries in Go: How Retry Storms Happen](https://levelup.gitconnected.com/timeout-budgets-retries-in-go-how-retry-storms-happen-stop-them-a6269958647d) - HIGH confidence
+- [Mastering Network Timeouts and Retries in Go](https://dev.to/jones_charles_ad50858ddb0/mastering-network-timeouts-and-retries-in-go) - MEDIUM confidence
 
 ---
 
-## Technical Debt Patterns
+### Pitfall 4: Graceful Shutdown Abandoning In-Flight Operations
 
-| Shortcut | Immediate Benefit | Long-term Cost | When Acceptable |
-|----------|-------------------|----------------|-----------------|
-| 并行停止所有实例 | 更快的停止速度 | 竞态条件,资源冲突 | Never - 始终串行化 |
-| 只报告第一个错误 | 简化错误处理 | 丢失重要失败信息 | Never - 必须聚合 |
-| 跳过进程退出确认 | 简化代码 | 僵尸进程,资源泄漏 | Never - 必须等待确认 |
-| 每个失败独立通知 | 实现简单 | 通知风暴,alert fatigue | MVP 阶段可接受,但需尽快重构 |
-| 不验证配置唯一性 | 简化验证逻辑 | 运行时混淆,难以调试 | Never - 配置加载时验证 |
-| 假设进程总是能优雅退出 | 简化清理逻辑 | 挂起进程,超时等待 | Never - 必须处理强制终止场景 |
-| Skip verification after update download | Faster development | Corrupted updates cause mysterious failures | Never - always verify checksums/signatures |
-| Use global singletons for scheduler/logger | Less parameter passing | Hard to test, hard to reset between tests | Never in production code |
-| Ignore `uv` exit codes | Simpler error handling | Silent update failures, stale versions | Never |
+**What goes wrong:**
+当服务收到 SIGTERM/SIGINT 时:
+1. HTTP 服务器调用 `Shutdown()` 并设置 30 秒超时
+2. Shutdown 完成但返回"context deadline exceeded"
+3. 处理中的请求被中途放弃
+4. 更新操作中断,系统处于不一致状态
+5. 监控 goroutines 被杀死而未清理
+
+**Why it happens:**
+大多数示例展示 `srv.Shutdown(ctx)` 但没有解释超时到期时会发生什么:**处理中的请求被强制终止**。部分写入、未提交事务、半更新文件随之产生。"优雅"关闭变得突然。
+
+**How to avoid:**
+```go
+func (s *Service) Shutdown(timeout time.Duration) error {
+    // 创建关闭 context
+    ctx, cancel := context.WithTimeout(context.Background(), timeout)
+    defer cancel()
+
+    // 1. 停止接受新的 HTTP 请求
+    if err := s.httpServer.Shutdown(ctx); err != nil {
+        log.WithError(err).Error("HTTP server shutdown error")
+        // 无论如何继续 - 需要清理其他资源
+    }
+
+    // 2. 取消所有后台 goroutines
+    s.cancelAll() // 取消根 context
+
+    // 3. 等待 goroutines,使用单独的超时
+    done := make(chan struct{})
+    go func() {
+        s.wg.Wait() // 跟踪所有 goroutines 的 WaitGroup
+        close(done)
+    }()
+
+    select {
+    case <-done:
+        log.Info("All goroutines stopped gracefully")
+        return nil
+    case <-time.After(timeout):
+        return fmt.Errorf("shutdown timeout: %d goroutines still running",
+            runtime.NumGoroutine())
+    }
+}
+```
+
+**关键模式 - 使用单独的关闭阶段:**
+```go
+func main() {
+    // ... 设置 ...
+
+    quit := make(chan os.Signal, 1)
+    signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+    <-quit
+
+    log.Info("Shutdown signal received")
+
+    // 阶段 1: 停止接受新请求(快速)
+    if err := httpServer.Shutdown(context.Background()); err != nil {
+        log.WithError(err).Error("HTTP shutdown failed")
+    }
+
+    // 阶段 2: 让处理中的工作完成(更长的超时)
+    shutdownCtx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+    defer cancel()
+
+    if err := service.WaitForCompletion(shutdownCtx); err != nil {
+        log.WithError(err).Error("Wait for completion failed")
+    }
+
+    // 阶段 3: 清理资源(后台 goroutines 等)
+    service.Cleanup()
+}
+```
+
+**Warning signs:**
+- 日志显示关闭期间"context deadline exceeded"
+- 重启后检测到数据不一致
+- 关闭恰好花费超时时长(表示达到超时)
+- 监控显示进程退出时请求仍在处理中
+
+**Phase to address:**
+**Phase 4 (Integration & Lifecycle Management)** - 分阶段实现关闭,使用单独的超时。在有处理中请求的负载下测试关闭行为。
+
+**Sources:**
+- [Graceful Shutdown in Go: Why Most Implementations Are Wrong](https://medium.com/codex/graceful-shutdown-in-go-why-most-implementations-are-wrong-323ff193f1f8) - HIGH confidence
+
+---
+
+### Pitfall 5: Missing Bearer Token Validation
+
+**What goes wrong:**
+HTTP API endpoint 检查 Bearer token 但:
+1. 接受空 token 字符串为有效
+2. Token 比较区分大小写(不应该)
+3. 没有常量时间比较(时序攻击漏洞)
+4. 缺少 token 返回通用错误而不是 401
+5. Token 记录在错误消息中(安全泄漏)
+
+**Why it happens:**
+安全代码通常作为事后补充添加。开发者复制粘贴基本认证示例而不理解安全含义。"它能工作"在他们的脑海中变成"它是安全的"。
+
+**How to avoid:**
+```go
+func (s *Service) authMiddleware(next http.HandlerFunc) http.HandlerFunc {
+    return func(w http.ResponseWriter, r *http.Request) {
+        // 1. 提取 Authorization header
+        authHeader := r.Header.Get("Authorization")
+        if authHeader == "" {
+            http.Error(w, "Missing Authorization header", http.StatusUnauthorized)
+            return
+        }
+
+        // 2. 解析 Bearer token
+        parts := strings.Split(authHeader, " ")
+        if len(parts) != 2 || parts[0] != "Bearer" {
+            http.Error(w, "Invalid Authorization header format", http.StatusUnauthorized)
+            return
+        }
+
+        token := parts[1]
+        if token == "" {
+            http.Error(w, "Missing bearer token", http.StatusUnauthorized)
+            return
+        }
+
+        // 3. 常量时间比较以防止时序攻击
+        if !hmac.Equal([]byte(token), []byte(s.config.APIToken)) {
+            // 不要记录 token!
+            log.WithField("remote_addr", r.RemoteAddr).Warn("Invalid API token attempt")
+            http.Error(w, "Invalid token", http.StatusUnauthorized)
+            return
+        }
+
+        // Token 有效,继续到处理程序
+        next(w, r)
+    }
+}
+```
+
+**配置验证:**
+```go
+func (c *Config) Validate() error {
+    if c.APIToken == "" {
+        return errors.New("api_token is required when HTTP API is enabled")
+    }
+
+    if len(c.APIToken) < 32 {
+        return errors.New("api_token must be at least 32 characters for security")
+    }
+
+    return nil
+}
+```
+
+**Warning signs:**
+- API 接受空字符串为有效 token
+- 多次失败的认证尝试使用相同的无效 token(暴力破解)
+- Token 出现在日志或错误消息中
+- 认证检查返回 500 而不是 401
+- 认证失败没有速率限制
+
+**Phase to address:**
+**Phase 3 (HTTP API Implementation)** - 在测试 endpoint 之前实现认证中间件。使用 `crypto/hmac.Equal` 进行常量时间比较。从不记录 token。
+
+**Sources:**
+- [API Security Myth: The Bearer Model Is Enough](https://corsha.com/blog/api-security-myth-bearer-model-is-enough) - HIGH confidence
+- [Secure & Scalable APIs in Go with JWT](https://levelup.gitconnected.com/mastering-jwt-authentication-in-go-10-expert-tips-for-secure-and-scalable-apis-723d16402b16) - MEDIUM confidence
+
+---
+
+### Pitfall 6: Port Conflicts on HTTP Server Startup
+
+**What goes wrong:**
+HTTP API 服务器尝试启动但端口已被使用:
+1. `http.ListenAndServe()` 立即返回错误
+2. 错误未正确处理 - 应用程序继续运行
+3. 监控服务工作但 API endpoint 不可达
+4. 令人困惑的用户体验 - 没有明确的错误消息
+5. 意外启动了同一服务的多个实例
+
+**Why it happens:**
+在 goroutine 中启动 HTTP 服务器使错误处理变得棘手。开发者看到"server started"日志但错过了 `ListenAndServe` 的立即错误。应用程序继续,看起来健康,而 API 已损坏。
+
+**How to avoid:**
+```go
+// 错误 - 错误在 goroutine 中丢失
+go func() {
+    if err := srv.ListenAndServe(":8080", handler); err != nil {
+        log.Fatal(err) // 但这发生在 goroutine 中!
+    }
+}()
+
+// 正确 - 正确的启动检查
+func startHTTPServer(addr string, handler http.Handler) (*http.Server, error) {
+    srv := &http.Server{Addr: addr, Handler: handler}
+
+    // channel 接收启动结果
+    started := make(chan error, 1)
+
+    go func() {
+        err := srv.ListenAndServe()
+        // 当服务器停止时发生此错误(正常关闭返回 http.ErrServerClosed)
+        started <- err
+    }()
+
+    // 给服务器一点时间启动(或失败)
+    select {
+    case err := <-started:
+        // 立即错误意味着启动失败(例如,端口被占用)
+        if err != http.ErrServerClosed {
+            return nil, fmt.Errorf("HTTP server failed to start: %w", err)
+        }
+    case <-time.After(100 * time.Millisecond):
+        // 没有立即错误,服务器可能成功启动
+    }
+
+    return srv, nil
+}
+```
+
+**更好 - 直接使用 listener:**
+```go
+func startHTTPServer(addr string, handler http.Handler) (*http.Server, error) {
+    // 首先尝试绑定到端口
+    listener, err := net.Listen("tcp", addr)
+    if err != nil {
+        return nil, fmt.Errorf("failed to bind to %s: %w", addr, err)
+    }
+
+    srv := &http.Server{Handler: handler}
+
+    go func() {
+        if err := srv.Serve(listener); err != http.ErrServerClosed {
+            log.WithError(err).Error("HTTP server error")
+        }
+    }()
+
+    return srv, nil
+}
+```
+
+**Warning signs:**
+- HTTP 服务器记录"starting"但请求超时
+- 应用程序运行但 API endpoints 返回 connection refused
+- 多个进程绑定到同一端口
+- 配置显示端口 8080 但 `netstat` 显示没有监听
+
+**Phase to address:**
+**Phase 3 (HTTP API Implementation)** - 启动 HTTP 服务器之前,尝试绑定到端口。如果端口不可用则返回明确错误。测试端口已被占用的情况。
+
+**Sources:**
+- [Go: start HTTP server asynchronously but return error if startup failed](https://stackoverflow.com/questions/66878374) - MEDIUM confidence
+
+---
+
+## Moderate Pitfalls
+
+### Pitfall 7: Context Not Propagated to Update Operations
+
+**What goes wrong:**
+监控服务或 HTTP API 使用 context 触发更新,但更新操作忽略 context 取消。当请求关闭时,更新继续运行,阻塞优雅关闭直到超时。
+
+**How to avoid:**
+通过整个调用链传递 context。在长时间运行的循环中检查 `ctx.Done()`。
+
+```go
+func (s *Service) performUpdate(ctx context.Context) error {
+    // 开始前检查
+    select {
+    case <-ctx.Done():
+        return ctx.Err()
+    default:
+    }
+
+    // 将 context 传递给所有操作
+    for _, instance := range s.instances {
+        if err := s.updateInstance(ctx, instance); err != nil {
+            // 检查是否取消
+            if ctx.Err() != nil {
+                return ctx.Err()
+            }
+            log.WithError(err).Error("Instance update failed")
+        }
+    }
+
+    return nil
+}
+```
+
+**Phase to address:** Phase 3 (HTTP API Implementation)
+
+---
+
+### Pitfall 8: Instance State Corruption During Concurrent Access
+
+**What goes wrong:**
+监控 goroutine 检查实例状态而 HTTP API 更新实例。没有同步,读取看到部分更新的状态,导致不正确的行为或崩溃。
+
+**How to avoid:**
+为实例状态使用 `sync.RWMutex`,或更好地使用 channel 进行状态变更。
+
+```go
+type InstanceManager struct {
+    mu        sync.RWMutex
+    instances map[string]*Instance
+}
+
+func (m *InstanceManager) GetInstance(name string) (*Instance, bool) {
+    m.mu.RLock()
+    defer m.mu.RUnlock()
+    inst, ok := m.instances[name]
+    return inst, ok
+}
+
+func (m *InstanceManager) UpdateInstance(name string, newInstance *Instance) {
+    m.mu.Lock()
+    defer m.mu.Unlock()
+    m.instances[name] = newInstance
+}
+```
+
+**Phase to address:** Phase 4 (Integration & Lifecycle Management)
+
+---
+
+### Pitfall 9: Pushover Notification on Every Monitoring Check
+
+**What goes wrong:**
+每次 Google 连通性检查失败时监控服务都发送 Pushover 通知。如果 Google 宕机数小时,用户会收到数百条通知。
+
+**How to avoid:**
+实现通知状态跟踪 - 仅在状态变化时通知(失败 → 恢复,恢复 → 失败)。
+
+```go
+type MonitoringService struct {
+    lastState    bool // true = connected, false = disconnected
+    stateChanged bool
+    mu           sync.Mutex
+}
+
+func (s *MonitoringService) checkAndNotify(ctx context.Context) {
+    connected := s.checkConnectivity(ctx)
+
+    s.mu.Lock()
+    stateChanged := (s.lastState != connected)
+    s.lastState = connected
+    s.mu.Unlock()
+
+    if !stateChanged {
+        return // 没有变化,不通知
+    }
+
+    if connected {
+        s.notify("Google connectivity recovered")
+    } else {
+        s.notify("Google connectivity lost")
+    }
+}
+```
+
+**Phase to address:** Phase 2 (Monitoring Service Implementation)
+
+---
+
+## Minor Pitfalls
+
+### Pitfall 10: Missing Health Check Endpoint
+
+**What goes wrong:**
+没有 `/health` endpoint 供编排器/监控系统检查服务是否健康。外部系统无法检测 HTTP API 何时因死锁或资源耗尽而无响应。
+
+**How to avoid:**
+实现简单的健康 endpoint 来检查关键依赖项。
+
+```go
+http.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+    // 检查服务是否健康
+    if !service.IsHealthy() {
+        w.WriteHeader(http.StatusServiceUnavailable)
+        return
+    }
+    w.WriteHeader(http.StatusOK)
+})
+```
+
+**Phase to address:** Phase 3 (HTTP API Implementation)
+
+---
+
+### Pitfall 11: Logs Missing Context for Debugging
+
+**What goes wrong:**
+日志消息不包含实例名称、操作类型或关联 ID。在调试生产问题时,无法跟踪请求流。
+
+**How to avoid:**
+使用带有 context 字段的结构化日志记录。延续 v0.2 的模式(logger.With 预注入)。
+
+```go
+func (s *Service) performUpdate(ctx context.Context, instance *Instance) {
+    log := s.logger.WithFields(logrus.Fields{
+        "instance": instance.Name,
+        "port":     instance.Port,
+        "operation": "update",
+    })
+
+    log.Info("Starting update")
+    // ... 其余操作
+}
+```
+
+**Phase to address:** Phase 3 (HTTP API Implementation) - 将现有日志模式扩展到新组件。
+
+---
+
+### Pitfall 12: Configuration Not Validated at Startup
+
+**What goes wrong:**
+只有在调用 API endpoint 时才发现缺少 API token 或端口无效。服务运行数小时/数天,然后在用户尝试使用时失败。
+
+**How to avoid:**
+在启动时验证所有配置,快速失败并给出明确错误消息。
+
+```go
+func (c *Config) Validate() error {
+    var errs []error
+
+    if c.HTTPAPIEnabled {
+        if c.APIPort == 0 {
+            errs = append(errs, errors.New("api_port required when HTTP API enabled"))
+        }
+        if c.APIToken == "" {
+            errs = append(errs, errors.New("api_token required when HTTP API enabled"))
+        }
+        if c.APIPort < 1024 || c.APIPort > 65535 {
+            errs = append(errs, fmt.Errorf("api_port %d out of valid range (1024-65535)", c.APIPort))
+        }
+    }
+
+    if c.MonitoringEnabled {
+        if c.MonitoringInterval < time.Minute {
+            errs = append(errs, fmt.Errorf("monitoring_interval %v too short (minimum 1 minute)", c.MonitoringInterval))
+        }
+    }
+
+    return errors.Join(errs...)
+}
+```
+
+**Phase to address:** Phase 5 (Configuration & Validation)
 
 ---
 
@@ -400,19 +695,13 @@ Phase 1 (Network Operations)
 
 | Integration | Common Mistake | Correct Approach |
 |-------------|----------------|------------------|
-| **Go os/exec** | 使用 `yaml` 标签配置进程结构体 | 使用 `mapstructure` 标签,Viper 内部使用 mapstructure |
-| **Windows Process Kill** | 直接调用 `Process.Kill()` | 先发送优雅停止信号,超时后再强制终止 |
-| **Context Cancellation** | 依赖默认 SIGKILL 行为 | 实现自定义信号处理,允许进程清理资源 |
-| **Viper Config** | 假设 `AutomaticEnv` 总是工作 | 显式设置环境变量绑定,测试覆盖 |
-| **Process Wait** | 不调用 `cmd.Wait()` 导致僵尸进程 | 始终在 goroutine 中等待进程退出 |
-| **YAML Validation** | 只验证必填项 | 验证实例名称唯一性,启动命令有效性 |
-| **uv package manager** | Assuming uv is in PATH | Use full path or verify `uv` in PATH at startup |
-| **uv package manager** | Ignoring python version compatibility issues | Check `requires-python` before installing |
-| **uv package manager** | Not handling network failures during install | Implement retry with backoff for `uv pip install` |
-| **Windows Service** | Not handling Session 0 isolation | Ensure no UI dependencies; test in Session 0 |
-| **Windows Service** | Using current user's environment variables | Services run as SYSTEM - use service-specific config paths |
-| **File system** | Hardcoding paths like `C:\Users\...` | Use `%PROGRAMDATA%` or `%ALLUSERSPROFILE%` for shared data |
-| **Notification webhooks** | No timeout on webhook calls | Set client timeout; use fire-and-forget with queue for reliability |
+| 现有 Instance Manager | 不加锁访问实例 | 使用 v0.2 中现有的 mutex 或方法 |
+| 现有 Notification System | 直接调用 Pushover 而不去重 | 重用 v0.2 的条件通知模式 |
+| 现有 Logging System | 创建没有 context 字段的 logger | 使用 `logger.With` 创建 context-aware logger |
+| 现有 Config System | 添加新字段而不验证 | 使用新字段扩展 `Validate()` 方法 |
+| Graceful Shutdown | 忘记停止监控 goroutine | 添加到 WaitGroup,通过 context 取消 |
+| Context Propagation | 在长时间操作中忽略 context | 在所有阻塞操作中检查 `ctx.Done()` |
+| HTTP Server Lifecycle | 假设 `ListenAndServe` 总是成功 | 立即检查绑定错误,使用单独的启动检查 |
 
 ---
 
@@ -420,14 +709,12 @@ Phase 1 (Network Operations)
 
 | Trap | Symptoms | Prevention | When It Breaks |
 |------|----------|------------|----------------|
-| 串行启动 N 个实例 | 启动时间随实例数线性增长 | 并行启动(但要验证资源无冲突) | 实例数 > 5 |
-| 每次更新重新解析配置 | 配置解析重复执行 | 启动时解析一次,缓存在内存 | 配置文件 > 100KB |
-| 全量进程健康检查 | CPU 占用高,日志量大 | 采样检查 + 异常时全量检查 | 实例数 > 10 |
-| 同步等待所有实例启动 | 启动时间取决于最慢实例 | 设置启动超时,独立报告慢实例 | 单个实例启动 > 30 秒 |
-| No connection pooling | Many TIME_WAIT sockets, slow requests | Use `http.Transport` with connection pooling | 10+ concurrent requests |
-| Unbounded log file growth | Disk space exhaustion | Implement log rotation with size limits | Days/weeks of operation |
-| Synchronous updates on startup | Slow service startup | Run updates in background; use cached version for startup | When updates take >30 seconds |
-| No request queuing | Memory exhaustion under load | Implement bounded queue for operations | High update check frequency |
+| 无缓冲通知 channel | 监控 goroutine 在发送时阻塞 | 使用缓冲 channel 或非阻塞发送 | 读取前 10+ 次监控失败 |
+| HTTP client 没有超时 | 网络挂起时 goroutine 泄漏 | 在所有 HTTP 客户端上设置显式超时 | 第一次重大网络中断 |
+| 每次请求验证 token | 重复认证检查导致 CPU 使用率高 | 缓存已验证的 token 并带 TTL(小心!) | >100 请求/秒 |
+| 在锁下迭代实例列表 | 随实例增长 API 响应变慢 | 复制实例列表,无锁迭代 | >50 个实例 |
+| 无限重试无退避 | 网络恢复时流量激增 | 使用指数退避 + jitter | 任何网络中断场景 |
+| 监控检查堆积 | 多个检查同时运行 | 使用带缓冲的 ticker 或跳过逻辑 | 监控检查耗时 > 间隔 |
 
 ---
 
@@ -435,56 +722,27 @@ Phase 1 (Network Operations)
 
 | Mistake | Risk | Prevention |
 |---------|------|------------|
-| 配置文件包含明文凭证 | 凭证泄露风险 | 使用环境变量或加密存储 |
-| 未验证启动命令路径 | 任意代码执行 | 验证命令路径在允许目录内 |
-| 实例间无隔离 | 一个实例故障影响其他 | 资源隔离(不同工作目录) |
-| 配置文件权限过宽 | 配置被篡改 | 限制配置文件访问权限 |
-| Downloading updates over HTTP | Man-in-the-middle attack delivers malicious binary | Always use HTTPS; verify TLS certificate |
-| No signature verification on updates | Compromised CDN delivers malicious binary | Sign updates; verify signature before applying |
-| Storing credentials in config file | Credential exposure if file is read | Use Windows Credential Manager or environment variables |
-| Running service as SYSTEM unnecessarily | Privilege escalation if service is compromised | Use minimal privilege service account |
-| Logging sensitive data | Credential/token exposure in logs | Redact sensitive fields before logging |
-| No integrity check on downloaded binaries | Corrupted update breaks installation | Always verify checksum/hash before applying |
-
----
-
-## UX Pitfalls
-
-| Pitfall | User Impact | Better Approach |
-|---------|-------------|-----------------|
-| "实例启动失败"无上下文 | 用户不知道哪个实例失败 | "实例 'bot-1' 启动失败: 端口 8080 已被占用" |
-| 通知消息技术化 | 用户无法理解错误原因 | 提供人类可读的错误描述 + 建议操作 |
-| 配置错误报 YAML 解析错误 | 用户需要懂 YAML 语法 | 提供配置示例 + 字段级错误提示 |
-| 批量操作无进度反馈 | 用户不知道系统是否在工作 | 提供实时进度:"正在启动实例 2/5" |
-| 错误日志分散 | 用户难以关联相关信息 | 结构化日志,包含操作 ID/批次 ID |
-| Silent updates with no notification | Users unaware of changes; surprised by behavior changes | Log update events; optionally notify on major updates |
-| No rollback mechanism | Stuck on broken version | Keep previous binary; provide rollback command |
-| Blocking updates during critical work | Disruption to user workflow | Defer updates; apply during idle periods |
-| Cryptic error messages | Users can't troubleshoot or report issues | Include actionable error messages with context |
-| No "check for update" command | Users forced to wait for scheduled check | Provide manual update trigger |
+| Token 在 URL 查询参数中 | Token 记录在访问日志、代理日志中 | 仅通过 Authorization header 接受 |
+| 使用 == 比较 token | 时序攻击揭示 token 长度 | 使用 `crypto/hmac.Equal` |
+| 缺少速率限制 | 暴力破解 token 猜测 | 添加速率限制器中间件 |
+| Token 记录在错误中 | Token 在日志中暴露 | 仅记录"authentication failed" |
+| 没有 token 轮换机制 | 泄露的 token 永久有效 | 记录轮换过程,支持重新加载 |
+| HTTP 而不是 HTTPS | Token 在传输中被拦截 | 强制所有 API 调用使用 HTTPS |
+| Token 存储在配置文件中 | 配置文件泄露暴露 token | 使用环境变量或加密存储 |
 
 ---
 
 ## "Looks Done But Isn't" Checklist
 
-**v0.2 Multi-Instance Checklist:**
-- [ ] **Multi-Instance Stop:** 所有进程真正退出(检查任务管理器) — 验证无僵尸进程
-- [ ] **Configuration Loading:** 配置文件格式错误时明确提示 — 验证错误消息包含行号和字段
-- [ ] **Error Aggregation:** 批量操作中所有失败都被记录 — 验证错误日志数量与失败实例数匹配
-- [ ] **Process Cleanup:** 进程启动失败后无资源泄漏 — 验证句柄和内存释放
-- [ ] **Notification Dedup:** 批量失败时通知被聚合 — 验证只发送一条摘要通知
-- [ ] **Instance Identification:** 日志中能识别具体实例 — 验证每条日志包含实例 ID
-- [ ] **Graceful Shutdown:** 进程有机会清理资源 — 验证临时文件被删除
-- [ ] **Config Validation:** 实例名称唯一性被验证 — 验证重复名称被拒绝
-
-**v0.1 Core Checklist (Still Relevant):**
-- [ ] **Update Process:** Often missing rollback capability - verify you can revert to previous version
-- [ ] **Service Installation:** Often missing proper uninstall/cleanup - verify service can be cleanly removed
-- [ ] **Log Rotation:** Often missing handling of log during rotation - verify no logs lost during rotation
-- [ ] **Error Recovery:** Often missing retry after network failure - verify update retries on transient failures
-- [ ] **Graceful Shutdown:** Often missing wait for in-flight operations - verify clean shutdown with pending operations
-- [ ] **Configuration:** Often missing validation of required fields - verify startup fails on missing config
-- [ ] **Windows Service:** Often missing testing in Session 0 - verify service works when started by SCM
+- [ ] **Monitoring Service:** 经常缺少 `defer ticker.Stop()` — 验证所有代码路径中的 ticker 清理
+- [ ] **HTTP API:** 经常缺少请求超时 — 验证 HTTP 客户端配置了超时
+- [ ] **Graceful Shutdown:** 经常放弃 goroutines — 使用 `runtime.NumGoroutine()` 检查验证所有 goroutines 已停止
+- [ ] **Concurrent Updates:** 经常缺少 mutex — 验证正确处理多个并发请求
+- [ ] **Auth Middleware:** 经常记录 token — 验证 token 从不出现在日志中
+- [ ] **Port Binding:** 经常忽略启动错误 — 验证端口被占用时的错误处理
+- [ ] **Context Propagation:** 在更新操作中经常被忽略 — 验证在长时间运行的循环中检查 context
+- [ ] **Notification Deduplication:** 经常发送重复通知 — 验证状态跟踪防止垃圾邮件
+- [ ] **State Tracking:** 监控状态变化经常缺少锁 — 验证并发访问受到保护
 
 ---
 
@@ -492,46 +750,36 @@ Phase 1 (Network Operations)
 
 | Pitfall | Recovery Cost | Recovery Steps |
 |---------|---------------|----------------|
-| 僵尸进程累积 | LOW | 1. 重启 auto-updater 服务<br>2. 如有残留,手动 taskkill |
-| 竞态条件导致启动失败 | MEDIUM | 1. 停止所有实例<br>2. 等待 5 秒<br>3. 重新执行启动 |
-| 配置错误 | LOW | 1. 修正配置文件<br>2. 重启服务 |
-| 通知风暴 | LOW | 1. 服务内部有速率限制会自动恢复<br>2. 用户可暂时关闭 Pushover 通知 |
-| 部分实例失败 | LOW | 1. 查看日志识别失败实例<br>2. 手动启动失败实例或下次 cron 自动重试 |
-| 资源泄漏(内存/句柄) | MEDIUM | 1. 重启 auto-updater 服务<br>2. 长期需要修复代码 |
-| Corrupted update blocks service | HIGH | Manual intervention: stop service, delete corrupted binary, restore backup or reinstall |
-| Log rotation broke logging | LOW | Restart service; logs resume to new file |
-| Config error causes crash loop | MEDIUM | Boot into safe mode / use alternate config path; fix config file |
-| Scheduler stuck in overlap | LOW | Restart service; clears job queue |
-| Network timeout blocks update | LOW | Automatic: retry with backoff; manual: check network/connectivity |
+| Goroutine leak | LOW | 重启服务,修复代码,部署。重启时释放内存。 |
+| Concurrent updates | MEDIUM | 检查实例状态,可能重启实例,修复代码 |
+| Missing timeout | LOW | 修复代码,部署。没有持久状态损坏。 |
+| Graceful shutdown failure | HIGH | 可能需要手动清理部分更新,重启实例 |
+| Auth vulnerability | HIGH | 轮换所有 token,审计访问日志,修复代码 |
+| Port conflict | LOW | 停止冲突进程,重启服务 |
+| State corruption | HIGH | 审计实例状态,可能从备份恢复 |
+| Context not propagated | MEDIUM | 重启服务,修复代码以尊重 context |
+| Notification spam | LOW | 服务内部速率限制会自动恢复,用户可暂时关闭通知 |
 
 ---
 
 ## Pitfall-to-Phase Mapping
 
-**v0.2 Multi-Instance Phases:**
+How roadmap phases should address these pitfalls:
 
 | Pitfall | Prevention Phase | Verification |
 |---------|------------------|--------------|
-| 竞态条件(停止/启动) | Phase 1 (Process Management) | 集成测试:并行停止 3+ 实例,验证无端口冲突 |
-| 资源泄漏 | Phase 1 (Process Management) | 压力测试:启动/停止 100 次,检查内存和句柄 |
-| 配置过度复杂 | Phase 1 (Process Management) | 代码审查:配置结构体不超过 2 层嵌套 |
-| 错误未聚合 | Phase 2 (Error Handling) | 集成测试:模拟 3 个实例失败,验证错误包含所有 3 个 |
-| 通知风暴 | Phase 2 (Notifications) | 集成测试:5 个实例同时失败,验证只发送 1 条通知 |
-| 进程识别混淆 | Phase 1 (Process Management) | 日志审查:每条日志包含实例标识符 |
-| 配置验证不足 | Phase 1 (Process Management) | 单元测试:重复名称、缺失字段、无效命令都被拒绝 |
-| 优雅退出处理 | Phase 1 (Process Management) | 集成测试:强制停止场景,验证资源清理 |
-
-**v0.1 Core Phases (Still Relevant):**
-
-| Pitfall | Prevention Phase | Verification |
-|---------|------------------|--------------|
-| Cannot Replace Running Binary | Phase 1 | Test update while service is running; verify rename-then-replace works |
-| SCM Recovery Actions | Phase 1 | Kill service process; verify SCM restarts it |
-| Cron Scheduler Job Overlap | Phase 1 | Schedule job at 1-minute interval; make job take 2 minutes; verify no overlap |
-| Command Prompt Window Flashes | Phase 1 | Run service; trigger update; verify no visible windows |
-| Log Rotation Breaks Logging | Phase 1 | Fill log to rotation threshold; verify logging continues to new file |
-| Configuration Zero-Value Bugs | Phase 1 | Provide config with typo; verify startup fails with clear error |
-| HTTP Client Default Timeout | Phase 1 | Point at server that never responds; verify request times out |
+| Goroutine leak | Phase 2 (Monitoring Service) | 使用 goleak 进行单元测试,验证前后的 goroutine 计数 |
+| Concurrent updates | Phase 3 (HTTP API) | 使用并发请求进行集成测试,验证 mutex/worker |
+| HTTP client timeout | Phase 2 (Monitoring Service) | 使用挂起的 HTTP 服务器测试,验证超时触发 |
+| Graceful shutdown | Phase 4 (Integration) | 测试有处理中请求时的关闭,验证完成 |
+| Auth validation | Phase 3 (HTTP API) | 测试空 token、错误 token、时序攻击,验证常量时间 |
+| Port conflicts | Phase 3 (HTTP API) | 测试端口被占用时的启动,验证明确错误消息 |
+| Context propagation | Phase 3 (HTTP API) | 测试更新期间的取消,验证操作停止 |
+| State corruption | Phase 4 (Integration) | 使用并发读/写进行集成测试,验证一致性 |
+| Notification spam | Phase 2 (Monitoring Service) | 测试重复失败,验证仅状态变化通知 |
+| Missing health check | Phase 3 (HTTP API) | 测试 /health endpoint,验证返回正确状态 |
+| Missing log context | Phase 3 (HTTP API) | 代码审查,验证所有日志包含相关 context |
+| Config validation | Phase 5 (Configuration) | 测试使用无效配置启动,验证明确错误消息 |
 
 ---
 
@@ -539,71 +787,54 @@ Phase 1 (Network Operations)
 
 | Phase Topic | Likely Pitfall | Mitigation |
 |-------------|---------------|------------|
-| 配置解析 | Viper mapstructure 标签错误 | 使用 mapstructure 标签而非 yaml 标签,测试嵌套结构 |
-| 进程启动 | 未等待进程完全退出 | 添加 Wait() 调用,设置超时机制 |
-| 错误处理 | 只记录第一个错误 | 实现错误切片,收集所有失败后再报告 |
-| 通知发送 | 失败立即发送通知 | 实现通知队列,批量聚合后再发送 |
-| 日志记录 | 缺少实例上下文 | 在 logger 中注入实例 ID 字段 |
-| 单元测试 | 难以模拟多进程场景 | 使用接口抽象进程管理,便于 mock |
-| Multi-instance stop/start | 竞态条件导致资源冲突 | 严格串行化,每个步骤验证完成再继续 |
-| Error aggregation | 丢失部分实例的失败信息 | 使用错误切片,记录所有失败实例 |
-| Notification design | 通知风暴导致用户忽略 | 实现聚合和速率限制 |
+| 监控服务实现 | 忘记 `defer ticker.Stop()` | 代码模板中包含,审查检查 |
+| HTTP API 实现 | 没有并发控制 | 在任何测试之前实现 mutex/worker 模式 |
+| 认证中间件 | 使用 == 比较 token | 使用 `crypto/hmac.Equal`,从不记录 token |
+| 优雅关闭 | 单一超时用于所有阶段 | 每个阶段使用单独超时(HTTP,goroutines,清理) |
+| Context 传播 | 忽略长时间操作中的 context | 在所有阻塞循环中检查 `ctx.Done()` |
+| 配置验证 | 启动时缺少必需字段验证 | 验证函数返回聚合错误 |
+| HTTP client | 没有超时配置 | 为所有 client 设置显式超时 |
+| 监控状态跟踪 | 没有状态变化的锁 | 使用 sync.Mutex 保护 lastState 字段 |
 
 ---
 
 ## Sources
 
 ### High Confidence Sources
-- (None - all findings from WebSearch require validation)
+- [How to Avoid Common Goroutine Leaks in Go](https://oneuptime.com/blog/post/2026-01-07-go-goroutine-leaks/view) - 全面的模式和生产示例
+- [Timeout Budgets & Retries in Go: How Retry Storms Happen & Stop Them](https://levelup.gitconnected.com/timeout-budgets-retries-in-go-how-retry-storms-happen-stop-them-a6269958647d) - 生产验证的模式,真实场景
+- [Graceful Shutdown in Go: Why Most Implementations Are Wrong](https://medium.com/codex/graceful-shutdown-in-go-why-most-implementations-are-wrong-323ff193f1f8) - 突出常见错误,详细分析
+- [API Security Myth: The Bearer Model Is Enough](https://corsha.com/blog/api-security-myth-bearer-model-is-enough) - 安全最佳实践
+- [How to Use Context in Go for Cancellation and Timeouts](https://oneuptime.com/blog/post/2026-01-23-go-context/view) - 官方模式,全面指南
 
-### Medium Confidence Sources (v0.2 Multi-Instance)
-- [5 Golang Concurrency Mistakes](https://medium.com/@puneetpm/5-golang-concurrency-mistakes-that-are-silently-killing-your-performance-updated-for-go-1-25-5f54d88e71be) - Go 并发常见错误
-- [Go Context Process Management](https://github.com/golang/go/issues/22757) - Go 官方进程管理提案
-- [Alert Fatigue Prevention](https://oneuptime.com/blog/post/2026-01-30-alert-fatigue-prevention/view) - 通知疲劳预防策略
-- [Go Config mapstructure Tags](https://buildsoftwaresystems.com/post/go-config-yaml-safer-mapstructure-fix/) - Viper 配置最佳实践
-- [Cascading Failure Resilience](https://www.sciencedirect.com/science/article/pii/S016740482400375X) - 级联失败研究
+### Medium Confidence Sources
+- [Go Goroutines: 7 Critical Pitfalls Every Developer Must Avoid](https://medium.com/@harshithgowdakt/go-goroutines-7-critical-pitfalls-every-developer-must-avoid-with-real-world-solutions-a436ac0fb4bb) - 好的示例,涵盖常见错误
+- [How to Prevent Duplicate API Requests with Deduplication in Go](https://oneuptime.com/blog/post/2026-01-25-prevent-duplicate-api-requests-deduplication-go/view) - 去重模式
+- [Mastering Network Timeouts and Retries in Go](https://dev.to/jones_charles_ad50858ddb0/mastering-network-timeouts-and-retries-in-go) - 实用指南
+- [Secure & Scalable APIs in Go with JWT](https://levelup.gitconnected.com/mastering-jwt-authentication-in-go-10-expert-tips-for-secure-and-scalable-apis-723d16402b16) - 安全提示
+- [Mutex with timeout or channels in go](https://silh.medium.com/mutex-with-timeout-or-channels-in-go-d00b736fe45b) - 长时间运行任务的实用模式
+- [Go: start HTTP server asynchronously but return error if startup failed](https://stackoverflow.com/questions/66878374) - Stack Overflow 社区答案
 
-### Low Confidence Sources (v0.2 Multi-Instance)
-- [Process Instance Monitoring](https://docs.oracle.com/cd/E13214_01/wli/docs81/manage/processmonitoring.html) - 通用进程监控概念
-- [YAML Configuration Mistakes](https://comate.baidu.com/zh/page/xe9q3bn4gmz) - YAML 通用错误
-- [Error Aggregation Patterns](https://www.reddit.com/r/dotnet/comments/17huhdh/what_is_your_preferred_way_of_returning_multiple/) - 社区讨论
-
-### Medium Confidence Sources (v0.1 Core)
-- Microsoft Learn: "Descriptions of some best practices when you create Windows Services" - https://support.microsoft.com/en-us/topic/descriptions-of-some-best-practices-when-you-create-windows-services-13ca508e-231d-43e6-b960-3b04ccf79064
-- Microsoft Learn: "Guidelines for Services" - https://learn.microsoft.com/en-us/windows/win32/rstmgr/guidelines-for-services
-- InfoQ: "The Service and the Beast: Building a Windows Service that Does Not Fail to Restart" - https://infoq.com/articles/windows-services-reliable-restart
-- Stephen Cleary Blog: "Win32 Service Gotcha: Recovery Actions" - https://blog.stephencleary.com/2020/06/servicebase-gotcha-recovery-actions.html
-- GitHub go-co-op/gocron Issue #385: "CPU usage 100% after system time change" - https://github.com/go-co-op/gocron/issues/385
-- Stack Overflow: "How to hide command prompt window when using Exec in Golang" - https://stackoverflow.com/questions/42500570
-- GitHub golang/go Issue #69939: "syscall: special case cmd.exe /c in StartProcess" - https://github.com/golang/go/issues/69939
-- GitHub natefinch/lumberjack Issues: Log rotation problems - https://github.com/natefinch/lumberjack/issues
-- Medium: "Implementing Log File Rotation in Go: Insights from logrus, zap, and slog" - https://leapcell.io/blog/log-rotation-and-file-splitting-in-go
-- Build Software Systems: "Go Config: Stop the Silent YAML Bug (Use mapstructure for Safety)" - https://buildsoftwaresystems.com/post/go-config-yaml-safer-mapstructure-fix/
-- DEV Community: "Mastering Network Timeouts and Retries in Go" - https://dev.to/jones_charles_ad50858dbc0/mastering-network-timeouts-and-retries-in-go
-- Lokal.so: "Comprehensive Guide on Golang Self-upgrading binary" - https://lokal.so/blog/comprehensive-guide-on-golang-go-self-upgrading-binary/
-- GitHub creativeprojects/go-selfupdate - https://github.com/creativeprojects/go-selfupdate
-- GitHub fynelabs/selfupdate - https://github.com/fynelabs/selfupdate
-- Microsoft Tech Community: "Application Compatibility - Session 0 Isolation" - https://techcommunity.microsoft.com/blog/askperf/application-compatibility---session-0-isolation/372361
-- Core Technologies Blog: "Investigating OneDrive Failures in Session 0 on Windows Server" - https://www.coretechnologies.com/blog/alwaysup/onedrive-fails-in-session-0/
-- GitHub astral-sh/uv Issues: Various compatibility and behavior issues - https://github.com/astral-sh/uv/issues
+### Low Confidence Sources
+- None - all findings verified across multiple sources
 
 ---
 
 ## Gaps to Address
 
 **Topics needing phase-specific research:**
-1. **Windows 特定的进程管理细节** - Go 在 Windows 上的信号处理与 Linux 不同,需要验证具体行为
-2. **Nanobot 进程行为** - nanobot 是否支持优雅停止?停止时需要多长时间?是否会产生子进程?
-3. **Pushover API 限制** - 通知速率限制、去重机制需要查看官方文档
-4. **长期运行稳定性** - 24x7 运行时的资源使用模式需要实际测试验证
+1. **Google 连通性检查的具体实现** - 需要确定检查 URL、预期响应、超时阈值
+2. **与 v0.2 实例管理器的集成点** - 需要识别共享状态和锁的精确位置
+3. **Pushover API 速率限制** - 需要查看官方文档确定通知频率限制
+4. **长期运行稳定性** - 需要实际测试验证 24x7 运行时的资源使用模式
 
 **Validation needed during implementation:**
-- 实际测试并行停止场景,确认竞态条件是否真实存在
-- 验证 Go 的 CommandContext 在 Windows 上的具体行为
-- 测试通知聚合策略的有效性
+- 实际测试并发更新触发场景,验证互斥机制有效性
+- 测试监控服务的中断和恢复行为
+- 验证优雅关闭在有长时间运行更新时的表现
+- 测试 Bearer token 认证的各种边缘情况(空 token、格式错误等)
 
 ---
 
-*Pitfalls research for: Multi-instance nanobot auto-updater (v0.2)*
-*Original research (v0.1): 2026-02-18*
-*Updated for multi-instance: 2026-03-09*
+*Pitfalls research for: Adding HTTP API and monitoring to existing Go application (v0.3)*
+*Researched: 2026-03-16*

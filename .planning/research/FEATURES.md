@@ -1,7 +1,7 @@
 # Feature Research
 
-**Domain:** Multi-instance process management and orchestration
-**Researched:** 2026-03-09
+**Domain:** HTTP API Service + Monitoring Service
+**Researched:** 2026-03-16
 **Confidence:** MEDIUM
 
 ## Feature Landscape
@@ -12,12 +12,14 @@ Features users assume exist. Missing these = product feels incomplete.
 
 | Feature | Why Expected | Complexity | Notes |
 |---------|--------------|------------|-------|
-| **Instance Configuration** | Users need to define what instances exist | LOW | YAML array structure with name, port, command fields |
-| **Unique Instance Names** | Required for identification and logging | LOW | Validate no duplicates in config, fail fast on startup |
-| **Stop All Instances** | Basic orchestration operation | LOW | Iterate through instances, stop each (reuse existing stop logic) |
-| **Start All Instances** | Basic orchestration operation | LOW | Iterate through instances, start each with configured command |
-| **Failure Notification** | Existing v0.1 feature, users expect it to continue | MEDIUM | Report which instances failed, include instance name in message |
-| **Graceful Degradation** | Some instances succeed, some fail - don't abort all | MEDIUM | Continue starting other instances when one fails |
+| Bearer Token Authentication | Standard auth for HTTP APIs. Users expect secure, token-based access control. | LOW | Single static token in Authorization header. Simple comparison, no JWT complexity needed. |
+| JSON Response Format | APIs must return structured data. JSON is the de facto standard. | LOW | Use standard Go encoding/json. Include status field + message/data structure. |
+| HTTP Status Codes (2xx, 4xx, 5xx) | Proper status codes communicate success/failure clearly to clients. | LOW | 200 for success, 401 for auth failure, 500 for server errors. Use standard net/http codes. |
+| Monitoring Service Runs Continuously | Always-on background service is core expectation for monitoring. | LOW | Use Go goroutine + time.Ticker. 15-minute intervals, runs forever until stopped. |
+| HTTP GET Health Checks | Standard pattern for connectivity monitoring. Simple, reliable, universally understood. | LOW | http.Client with timeout. Check response status code only (no body parsing needed). |
+| Failure Notifications | Users expect to be notified when monitoring detects problems. | LOW | Reuse existing Pushover integration. Send alert on connectivity failure. |
+| Service Logging | All services must log operations for debugging and audit. | LOW | Already using WQGroup/logger. Add component-level logging (monitor/api). |
+| Configuration from YAML | Existing pattern. Users expect to configure in config.yaml. | LOW | Extend existing config structure with new sections (api, monitoring). |
 
 ### Differentiators (Competitive Advantage)
 
@@ -25,10 +27,13 @@ Features that set the product apart. Not required, but valuable.
 
 | Feature | Value Proposition | Complexity | Notes |
 |---------|-------------------|------------|-------|
-| **Instance Health Status** | Know which instances are running vs failed | MEDIUM | Track state per instance, report in logs and notifications |
-| **Configurable Retry Policy** | Auto-retry failed instances | HIGH | Defer to v0.3 - adds significant complexity, needs backoff logic |
-| **Individual Instance Control** | Stop/start specific instance by name | MEDIUM | Future consideration for v0.3 - CLI flags for targeting specific instances |
-| **Parallel Instance Startup** | Start instances concurrently for faster recovery | HIGH | Defer to v0.3 - requires goroutine management, error aggregation |
+| Recovery Notifications | Alert when connectivity is restored. Provides complete incident lifecycle visibility. | LOW | Track previous state. Send notification on failure→success transition. |
+| Structured JSON Error Responses | Include error code + human message. Easier for clients to parse and display errors. | MEDIUM | Define error codes enum. Include `error_code`, `message`, `details` fields. |
+| Request/Response Logging | Log API requests and responses for audit trail. Helps debugging integration issues. | MEDIUM | Log method, path, status code, duration. Be careful with log volume. |
+| Configurable Monitoring Interval | Allow users to customize check frequency (default 15 min). Flexibility for different use cases. | LOW | Add `monitoring.interval` to config. Use time.Duration parsing. |
+| Configurable Monitoring Target | Allow users to change what URL to monitor. Some may prefer different endpoints. | LOW | Add `monitoring.target_url` to config. Default to https://www.google.com. |
+| Graceful Service Shutdown | Handle Ctrl+C cleanly. Stop monitoring, finish in-flight API requests. | MEDIUM | Use context.Context + signal.Notify. Implement shutdown timeout. |
+| Health Check Endpoint | Expose /health for the API service itself. Allows external monitoring. | LOW | GET /health returns 200 + JSON status. No auth required. |
 
 ### Anti-Features (Commonly Requested, Often Problematic)
 
@@ -36,207 +41,160 @@ Features that seem good but create problems.
 
 | Feature | Why Requested | Why Problematic | Alternative |
 |---------|---------------|-----------------|-------------|
-| **Rolling Updates (sequential)** | Maintain availability during update | Not applicable - nanobot instances are stateless agents, no traffic to route | All-at-once is simpler and appropriate for this use case |
-| **Dependency Ordering** | Start instances in specific order | Adds complexity for minimal benefit in this single-tool context | Parallel start with graceful degradation handles failures adequately |
-| **Auto-restart on Crash** | Keep instances running | Conflicts with update orchestration, creates race conditions | Cron-based health checks or external monitoring is better fit |
+| JWT Token Authentication | "More secure" than static token. Industry standard for user auth. | Overkill for single-user internal service. Adds complexity (token rotation, expiration, signing keys). | Static Bearer token in config. Simple, sufficient for internal tool. |
+| Multiple Monitoring Targets | Monitor multiple URLs simultaneously. Redundancy improves reliability. | Increases complexity exponentially (state management per target, notification grouping, error aggregation). Already covered by existing multi-instance pattern. | Single target per service instance. Use separate instances for different targets if needed. |
+| Monitoring Response Body Content | "Verify the response contains expected data." More thorough than status code check. | Creates fragility. Content changes, formatting differences, false positives. Google homepage content varies by region/user agent. | Check HTTP status code only (200 OK). Simple, reliable, sufficient for connectivity test. |
+| Complex Alert Thresholds | Alert after N consecutive failures. Avoid false positives from transient issues. | Adds state machine complexity. Delays real alerts. Transient failures are rare for Google connectivity. | Alert on first failure. Immediate notification. Fast response time is priority. |
+| Rate Limiting on API | Prevent abuse. Protect service from overload. | Unnecessary for internal single-user service. Adds complexity (token bucket, client tracking). | Trust internal network. If needed, add simple request timeout. |
+| Database for Monitoring History | Store historical data for analysis, trending, reporting. | Massive scope creep. Requires DB, schema, migrations, retention policy. Out of project scope. | Logs provide recent history. Keep service stateless. No persistent data. |
+| API Versioning (/api/v2/) | Future-proof for API changes. Standard practice for public APIs. | Over-engineering for internal tool. Single endpoint, unlikely to change significantly. | Simple /api/v1/ prefix. Sufficient for current scope. Can version later if truly needed. |
+| Retry Logic for HTTP Requests | "Make monitoring more resilient to transient failures." | Hides real connectivity issues. Delays failure detection. Defeats purpose of monitoring. | Single request with timeout. Fail fast, alert immediately. |
+| Circuit Breaker Pattern | "Prevent cascading failures when Google is down." | Unnecessary for single-purpose monitoring. Adds complexity (state machine, cooldown period). | Simple check + alert pattern. Let monitoring fail and notify. No downstream dependencies to protect. |
+| Real-time Web Dashboard | "Visual interface to see monitoring status." | Massive scope creep. Requires frontend, WebSocket, state management. | Logs + JSON API responses. Keep it simple. Use existing log files. |
 
 ## Feature Dependencies
 
 ```
-[Multi-Instance Configuration]
-    └──requires──> [Instance Name Validation]
-    └──requires──> [Port Detection per Instance]
+HTTP API Service
+    └──requires──> Bearer Token Authentication
+    └──requires──> JSON Response Format
+    └──requires──> Configuration (YAML)
+    └──requires──> Logging
 
-[Stop All Instances]
-    └──requires──> [Instance Configuration]
-    └──requires──> [Process Detection by Port] (exists from v0.1)
+Monitoring Service
+    └──requires──> HTTP GET Health Checks
+    └──requires──> Configuration (YAML)
+    └──requires──> Logging
+    └──requires──> Pushover Integration (for notifications)
 
-[Update Operation]
-    └──requires──> [Stop All Instances]
-    └──requires──> [Update Binary] (exists from v0.1)
+Recovery Notifications
+    └──requires──> Monitoring Service (must track state)
+    └──requires──> Pushover Integration
 
-[Start All Instances]
-    └──requires──> [Update Operation]
-    └──requires──> [Graceful Degradation]
-    └──requires──> [Failure Notification per Instance]
+Graceful Service Shutdown
+    └──requires──> HTTP API Service (must stop accepting requests)
+    └──requires──> Monitoring Service (must stop goroutine)
 
-[Graceful Degradation]
-    └──requires──> [Failure Notification per Instance]
+Health Check Endpoint (/health)
+    └──enhances──> HTTP API Service (allows external monitoring)
 
-[Failure Notification per Instance]
-    └──requires──> [Instance Configuration]
-    └──enhances──> [Pushover Integration] (exists from v0.1)
+Request/Response Logging
+    └──enhances──> HTTP API Service (improves debugging)
 ```
 
 ### Dependency Notes
 
-- **Multi-Instance Configuration requires Instance Name Validation:** Duplicate names would cause ambiguity in logs and notifications. Validate on startup, fail fast with clear error message.
-
-- **Multi-Instance Configuration requires Port Detection per Instance:** Each instance runs on a unique port. Config must specify port per instance for process detection (existing v0.1 logic adapted).
-
-- **Start All Instances requires Graceful Degradation:** If one instance fails to start, continue starting others. Don't abort the entire operation because of a single instance failure.
-
-- **Graceful Degradation requires Failure Notification per Instance:** Users need to know which specific instances failed. Aggregate failures and send single notification with all failed instance names.
-
-- **Failure Notification per Instance enhances Pushover Integration:** Reuse existing Pushover setup from v0.1, extend message format to include instance names.
+- **HTTP API requires Bearer Token Authentication:** Security baseline. API cannot be exposed without access control.
+- **HTTP API requires JSON Response Format:** Structured responses are expected by all API clients. Alternative (plain text) would break integration.
+- **Monitoring Service requires Pushover Integration:** Notifications are core value. Without them, monitoring is just silent logging.
+- **Recovery Notifications requires Monitoring Service:** Must track previous state (failed vs healthy) to detect recovery transition.
+- **Health Check Endpoint enhances HTTP API Service:** Nice-to-have for operational visibility, but API works without it.
+- **Request/Response Logging enhances HTTP API Service:** Improves debugging but increases log volume. Optional optimization.
 
 ## MVP Definition
 
-### Launch With (v0.2)
+### Launch With (v0.3)
 
-Minimum viable product - what's needed to validate multi-instance management.
+Minimum viable product — what's needed to validate the architecture change from cron to HTTP API + monitoring.
 
-- [x] **Instance Configuration (YAML)** - Essential: Define instances as array with name, port, start_command fields
-- [x] **Instance Name Validation** - Essential: Detect duplicates on startup, fail fast
-- [x] **Stop All Instances** - Essential: Iterate config, stop each by port (reuse v0.1 logic)
-- [x] **Start All Instances** - Essential: Iterate config, start each with command, capture errors per instance
-- [x] **Graceful Degradation** - Essential: Continue starting other instances when one fails
-- [x] **Per-Instance Failure Notification** - Essential: Report which instances failed in Pushover message
+- [x] Bearer Token Authentication — Essential for API security. Non-negotiable.
+- [x] JSON Response Format — Standard API expectation. Required for client integration.
+- [x] HTTP Status Codes — Basic HTTP compliance. Cannot skip.
+- [x] Monitoring Service Runs Continuously — Core architecture change. Replaces cron.
+- [x] HTTP GET Health Checks (Google) — Primary monitoring feature. Cannot skip.
+- [x] Failure Notifications — Core value proposition. Must alert on connectivity issues.
+- [x] Service Logging — Required for debugging and operations.
+- [x] Configuration from YAML — Consistency with existing pattern.
+- [x] POST /api/v1/trigger-update Endpoint — Primary API feature. Triggers nanobot update.
 
-### Add After Validation (v0.3)
+### Add After Validation (v0.3.x)
 
-Features to add once multi-instance is working.
+Features to add once core is working in production.
 
-- [ ] **Instance Health Status Tracking** - Track running/stopped/failed state per instance for better logging
-- [ ] **Individual Instance Control** - CLI flags like `-instance <name>` to target specific instance
-- [ ] **Parallel Instance Startup** - Start instances concurrently for faster recovery after update
+- [ ] Recovery Notifications — Trigger: Users ask "how do I know when it's fixed?" HIGH value, LOW complexity.
+- [ ] Graceful Service Shutdown — Trigger: Need to restart service cleanly. Improves ops experience.
+- [ ] Configurable Monitoring Interval — Trigger: Users want faster/slower checks. Common customization request.
+- [ ] Health Check Endpoint (/health) — Trigger: External monitoring systems need to check service health.
 
-### Future Consideration (v2+)
+### Future Consideration (v0.4+)
 
-Features to defer until product has more users and feedback.
+Features to defer until architecture is proven and stable.
 
-- [ ] **Configurable Retry Policy** - Auto-retry failed starts with exponential backoff
-- [ ] **Instance Groups** - Define groups of instances for partial updates (e.g., "frontend" vs "backend" groups)
-- [ ] **Health Check Endpoint** - Expose instance status via HTTP endpoint for external monitoring
+- [ ] Structured JSON Error Responses — Better DX, but requires error code taxonomy.
+- [ ] Request/Response Logging — Audit trail, but increases log volume significantly.
+- [ ] Configurable Monitoring Target — Flexibility, but most users will use default.
 
 ## Feature Prioritization Matrix
 
 | Feature | User Value | Implementation Cost | Priority |
 |---------|------------|---------------------|----------|
-| Instance Configuration (YAML) | HIGH | LOW | P1 |
-| Instance Name Validation | HIGH | LOW | P1 |
-| Stop All Instances | HIGH | LOW | P1 |
-| Start All Instances | HIGH | MEDIUM | P1 |
-| Graceful Degradation | HIGH | MEDIUM | P1 |
-| Per-Instance Failure Notification | HIGH | LOW | P1 |
-| Instance Health Status Tracking | MEDIUM | MEDIUM | P2 |
-| Individual Instance Control | MEDIUM | MEDIUM | P2 |
-| Parallel Instance Startup | LOW | HIGH | P3 |
-| Configurable Retry Policy | MEDIUM | HIGH | P3 |
+| Bearer Token Authentication | HIGH | LOW | P1 |
+| JSON Response Format | HIGH | LOW | P1 |
+| HTTP Status Codes | HIGH | LOW | P1 |
+| Monitoring Service (continuous) | HIGH | LOW | P1 |
+| HTTP GET Health Checks | HIGH | LOW | P1 |
+| Failure Notifications | HIGH | LOW | P1 |
+| POST /api/v1/trigger-update | HIGH | LOW | P1 |
+| Service Logging | HIGH | LOW | P1 |
+| Configuration from YAML | HIGH | LOW | P1 |
+| Recovery Notifications | HIGH | LOW | P2 |
+| Graceful Service Shutdown | MEDIUM | MEDIUM | P2 |
+| Health Check Endpoint | MEDIUM | LOW | P2 |
+| Configurable Monitoring Interval | MEDIUM | LOW | P2 |
+| Structured JSON Error Responses | MEDIUM | MEDIUM | P3 |
+| Request/Response Logging | LOW | MEDIUM | P3 |
+| Configurable Monitoring Target | LOW | LOW | P3 |
 
 **Priority key:**
-- P1: Must have for launch (v0.2)
-- P2: Should have, add when possible (v0.3)
-- P3: Nice to have, future consideration (v2+)
+- P1: Must have for launch (v0.3)
+- P2: Should have, add when possible (v0.3.x)
+- P3: Nice to have, future consideration (v0.4+)
 
 ## Competitor Feature Analysis
 
-| Feature | Docker Compose | Supervisord | Systemd | Our Approach (Nanobot Updater) |
-|---------|----------------|-------------|---------|--------------------------------|
-| **Configuration Format** | YAML services array | INI [program:x] sections | INI unit files with @ templates | YAML instances array (simple, familiar) |
-| **Instance Identification** | Service name (key) | Program name after [program:] | Unit name with @instance | Instance name field in config |
-| **Startup Order** | depends_on + healthcheck | priority field | After=, Wants= | Parallel start (no dependencies needed for stateless agents) |
-| **Failure Handling** | restart: on-failure | autorestart=true | Restart=on-failure | Continue other instances, notify failures |
-| **Status Reporting** | docker-compose ps | supervisorctl status | systemctl status | Logs + Pushover notification |
-| **Duplicate Detection** | YAML parser error | Last definition wins | Multiple units allowed | Explicit validation, fail fast |
+| Feature | Datadog Synthetics | New Relic Synthetics | SigNoz | Our Approach |
+|---------|-------------------|----------------------|--------|--------------|
+| Monitoring Type | Multi-location synthetic checks | Synthetic API tests | Full-stack APM with metrics | Single-location HTTP GET |
+| Authentication | OAuth, API keys, mTLS | API keys, OAuth | OpenTelemetry tokens | Static Bearer token |
+| Alerting | Multi-channel, AI-powered | Threshold-based, integrations | Alert rules, silences | Pushover notifications only |
+| Response Analysis | Body, headers, timing metrics | Body validation, assertions | Metrics + traces + logs | Status code only |
+| Complexity | HIGH (enterprise SaaS) | HIGH (enterprise SaaS) | HIGH (full observability) | LOW (single-purpose tool) |
+| Pricing | Usage-based, expensive | Usage-based, expensive | Free tier + paid | N/A (self-hosted, free) |
 
-### Key Insights from Competitor Analysis
-
-1. **Docker Compose Pattern** (HIGH confidence):
-   - Services defined as YAML map with service names as keys
-   - Healthchecks for startup ordering (`depends_on: condition: service_healthy`)
-   - [Source: Docker Docs](https://docs.docker.com/compose/how-tos/startup-order/)
-
-2. **Supervisord Pattern** (MEDIUM confidence):
-   - Programs defined as `[program:name]` sections
-   - Group multiple programs with `[group:name] programs=prog1,prog2`
-   - Last duplicate definition wins (potential silent failure)
-   - [Source: Supervisord Docs](https://supervisord.org/configuration.html)
-
-3. **Systemd Template Pattern** (HIGH confidence):
-   - Template unit files with `@` symbol (e.g., `service@.service`)
-   - Instantiate multiple: `service@1.service`, `service@2.service`
-   - Use `%I` specifier in unit file to reference instance identifier
-   - [Source: Icinga Blog](https://icinga.com/blog/managing-multiple-service-instances-with-a-systemd-generator/)
-
-4. **Our Approach Rationale**:
-   - Use YAML array (not map) for instances - simpler iteration, explicit ordering
-   - Validate duplicates explicitly (unlike supervisord's silent override)
-   - Skip dependency ordering - nanobot instances are stateless, no interdependencies
-   - Graceful degradation with notification - appropriate for background tool management
-
-## Implementation Notes
-
-### Configuration Structure (YAML)
-
-```yaml
-# v0.1 single instance (backward compatible)
-cron: "0 3 * * *"
-pushover_token: ""
-pushover_user: ""
-
-# v0.2 multi-instance addition
-instances:
-  - name: "bot-alpha"
-    port: 8080
-    start_command: "nanobot serve --port 8080"
-  - name: "bot-beta"
-    port: 8081
-    start_command: "nanobot serve --port 8081 --config beta.yaml"
-```
-
-**Rationale:**
-- Array (not map) preserves explicit ordering
-- Name field required for identification in logs/notifications
-- Port required for process detection (existing v0.1 logic)
-- Start command per instance allows different configurations
-
-### Graceful Degradation Strategy
-
-**Pattern:** Continue on failure, aggregate errors, report at end
-
-```go
-// Pseudocode
-failedInstances := []string{}
-for _, instance := range instances {
-    if err := startInstance(instance); err != nil {
-        log.Errorf("Failed to start %s: %v", instance.Name, err)
-        failedInstances = append(failedInstances, instance.Name)
-    }
-}
-
-if len(failedInstances) > 0 {
-    notifyFailedInstances(failedInstances)
-}
-```
-
-**Notification Format:**
-```
-Nanobot Update Complete - Partial Failure
-
-Failed to start: bot-alpha, bot-gamma
-Successfully started: bot-beta
-
-Check logs for details.
-```
-
-### Instance Name Validation Rules
-
-1. **Required field** - Empty name rejected
-2. **No duplicates** - Case-sensitive comparison
-3. **Valid characters** - Alphanumeric, hyphens, underscores (no spaces or special chars)
-4. **Length limit** - 1-64 characters (reasonable for logging and display)
+**Our Differentiation:**
+- Extreme simplicity: Single endpoint, single monitoring target, single notification channel
+- No external dependencies: No database, no SaaS subscription, no vendor lock-in
+- Tight scope: Does one thing well (connectivity monitoring + update triggering)
+- Low resource usage: Designed for lightweight Windows background service
 
 ## Sources
 
-- [Docker Compose Startup Order](https://docs.docker.com/compose/how-tos/startup-order/) - Healthcheck and dependency patterns (HIGH confidence)
-- [Supervisord Configuration](https://supervisord.org/configuration.html) - Multi-program configuration format (MEDIUM confidence - network error during fetch, relied on search snippets)
-- [Systemd Template Services](https://icinga.com/blog/managing-multiple-service-instances-with-a-systemd-generator/) - Multi-instance management patterns (HIGH confidence)
-- [AWS Well-Architected - Graceful Degradation](https://docs.aws.amazon.com/wellarchitected/latest/reliability-pillar/rel_mitigate_interaction_failure_graceful_degradation.html) - Partial failure handling philosophy (HIGH confidence)
-- [Rolling vs All-at-Once Deployments](https://www.harness.io/blog/difference-between-rolling-and-blue-green-deployments) - Deployment strategy comparison (HIGH confidence)
-- [YAML Duplicate Key Detection](https://stackoverflow.com/questions/47668308/duplicate-key-in-yaml-configuaration-file) - Validation best practices (HIGH confidence)
-- [Server Naming Conventions](https://blog.invgate.com/server-naming-conventions) - Instance identification best practices (MEDIUM confidence)
+**API Monitoring Best Practices:**
+- [SigNoz: The Ultimate Guide to API Monitoring in 2026](https://signoz.io/blog/api-monitoring-complete-guide/) — MEDIUM confidence (verified multiple sources agree on JSON, status codes, auth patterns)
+- [Dotcom-Monitor: API Monitoring Metrics, Best Practices](https://www.dotcom-monitor.com/blog/api-monitoring/) — MEDIUM confidence (industry standard practices)
+
+**Monitoring Anti-Patterns:**
+- [Netdata: Monitor Everything is an Anti-Pattern!](https://www.netdata.cloud/blog/monitor-everything-is-an-anti-pattern/) — HIGH confidence (authoritative source, detailed architectural analysis)
+- [AWS DevOps Guidance: Anti-patterns for Continuous Monitoring](https://docs.aws.amazon.com/wellarchitected/latest/devops-guidance/anti-patterns-for-continuous-monitoring.html) — HIGH confidence (official AWS documentation)
+
+**Alert Fatigue Research:**
+- [OneUptime: Alert Fatigue Is Killing Your On-Call Team](https://oneuptime.com/blog/post/2026-03-05-alert-fatigue-ai-on-call/view) — MEDIUM confidence (industry trend analysis)
+- [LogicMonitor: 2026 Observability & AI Trends](https://www.logicmonitor.com/blog/observability-ai-trends-2026) — MEDIUM confidence (survey data, 36% alert fatigue statistic)
+
+**HTTP Status Codes:**
+- [Dev.to: The Ultimate Guide to HTTP Status Codes in REST APIs](https://dev.to/gianfcop98/the-ultimate-guide-to-http-status-codes-in-rest-apis-40cp) — MEDIUM confidence (verified against official HTTP spec)
+- [Postman: What are HTTP status codes?](https://blog.postman.com/what-are-http-status-codes/) — HIGH confidence (authoritative API tool vendor)
+
+**Golang HTTP API Patterns:**
+- [Encore.dev: How to Build a REST API with Go in 2026](https://encore.dev/articles/build-rest-api-go-2026) — MEDIUM confidence (current best practices)
+- [JetBrains Guide: Authentication for Go Applications](https://www.jetbrains.com/guide/go/tutorials/authentication-for-go-apps/auth/) — HIGH confidence (official JetBrains documentation)
+
+**Confidence Assessment:**
+- Stack research: MEDIUM (relied on web search + industry sources, verified key claims across multiple sources)
+- Features landscape: MEDIUM (based on general API monitoring domain knowledge, specific to our narrow use case)
+- Anti-patterns: HIGH (strong consensus across multiple authoritative sources)
 
 ---
-*Feature research for: Multi-instance nanobot management*
-*Researched: 2026-03-09*
+
+*Feature research for: HTTP API Service + Monitoring Service*
+*Researched: 2026-03-16*
