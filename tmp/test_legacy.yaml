@@ -2,3 +2,6 @@ cron: "*/5 * * * *"
 nanobot:
   port: 18790
   startup_timeout: 30s
+
+api:
+  bearer_token: "this-is-a-secure-token-with-at-least-32-characters"

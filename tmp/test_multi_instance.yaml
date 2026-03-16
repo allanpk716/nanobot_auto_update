@@ -8,3 +8,6 @@ instances:
     port: 18791
     start_command: "echo test-worker"
     startup_timeout: 5s
+
+api:
+  bearer_token: "this-is-a-secure-token-with-at-least-32-characters"
