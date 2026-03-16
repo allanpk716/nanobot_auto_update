@@ -9,12 +9,12 @@ v0.3 里程碑将项目从定时更新工具转变为持续运行的监控服务
 
 ### Configuration
 
-- [ ] **CONF-01**: 用户可以在 YAML 配置文件中配置 Pushover credentials (token/user)，不再依赖环境变量
-- [ ] **CONF-02**: 用户可以在 YAML 配置文件中配置 HTTP API 端口号
-- [ ] **CONF-03**: 用户可以在 YAML 配置文件中配置 Bearer Token (API 认证)
-- [ ] **CONF-04**: 用户可以在 YAML 配置文件中配置 Google 监控间隔时间
-- [ ] **CONF-05**: 用户可以在 YAML 配置文件中配置 HTTP 请求超时时间
-- [ ] **CONF-06**: 系统在启动时验证所有必需配置项，缺失或无效配置时拒绝启动并返回明确错误
+- [x] **CONF-01**: 用户可以在 YAML 配置文件中配置 Pushover credentials (token/user)，不再依赖环境变量
+- [x] **CONF-02**: 用户可以在 YAML 配置文件中配置 HTTP API 端口号
+- [x] **CONF-03**: 用户可以在 YAML 配置文件中配置 Bearer Token (API 认证)
+- [x] **CONF-04**: 用户可以在 YAML 配置文件中配置 Google 监控间隔时间
+- [x] **CONF-05**: 用户可以在 YAML 配置文件中配置 HTTP 请求超时时间
+- [x] **CONF-06**: 系统在启动时验证所有必需配置项，缺失或无效配置时拒绝启动并返回明确错误
 
 ### HTTP API Service
 
@@ -52,7 +52,7 @@ v0.3 里程碑将项目从定时更新工具转变为持续运行的监控服务
 
 - [ ] **SEC-01**: 系统使用常量时间比较验证 Bearer Token，防止时序攻击
 - [ ] **SEC-02**: 系统不在日志中记录完整的 Bearer Token
-- [ ] **SEC-03**: 系统在启动时验证 Bearer Token 长度至少 32 字符
+- [x] **SEC-03**: 系统在启动时验证 Bearer Token 长度至少 32 字符
 
 ## v0.4 Requirements
 
@@ -94,13 +94,13 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| CONF-01 | Phase 11 | Pending |
-| CONF-02 | Phase 11 | Pending |
-| CONF-03 | Phase 11 | Pending |
-| CONF-04 | Phase 11 | Pending |
-| CONF-05 | Phase 11 | Pending |
-| CONF-06 | Phase 11 | Pending |
-| SEC-03 | Phase 11 | Pending |
+| CONF-01 | Phase 11 | Complete |
+| CONF-02 | Phase 11 | Complete |
+| CONF-03 | Phase 11 | Complete |
+| CONF-04 | Phase 11 | Complete |
+| CONF-05 | Phase 11 | Complete |
+| CONF-06 | Phase 11 | Complete |
+| SEC-03 | Phase 11 | Complete |
 | MON-01 | Phase 12 | Pending |
 | MON-04 | Phase 12 | Pending |
 | MON-05 | Phase 12 | Pending |
