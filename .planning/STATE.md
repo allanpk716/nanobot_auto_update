@@ -42,10 +42,10 @@ See: .planning/PROJECT.md (updated 2026-03-16)
 
 ## Current Position
 
-**Phase:** 11 - Configuration Extension
-**Plan:** 01a complete (Wave 0 test scaffolding)
-**Status:** Ready to plan
-**Last activity:** 2026-03-16 — Completed 11-01a test scaffolding
+**Phase:** Not started (defining requirements)
+**Plan:** —
+**Status:** Defining requirements for v0.4
+**Last activity:** 2026-03-16 — Milestone v0.4 started
 
 **Progress:**
 [██████████] 100%

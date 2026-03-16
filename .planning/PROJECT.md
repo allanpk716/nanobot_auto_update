@@ -136,16 +136,17 @@ instances:
 
 ---
 
-## Current Milestone: v0.3 监控服务和 HTTP API
+## Current Milestone: v0.4 实时日志查看
 
-**Goal:** 从定时更新工具转变为监控服务 + HTTP API 触发更新模式
+**Goal:** 为 nanobot 实例提供实时日志查看功能，通过 HTTP API 和 Web UI 访问
 
 **Target features:**
-- Pushover 配置从环境变量迁移到配置文件
-- Google 连通性监控 (HTTP GET https://www.google.com)
-- HTTP API 触发更新 (POST /api/v1/trigger-update)
-- 移除 cron 定时更新，改为仅 HTTP API 触发
-- 监控失败/恢复通知机制
+- 捕获 nanobot 进程的 stdout/stderr 输出
+- 内存缓冲，保留最近 5000 行日志
+- Server-Sent Events (SSE) 实时推送日志流
+- 内置 Web UI 页面查看日志
+- 按实例名称选择查看日志
 
 ---
-*Last updated: 2026-03-16 after v0.3 milestone start*
+
+*Last updated: 2026-03-16 after v0.4 milestone start*
