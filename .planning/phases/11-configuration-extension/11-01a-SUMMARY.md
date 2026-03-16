@@ -87,6 +87,14 @@ None - no external service configuration required.
 - Tests define expected validation behavior for CONF-01~06 and SEC-03
 - Wave 0 complete for API and Monitor configs
 
+## Self-Check: PASSED
+
+- [x] `internal/config/api_test.go` - FOUND
+- [x] `internal/config/monitor_test.go` - FOUND
+- [x] Commit `65c6def` - FOUND
+- [x] Commit `7f2ad70` - FOUND
+- [x] All tests pass: `go test -v ./internal/config/`
+
 ---
 *Phase: 11-configuration-extension*
 *Completed: 2026-03-16*
