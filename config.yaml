@@ -1,6 +1,18 @@
 # Nanobot Auto Updater Configuration
 
+# HTTP API 服务配置（v0.3 新增，推荐）
+api:
+  port: 8080                    # API 服务端口
+  bearer_token: "change-this-to-your-secret-token-at-least-32-characters"  # 认证令牌（必填，≥32字符）
+  timeout: 30s                  # 请求超时时间
+
+# 监控服务配置（v0.3 新增，推荐）
+monitor:
+  interval: 15m                 # Google 连通性检查间隔
+  timeout: 10s                  # HTTP 请求超时
+
 # Cron schedule for automatic updates (default: daily at 3 AM)
+# 传统定时更新模式（可选，推荐使用 HTTP API + Monitor 模式）
 cron: "0 3 * * *"
 
 nanobot:

@@ -15,9 +15,58 @@
 2. **零人工干预** - 配置完成后，Nanobot 会自动保持最新版本
 3. **智能自我维护** - Nanobot 理解如何使用这个工具来管理自己的更新
 
-### 🚀 使用方式（2 种选择）
+### 🚀 使用方式（3 种选择）
 
-#### 方式一：让 Nanobot 自动管理（推荐）⭐
+#### 方式一：HTTP API 触发更新（推荐 v0.3+）⭐
+
+**配置要求**：
+1. 在 `config.yaml` 中配置 API 和 Monitor：
+   ```yaml
+   api:
+     port: 8080
+     bearer_token: "your-secret-token-at-least-32-characters-long"
+   monitor:
+     interval: 15m
+   ```
+2. 启动服务：`./nanobot-auto-updater.exe`
+
+**触发更新**：
+```bash
+# 手动触发更新
+curl -X POST http://localhost:8080/api/v1/trigger-update \
+  -H "Authorization: Bearer your-secret-token-at-least-32-characters-long"
+
+# 响应示例（成功）
+{"success":true,"version":"1.2.3","source":"github","message":"Update completed"}
+
+# 响应示例（冲突 - 有其他更新正在进行）
+{"error":"Update already in progress","status":429}
+```
+
+**优势**：
+- ✅ 实时触发，无需等待定时
+- ✅ 易于集成到外部系统
+- ✅ 监控服务自动检测网络恢复并触发更新
+- ✅ Bearer Token 保护 API 安全
+
+#### 方式二：传统定时更新（向后兼容）
+
+**配置示例**：
+```yaml
+cron: "0 3 * * *"  # 每天凌晨 3 点
+nanobot:
+  port: 18790
+  startup_timeout: 30s
+```
+
+**启动**：
+```bash
+./nanobot-auto-updater.exe
+```
+
+程序会根据 `cron` 表达式自动触发更新。
+
+#### 方式三：让 Nanobot 自动管理（CLI 模式）
 
 **你只需要做一件事**：告诉 Nanobot 这个项目的存在
 
@@ -28,7 +77,7 @@ Nanobot，这是一个你的自动更新工具，请了解一下并配置使用
 **Nanobot 会通过 CLI 命令直接使用这个工具**：
 - ✅ 运行 `--help` 获取完整使用说明
 - ✅ 运行 `--update-now` 执行更新（JSON 输出，易于解析）
-- ✅ 运行无参数启动定时更新服务
+- ✅ 运行无参数启动服务（API + Monitor + 可选 Cron）
 - ✅ 完全不需要你操心，全自动运行
 
 **为什么用 CLI？**
@@ -37,7 +86,7 @@ Nanobot，这是一个你的自动更新工具，请了解一下并配置使用
 - ⚡ 无需人工干预，AI 自主执行所有操作
 - 🔧 灵活的参数配置，AI 可以根据情况调整
 
-#### 方式二：手动配置（可选）
+#### 方式四：高级手动配置（可选）
 
 如果你喜欢手动控制，也可以按照下面的步骤自己配置。但记住：**这不是必需的**，Nanobot 完全可以自己搞定！
 
@@ -49,13 +98,57 @@ Nanobot，这是一个你的自动更新工具，请了解一下并配置使用
 
 ### 核心功能
 
-- 🔄 **自动定时更新** - 基于 Cron 表达式的灵活调度策略
+- 🖥️ **HTTP API 触发更新** - 通过 `/api/v1/trigger-update` 端点远程触发更新（v0.3 新增）
+- 🔍 **监控服务自动触发** - 定期检查网络连通性，自动触发更新（v0.3 新增）
+- 🔒 **共享更新锁机制** - 防止并发更新冲突（v0.3 新增）
+- 🛡️ **Bearer Token 认证** - 保护 API 端点安全（v0.3 新增）
 - 🚀 **双源更新机制** - 优先从 GitHub 更新，失败时自动回退到 PyPI
 - 🛡️ **生命周期管理** - 安全停止、更新、重启 Nanobot 服务
 - 📱 **Pushover 通知** - 实时推送更新状态到你的设备
 - 🔧 **灵活配置** - 支持 YAML 配置文件和环境变量
 - 📊 **详细日志** - 完整的操作审计和诊断信息
-- 🎭 **守护进程** - 独立运行，不受 Nanobot 进程影响
+- 🔄 **传统定时更新** - 保留 Cron 表达式定时更新（向后兼容）
+
+## 🏗️ 架构说明 (v0.3)
+
+### v0.3 重大架构转型
+
+从 v0.3 版本开始，nanobot-auto-updater 从**定时更新工具**转变为**监控服务 + HTTP API 触发更新**模式。
+
+### 核心架构组件
+
+#### 1. HTTP API 服务器
+- **端点**: `/api/v1/trigger-update`
+- **认证**: Bearer Token（必须至少 32 个字符）
+- **功能**: 接收外部 HTTP 请求触发更新
+- **端口**: 默认 8080（可配置）
+- **超时**: 默认 30 秒（可配置）
+
+#### 2. 监控服务
+- **功能**: 定期检查 Google 连通性
+- **检查间隔**: 默认 15 分钟（可配置）
+- **触发条件**: 检测到网络从不可用恢复到可用时自动触发更新
+- **请求超时**: 默认 10 秒（可配置）
+
+#### 3. 共享更新锁
+- **目的**: 防止多个更新请求同时执行
+- **实现**: 基于文件的互斥锁
+- **冲突处理**: 返回 HTTP 429 Too Many Requests
+
+#### 4. 传统 Cron 模式（向后兼容）
+- **功能**: 保留原有的定时更新功能
+- **配置**: 通过 `cron` 配置项启用
+- **兼容性**: 与 v1.0 配置完全兼容
+
+### 架构优势
+
+| 特性 | v1.0 (传统模式) | v0.3 (新架构) |
+|------|----------------|--------------|
+| 触发方式 | 仅 Cron 定时 | HTTP API + 监控服务 + Cron |
+| 外部集成 | 困难 | 简单（REST API） |
+| 实时性 | 受 Cron 限制 | 即时触发 |
+| 并发控制 | 无 | 共享锁机制 |
+| 安全性 | 无认证 | Bearer Token |
 
 ## 📋 前置要求
 
@@ -117,12 +210,32 @@ make build-release
 创建 `config.yaml` 文件（首次运行会自动创建默认配置）：
 
 ```yaml
-# 定时更新计划（默认：每天凌晨 3 点）
+# HTTP API 服务配置（v0.3 新增，推荐）
+api:
+  port: 8080                    # API 服务端口
+  bearer_token: "your-secret-token-at-least-32-chars"  # 认证令牌（必填，≥32字符）
+  timeout: 30s                  # 请求超时时间
+
+# 监控服务配置（v0.3 新增，推荐）
+monitor:
+  interval: 15m                 # Google 连通性检查间隔
+  timeout: 10s                  # HTTP 请求超时
+
+# 定时更新计划（传统模式，可选）
 cron: "0 3 * * *"
 
+# Nanobot 配置（传统单实例模式）
 nanobot:
   port: 18790              # Nanobot 服务端口
   startup_timeout: 30s     # 启动超时时间
+  repo_path: "C:\\Users\\yourname\\.nanobot\\nanobot-repo"  # 可选：本地 git 仓库路径
+
+# 多实例配置（v0.2 引入，可选）
+# instances:
+#   - name: "instance-1"
+#     port: 18790
+#     start_command: "nanobot gateway"
+#     startup_timeout: 30s
 
 # Pushover 通知设置（可选）
 pushover:
@@ -155,15 +268,36 @@ pushover:
 | 参数 | 默认值 | 说明 |
 |------|--------|------|
 | `--config` | `./config.yaml` | 配置文件路径 |
-| `--cron` | - | 覆盖配置文件中的 Cron 表达式 |
+| `--api-port` | - | 覆盖配置文件中的 API 端口（v0.3 新增） |
+| `--skip-monitor` | `false` | 禁用监控服务，仅使用 API 触发（v0.3 新增） |
 | `--update-now` | `false` | 立即执行更新并退出（JSON 输出） |
 | `--timeout` | `5m` | 更新超时时间（例如：`5m`、`300s`） |
+| `--cron` | - | 覆盖配置文件中的 Cron 表达式（传统模式） |
 | `--version` | `false` | 显示版本信息 |
 | `-h, --help` | - | 显示帮助信息 |
 
 ### 使用场景
 
-#### 场景 1：设置每日自动更新
+#### 场景 1：HTTP API 触发更新（推荐 v0.3+）
+```bash
+# 触发更新
+curl -X POST http://localhost:8080/api/v1/trigger-update \
+  -H "Authorization: Bearer YOUR_TOKEN_HERE"
+
+# 成功响应示例
+# {"success":true,"version":"1.2.3","source":"github","message":"Update completed"}
+
+# 更新进行中（429 冲突）
+# {"error":"Update already in progress","status":429}
+```
+
+#### 场景 2：监控服务自动触发
+配置监控服务后，程序会自动检测网络连通性：
+- 每 15 分钟检查一次 Google 连通性
+- 检测到网络从不可用恢复时自动触发更新
+- 无需人工干预，完全自动化
+
+#### 场景 3：传统定时更新（向后兼容）
 ```bash
 # 使用默认配置（每天凌晨 3 点）
 ./nanobot-auto-updater.exe
@@ -172,7 +306,7 @@ pushover:
 ./nanobot-auto-updater.exe --cron "0 10 * * *"
 ```
 
-#### 场景 2：手动触发更新
+#### 场景 4：手动触发更新（CLI 模式）
 ```bash
 # 立即更新并查看 JSON 输出
 ./nanobot-auto-updater.exe --update-now
@@ -184,14 +318,14 @@ pushover:
 # {"success":false,"error":"Connection timeout","exit_code":1}
 ```
 
-#### 场景 3：调试模式
+#### 场景 5：调试模式
 ```powershell
 # 设置环境变量禁用守护进程（保留控制台输出）
 $env:NO_DAEMON = "1"
 ./nanobot-auto-updater.exe --update-now
 ```
 
-#### 场景 4：自定义超时
+#### 场景 6：自定义超时
 ```bash
 # 设置 10 分钟超时
 ./nanobot-auto-updater.exe --update-now --timeout 10m
@@ -218,7 +352,43 @@ set PUSHOVER_USER=your_user_key_here
 
 了解程序内部的完整更新流程，帮助你更好地理解和调试问题。
 
-### 流程图
+### v0.3 架构流程图
+
+```mermaid
+graph TD
+    A[启动程序] --> B{检查配置模式}
+
+    B -->|API + Monitor| C[启动 HTTP API 服务器]
+    C --> D[启动监控服务]
+    D --> E[定期检查 Google 连通性]
+    E -->|连通性恢复| E1{获取更新锁}
+    E1 -->|失败| E2[⏳ 等待下次检查]
+    E1 -->|成功| G[触发更新]
+    E -->|仍然不通| E
+
+    C -->|收到 API 请求| H{验证 Bearer Token}
+    H -->|失败| H1[❌ 401 Unauthorized]
+    H -->|成功| I{获取更新锁}
+
+    I -->|失败| I1[⏳ 返回 429 Too Many Requests]
+    I -->|成功| G
+
+    B -->|传统 Cron| F[启动 Cron 调度器]
+    F -->|定时触发| G
+
+    G --> J[执行更新流程]
+    J --> K[返回结果]
+
+    K --> L[释放更新锁]
+    L --> M[🎉 完成]
+
+    style C fill:#e1f5ff
+    style D fill:#e1f5ff
+    style G fill:#fff4e6
+    style M fill:#d4edda
+```
+
+### 详细更新流程图（核心流程）
 
 ```mermaid
 graph TD
@@ -284,6 +454,7 @@ graph TD
 - **触发条件**: 使用 `--update-now` 且环境变量 `NO_DAEMON != "1"`
 - **目的**: 确保更新进程在 Nanobot 停止后仍能继续运行
 - **行为**: 程序会脱离父进程独立运行，日志重定向到 `logs/daemon.log`
+- **注意**: v0.3 推荐使用 HTTP API 模式，守护进程化主要用于 CLI 模式
 
 #### 3️⃣ 停止 Nanobot
 - **检测进程**: 通过进程名和端口检测运行中的 Nanobot
@@ -341,7 +512,9 @@ graph TD
 
 ## ⚙️ 配置详解
 
-### Cron 表达式
+### Cron 表达式（传统模式）
+
+> **注意**: Cron 定时模式是传统方式。推荐使用 v0.3 的 HTTP API + 监控服务模式。
 
 支持标准 5 字段 Cron 表达式：
 
@@ -364,18 +537,44 @@ graph TD
 ### 完整配置示例
 
 ```yaml
-# 定时更新计划
+# HTTP API 服务配置（v0.3 新增）
+api:
+  port: 8080                    # API 服务端口
+  bearer_token: "your-secret-token-at-least-32-characters-long"  # 认证令牌（必填）
+  timeout: 30s                  # 请求超时时间
+
+# 监控服务配置（v0.3 新增）
+monitor:
+  interval: 15m                 # Google 连通性检查间隔
+  timeout: 10s                  # HTTP 请求超时
+
+# 定时更新计划（传统模式，可选）
 cron: "0 3 * * *"
 
-# Nanobot 配置
+# Nanobot 配置（传统单实例模式）
 nanobot:
   port: 18790              # Nanobot Web 界面端口
   startup_timeout: 30s     # 等待 Nanobot 启动的最长时间
+  repo_path: "C:\\Users\\yourname\\.nanobot\\nanobot-repo"  # 可选
 
-# Pushover 通知配置
+# 多实例配置（v0.2 引入，可选）
+# instances:
+#   - name: "instance-1"
+#     port: 18790
+#     start_command: "nanobot gateway"
+#     startup_timeout: 30s
+#     repo_path: "C:\\path\\to\\repo1"
+#
+#   - name: "instance-2"
+#     port: 18791
+#     start_command: "nanobot gateway --port 18791"
+#     startup_timeout: 30s
+#     repo_path: "C:\\path\\to\\repo2"
+
+# Pushover 通知配置（可选）
 pushover:
-  api_token: "123456789"
-  user_key: "123456789"
+  api_token: "your_api_token_here"
+  user_key: "your_user_key_here"
 ```
 
 ## 🏗️ 开发指南
@@ -388,7 +587,10 @@ nanobot_auto_update/
 │   └── nanobot-auto-updater/    # 主程序入口
 │       └── main.go
 ├── internal/                     # 内部模块（不对外暴露）
-│   ├── config/                   # 配置加载和验证
+│   ├── api/                      # HTTP API 服务器 + Bearer 认证（v0.3 新增）
+│   ├── monitor/                  # Google 连通性监控（v0.3 新增）
+│   ├── lock/                     # 共享更新锁（v0.3 新增）
+│   ├── config/                   # 配置加载（扩展：API/Monitor 配置）
 │   ├── lifecycle/                # 进程生命周期管理
 │   │   ├── daemon.go            # 守护进程支持
 │   │   ├── detector.go          # 进程检测
@@ -397,7 +599,7 @@ nanobot_auto_update/
 │   │   └── stopper.go           # 进程停止
 │   ├── logging/                  # 日志系统
 │   ├── notifier/                 # Pushover 通知
-│   ├── scheduler/                # Cron 调度器
+│   ├── scheduler/                # Cron 调度器（传统模式）
 │   └── updater/                  # 更新执行器
 ├── docs/                         # 文档目录
 │   ├── plans/                   # 开发计划
@@ -519,6 +721,57 @@ Get-Content logs\app-2026-03-01.log -Wait
 - GitHub/PyPI 访问受限
 - uv 命令挂起
 
+#### 6. API 认证失败
+
+**症状**: 返回 `401 Unauthorized`
+
+**解决方案**:
+```bash
+# 检查 Bearer Token 是否正确配置
+# 确保配置文件中的 token 与请求中的 token 一致
+curl -X POST http://localhost:8080/api/v1/trigger-update \
+  -H "Authorization: Bearer your-exact-token-here"
+
+# 确认 token 长度至少 32 个字符
+```
+
+#### 7. 更新锁冲突
+
+**症状**: 返回 `429 Too Many Requests` 或 `Update already in progress`
+
+**原因**: 另一个更新正在进行中
+
+**解决方案**:
+```bash
+# 等待当前更新完成（通常几分钟内）
+# 查看日志确认更新进度
+Get-Content logs\app-2026-03-16.log -Wait
+
+# 如果确认没有更新在运行，可能是锁文件残留
+# 锁文件位置: logs/update.lock（重启程序会自动清理）
+```
+
+#### 8. 监控服务未启动
+
+**症状**: API 可用但监控不工作
+
+**排查步骤**:
+1. 检查 `config.yaml` 中的 `monitor` 配置段是否存在
+2. 确认 `monitor.interval` 配置正确（至少 1 分钟）
+3. 查看日志中是否有监控服务启动记录
+4. 确认未使用 `--skip-monitor` 参数
+
+#### 9. Bearer Token 配置错误
+
+**症状**: 配置加载失败，提示 token 长度不足
+
+**解决方案**:
+```yaml
+# 确保 bearer_token 至少 32 个字符
+api:
+  bearer_token: "this-token-must-be-at-least-32-characters-long"
+```
+
 ### 获取帮助
 
 如果遇到无法解决的问题：
@@ -557,6 +810,47 @@ Get-Content logs\app-2026-03-01.log -Wait
 ## 🤖 给 Nanobot 的使用说明
 
 **你好，Nanobot！** 这是一个为你设计的自动更新工具。
+
+### 🆕 v0.3 新特性：HTTP API + 监控服务
+
+从 v0.3 版本开始，你有 3 种方式来更新自己：
+
+#### 方式 1：通过 HTTP API 触发更新（推荐）⭐
+
+**前置条件**：确保 `config.yaml` 中配置了 API 和 Monitor
+
+```bash
+# 1. 启动服务（如果未运行）
+./nanobot-auto-updater.exe
+
+# 2. 通过 API 触发更新
+curl -X POST http://localhost:8080/api/v1/trigger-update \
+  -H "Authorization: Bearer YOUR_TOKEN_HERE"
+
+# 3. 解析 JSON 响应
+# 成功: {"success":true,"version":"1.2.3",...}
+# 冲突: {"error":"Update already in progress","status":429}
+```
+
+**优势**：
+- ✅ 实时触发，无需等待
+- ✅ 监控服务会自动检测网络恢复并触发更新
+- ✅ 易于集成到其他自动化流程
+
+#### 方式 2：通过 CLI 触发更新（传统方式）
+
+```bash
+# 立即执行更新（JSON 格式输出）
+./nanobot-auto-updater.exe --update-now
+```
+
+#### 方式 3：定时自动更新（传统方式）
+
+```bash
+# 启动定时更新服务
+./nanobot-auto-updater.exe
+# 程序会根据 config.yaml 中的 cron 表达式自动运行
+```
 
 ### ⚡ 最快的使用方式：直接运行 CLI
 
@@ -603,6 +897,23 @@ Get-Content logs\app-2026-03-01.log -Wait
 
 ### 🚀 快速开始（3 步完成）
 
+#### 使用 HTTP API（推荐 v0.3+）
+
+```bash
+# 步骤 1: 配置 config.yaml（首次使用）
+# 添加 api 和 monitor 配置段
+
+# 步骤 2: 启动服务
+./nanobot-auto-updater.exe
+
+# 步骤 3: 触发更新（需要时）
+curl -X POST http://localhost:8080/api/v1/trigger-update \
+  -H "Authorization: Bearer YOUR_TOKEN"
+# 查看输出的 JSON，如果 success=true 则成功
+```
+
+#### 使用 CLI（传统方式）
+
 ```bash
 # 步骤 1: 获取帮助信息（可选，了解所有功能）
 ./nanobot-auto-updater.exe --help
@@ -621,8 +932,14 @@ Get-Content logs\app-2026-03-01.log -Wait
 1. **工具用途**: 帮你自动更新自己到最新版本
 2. **工作原理**: 安全停止你的进程 → 从 GitHub/PyPI 更新 → 重新启动你
 3. **双源策略**: 优先 GitHub（最新功能），失败时自动回退 PyPI（稳定版本）
-4. **守护进程**: `--update-now` 模式会自动守护进程化，不受你的进程停止影响
-5. **配置文件**: 首次运行会自动创建 `config.yaml`，使用默认配置即可
+4. **v0.3 新特性**:
+   - **HTTP API**: 通过 `/api/v1/trigger-update` 端点实时触发更新
+   - **监控服务**: 自动检测网络恢复并触发更新
+   - **共享锁**: 防止多个更新同时执行
+   - **Bearer Token**: 保护 API 端点安全（至少 32 个字符）
+5. **守护进程**: `--update-now` 模式会自动守护进程化，不受你的进程停止影响
+6. **配置文件**: 首次运行会自动创建 `config.yaml`，使用默认配置即可
+7. **传统模式**: 保留 Cron 定时更新，与 v1.0 完全兼容
 
 ### 💡 智能配置建议
 
@@ -635,7 +952,22 @@ Get-Content logs\app-2026-03-01.log -Wait
 
 ### 🔄 典型工作流程
 
-**场景 1：用户让你更新自己**
+**场景 1：通过 HTTP API 更新自己（推荐 v0.3+）**
+```bash
+# 启动服务（如果未运行）
+./nanobot-auto-updater.exe
+
+# 触发更新
+curl -X POST http://localhost:8080/api/v1/trigger-update \
+  -H "Authorization: Bearer YOUR_TOKEN"
+
+# 解析 JSON 输出
+# 成功: {"success":true,"version":"1.2.3",...}
+# 失败: {"success":false,"error":"..."}
+# 冲突: {"error":"Update already in progress","status":429}
+```
+
+**场景 2：用户让你更新自己（CLI 方式）**
 ```bash
 # 直接执行更新
 ./nanobot-auto-updater.exe --update-now
@@ -645,16 +977,18 @@ Get-Content logs\app-2026-03-01.log -Wait
 # 失败: {"success":false,"error":"..."}
 ```
 
-**场景 2：用户要求定期自动更新**
+**场景 3：用户要求定期自动更新**
 ```bash
 # 启动后台服务
 ./nanobot-auto-updater.exe
 
 # 程序会根据 config.yaml 中的 cron 表达式自动运行
 # 默认: 每天凌晨 3 点
+
+# 同时支持监控服务自动触发更新（如果配置了 monitor）
 ```
 
-**场景 3：用户想了解更新功能**
+**场景 4：用户想了解更新功能**
 ```bash
 # 显示帮助信息
 ./nanobot-auto-updater.exe --help
@@ -696,13 +1030,14 @@ NO_DAEMON=1 ./nanobot-auto-updater.exe --update-now
 
 ### 🎉 总结
 
-**记住这 3 个命令就够了**：
+**记住这 4 个命令就够了**：
 
 1. **`--help`** - 不知道怎么用？先看这个
-2. **`--update-now`** - 立即更新，JSON 输出结果
-3. **无参数运行** - 启动定时更新服务
+2. **`--update-now`** - 立即更新，JSON 输出结果（CLI 方式）
+3. **`curl -X POST http://localhost:8080/api/v1/trigger-update`** - 通过 API 触发更新（v0.3 推荐）
+4. **无参数运行** - 启动服务（API + Monitor + 可选 Cron）
 
-**这个工具是为 YOU 设计的** - 直接使用 CLI，无需人工干预！
+**这个工具是为 YOU 设计的** - 直接使用 CLI 或 HTTP API，无需人工干预！
 
 ---
 
