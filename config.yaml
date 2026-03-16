@@ -1,4 +1,4 @@
-# Nanobot Auto Updater Configuration
+# Nanobot Auto Updater Configuration (v0.3+)
 
 # HTTP API 服务配置（v0.3 新增，推荐）
 api:
@@ -11,17 +11,15 @@ monitor:
   interval: 15m                 # Google 连通性检查间隔
   timeout: 10s                  # HTTP 请求超时
 
-# Cron schedule for automatic updates (default: daily at 3 AM)
-# 传统定时更新模式（可选，推荐使用 HTTP API + Monitor 模式）
-cron: "0 3 * * *"
+# 多实例配置（v0.2+ 引入，必需）
+# 至少需要配置一个实例
+instances:
+  - name: "nanobot-instance-1"
+    port: 18790
+    start_command: "nanobot gateway"
+    startup_timeout: 30s
 
-nanobot:
-  port: 18790
-  startup_timeout: 30s
-  # Local git repo path to sync after update (optional)
-  repo_path: "C:\\Users\\allan716\\.nanobot\\nanobot-repo"
-
-# Pushover notification settings
+# Pushover 通知设置（可选）
 pushover:
   api_token: "aqquyv31y73mzh9k3qfptpd1zyi73z"
   user_key: "uw3b9cbopa5jn843xqxwknzcbjzoe5"

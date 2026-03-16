@@ -15,18 +15,22 @@
 2. **零人工干预** - 配置完成后，Nanobot 会自动保持最新版本
 3. **智能自我维护** - Nanobot 理解如何使用这个工具来管理自己的更新
 
-### 🚀 使用方式（3 种选择）
+### 🚀 使用方式
 
-#### 方式一：HTTP API 触发更新（推荐 v0.3+）⭐
+**推荐方式：HTTP API + 监控服务（v0.3+）**
 
 **配置要求**：
-1. 在 `config.yaml` 中配置 API 和 Monitor：
+1. 在 `config.yaml` 中配置 API、Monitor 和至少一个实例：
    ```yaml
    api:
      port: 8080
      bearer_token: "your-secret-token-at-least-32-characters-long"
    monitor:
      interval: 15m
+   instances:
+     - name: "nanobot-instance-1"
+       port: 18790
+       start_command: "nanobot gateway"
    ```
 2. 启动服务：`./nanobot-auto-updater.exe`
 
@@ -49,45 +53,6 @@ curl -X POST http://localhost:8080/api/v1/trigger-update \
 - ✅ 监控服务自动检测网络恢复并触发更新
 - ✅ Bearer Token 保护 API 安全
 
-#### 方式二：传统定时更新（向后兼容）
-
-**配置示例**：
-```yaml
-cron: "0 3 * * *"  # 每天凌晨 3 点
-nanobot:
-  port: 18790
-  startup_timeout: 30s
-```
-
-**启动**：
-```bash
-./nanobot-auto-updater.exe
-```
-
-程序会根据 `cron` 表达式自动触发更新。
-
-#### 方式三：让 Nanobot 自动管理（CLI 模式）
-
-**你只需要做一件事**：告诉 Nanobot 这个项目的存在
-
-```
-Nanobot，这是一个你的自动更新工具，请了解一下并配置使用
-```
-
-**Nanobot 会通过 CLI 命令直接使用这个工具**：
-- ✅ 运行 `--help` 获取完整使用说明
-- ✅ 运行 `--update-now` 执行更新（JSON 输出，易于解析）
-- ✅ 运行无参数启动服务（API + Monitor + 可选 Cron）
-- ✅ 完全不需要你操心，全自动运行
-
-**为什么用 CLI？**
-- 📋 AI 可以直接通过 `--help` 获取最新文档
-- 📊 JSON 格式输出，AI 容易解析和理解结果
-- ⚡ 无需人工干预，AI 自主执行所有操作
-- 🔧 灵活的参数配置，AI 可以根据情况调整
-
-#### 方式四：高级手动配置（可选）
-
 如果你喜欢手动控制，也可以按照下面的步骤自己配置。但记住：**这不是必需的**，Nanobot 完全可以自己搞定！
 
 ---
@@ -98,16 +63,11 @@ Nanobot，这是一个你的自动更新工具，请了解一下并配置使用
 
 ### 核心功能
 
-- 🖥️ **HTTP API 触发更新** - 通过 `/api/v1/trigger-update` 端点远程触发更新（v0.3 新增）
-- 🔍 **监控服务自动触发** - 定期检查网络连通性，自动触发更新（v0.3 新增）
-- 🔒 **共享更新锁机制** - 防止并发更新冲突（v0.3 新增）
-- 🛡️ **Bearer Token 认证** - 保护 API 端点安全（v0.3 新增）
 - 🚀 **双源更新机制** - 优先从 GitHub 更新，失败时自动回退到 PyPI
 - 🛡️ **生命周期管理** - 安全停止、更新、重启 Nanobot 服务
 - 📱 **Pushover 通知** - 实时推送更新状态到你的设备
 - 🔧 **灵活配置** - 支持 YAML 配置文件和环境变量
 - 📊 **详细日志** - 完整的操作审计和诊断信息
-- 🔄 **传统定时更新** - 保留 Cron 表达式定时更新（向后兼容）
 
 ## 🏗️ 架构说明 (v0.3)
 
@@ -135,20 +95,15 @@ Nanobot，这是一个你的自动更新工具，请了解一下并配置使用
 - **实现**: 基于文件的互斥锁
 - **冲突处理**: 返回 HTTP 429 Too Many Requests
 
-#### 4. 传统 Cron 模式（向后兼容）
-- **功能**: 保留原有的定时更新功能
-- **配置**: 通过 `cron` 配置项启用
-- **兼容性**: 与 v1.0 配置完全兼容
-
 ### 架构优势
 
-| 特性 | v1.0 (传统模式) | v0.3 (新架构) |
-|------|----------------|--------------|
-| 触发方式 | 仅 Cron 定时 | HTTP API + 监控服务 + Cron |
-| 外部集成 | 困难 | 简单（REST API） |
-| 实时性 | 受 Cron 限制 | 即时触发 |
-| 并发控制 | 无 | 共享锁机制 |
-| 安全性 | 无认证 | Bearer Token |
+| 特性 | v0.3 新架构 |
+|------|------------|
+| 触发方式 | HTTP API + 监控服务 |
+| 外部集成 | 简单（REST API） |
+| 实时性 | 即时触发 |
+| 并发控制 | 共享锁机制 |
+| 安全性 | Bearer Token |
 
 ## 📋 前置要求
 
@@ -161,30 +116,25 @@ Nanobot，这是一个你的自动更新工具，请了解一下并配置使用
 
 ## 🚀 快速开始
 
-### 🤖 方式一：Nanobot 自动管理（推荐）⭐
+### 📋 巻加配置（首次使用）
 
-**只需要一句话**：
+**步骤 1**: 配置 `config.yaml`
 
+首次运行会自动创建默认配置文件，你需要编辑它，至少添加一个实例配置：
+
+**步骤 2**: 启动服务
+
+```bash
+./nanobot-auto-updater.exe
 ```
-Nanobot，这是一个你的自动更新工具：https://github.com/HQGroup/nanobot-auto-updater
-请配置并使用它来保持你的版本最新
+
+**步骤 3**: 触发更新（需要时）
+
+```bash
+curl -X POST http://localhost:8080/api/v1/trigger-update \
+  -H "Authorization: Bearer YOUR_TOKEN"
+# 查看输出的 JSON，如果 success=true 则成功
 ```
-
-**就这么简单！** Nanobot 会通过 CLI 自动完成：
-
-1. 运行 `./nanobot-auto-updater.exe --help` 了解所有功能
-2. 运行 `./nanobot-auto-updater.exe --update-now` 测试更新
-3. 解析 JSON 输出判断成功或失败
-4. 运行 `./nanobot-auto-updater.exe` 启动定时更新
-5. 完全自动运行，无需任何人工操作
-
-### 🔧 方式二：手动配置（可选）
-
-如果你喜欢完全控制，可以手动配置。以下是详细步骤：
-
-#### 1. 获取程序
-
-#### 1. 获取程序
 
 **选项 A：下载预编译版本（最简单）**
 

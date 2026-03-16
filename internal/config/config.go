@@ -5,16 +5,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/robfig/cron/v3"
 	"github.com/spf13/viper"
 )
-
-// NanobotConfig holds configuration for nanobot lifecycle management.
-type NanobotConfig struct {
-	Port           uint32        `yaml:"port" mapstructure:"port"`
-	StartupTimeout time.Duration `yaml:"startup_timeout" mapstructure:"startup_timeout"`
-	RepoPath       string        `yaml:"repo_path" mapstructure:"repo_path"`
-}
 
 // PushoverConfig holds configuration for Pushover notifications.
 type PushoverConfig struct {
@@ -24,8 +16,6 @@ type PushoverConfig struct {
 
 // Config holds the main application configuration.
 type Config struct {
-	Cron      string           `yaml:"cron" mapstructure:"cron"`
-	Nanobot   NanobotConfig    `yaml:"nanobot" mapstructure:"nanobot"`
 	Instances []InstanceConfig `yaml:"instances" mapstructure:"instances"`
 	Pushover  PushoverConfig   `yaml:"pushover" mapstructure:"pushover"`
 	API       APIConfig        `yaml:"api" mapstructure:"api"`         // HTTP API server config (CONF-02, CONF-03)
@@ -34,9 +24,7 @@ type Config struct {
 
 // defaults sets the default values for the configuration.
 func (c *Config) defaults() {
-	c.Cron = "0 3 * * *"
-	// Note: Nanobot defaults are set in Validate() only when using legacy mode
-	c.Nanobot.RepoPath = ""
+	// Pushover defaults (optional)
 	c.Pushover.ApiToken = ""
 	c.Pushover.UserKey = ""
 
@@ -48,28 +36,6 @@ func (c *Config) defaults() {
 	// Monitor defaults (CONF-04, CONF-05)
 	c.Monitor.Interval = 15 * time.Minute
 	c.Monitor.Timeout = 10 * time.Second
-}
-
-// Validate validates the NanobotConfig values.
-func (nc *NanobotConfig) Validate() error {
-	if nc.Port == 0 || nc.Port > 65535 {
-		return fmt.Errorf("port must be > 0 and <= 65535, got %d", nc.Port)
-	}
-	if nc.StartupTimeout < 5*time.Second {
-		return fmt.Errorf("startup_timeout must be at least 5 seconds, got %v", nc.StartupTimeout)
-	}
-	return nil
-}
-
-// ValidateModeCompatibility checks if both legacy and new modes are configured.
-func (c *Config) ValidateModeCompatibility() error {
-	hasLegacyMode := c.Nanobot.Port != 0
-	hasNewMode := len(c.Instances) > 0
-
-	if hasLegacyMode && hasNewMode {
-		return fmt.Errorf("配置错误: 不能同时使用 'nanobot' section 和 'instances' 数组,请选择其中一种配置模式")
-	}
-	return nil
 }
 
 // validateUniqueNames checks for duplicate instance names.
@@ -102,40 +68,23 @@ func validateUniquePorts(instances []InstanceConfig) error {
 func (c *Config) Validate() error {
 	var errs []error
 
-	// Validate cron expression
-	if err := ValidateCron(c.Cron); err != nil {
-		errs = append(errs, err)
-	}
-
-	// Check mode compatibility
-	if err := c.ValidateModeCompatibility(); err != nil {
-		errs = append(errs, err)
-	}
-
-	// Validate based on mode
-	if len(c.Instances) > 0 {
-		// Multi-instance mode
+	// Validate instances (required)
+	if len(c.Instances) == 0 {
+		errs = append(errs, fmt.Errorf("at least one instance must be configured in 'instances' array"))
+	} else {
+		// Validate unique names
 		if err := validateUniqueNames(c.Instances); err != nil {
 			errs = append(errs, err)
 		}
+		// Validate unique ports
 		if err := validateUniquePorts(c.Instances); err != nil {
 			errs = append(errs, err)
 		}
+		// Validate each instance
 		for i := range c.Instances {
 			if err := c.Instances[i].Validate(); err != nil {
 				errs = append(errs, err)
 			}
-		}
-	} else {
-		// Legacy mode - set defaults for Nanobot if needed
-		if c.Nanobot.Port == 0 {
-			c.Nanobot.Port = 18790
-		}
-		if c.Nanobot.StartupTimeout == 0 {
-			c.Nanobot.StartupTimeout = 30 * time.Second
-		}
-		if err := c.Nanobot.Validate(); err != nil {
-			errs = append(errs, err)
 		}
 	}
 
@@ -159,16 +108,6 @@ func New() *Config {
 	return c
 }
 
-// ValidateCron validates a cron expression.
-func ValidateCron(expr string) error {
-	parser := cron.NewParser(cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow)
-	_, err := parser.Parse(expr)
-	if err != nil {
-		return fmt.Errorf("invalid cron expression %q: %w", expr, err)
-	}
-	return nil
-}
-
 var (
 	// ErrHelpRequested is returned when help flag is requested.
 	ErrHelpRequested = errors.New("help requested")
@@ -187,9 +126,7 @@ func Load(configPath string) (*Config, error) {
 	cfg := New()
 
 	// Set defaults in viper (for fields not in file)
-	v.SetDefault("cron", cfg.Cron)
-	// Note: Nanobot defaults are NOT set here to allow mode detection in Validate()
-	v.SetDefault("nanobot.repo_path", cfg.Nanobot.RepoPath)
+	// Pushover defaults (optional)
 	v.SetDefault("pushover.api_token", cfg.Pushover.ApiToken)
 	v.SetDefault("pushover.user_key", cfg.Pushover.UserKey)
 

@@ -1,55 +1,22 @@
 package main
 
 import (
-	"context"
-	"encoding/json"
 	"fmt"
 	"log/slog"
 	"os"
-	"os/signal"
-	"syscall"
-	"time"
 
 	flag "github.com/spf13/pflag"
 
 	"github.com/HQGroup/nanobot-auto-updater/internal/config"
-	"github.com/HQGroup/nanobot-auto-updater/internal/instance"
-	"github.com/HQGroup/nanobot-auto-updater/internal/lifecycle"
 	"github.com/HQGroup/nanobot-auto-updater/internal/logging"
-	"github.com/HQGroup/nanobot-auto-updater/internal/notifier"
-	"github.com/HQGroup/nanobot-auto-updater/internal/scheduler"
-	"github.com/HQGroup/nanobot-auto-updater/internal/updater"
 )
 
 // Version is set via ldflags at build time.
 var Version = "dev"
 
-// UpdateNowResult represents the JSON output for --update-now mode
-type UpdateNowResult struct {
-	Success  bool   `json:"success"`
-	Version  string `json:"version,omitempty"`
-	Source   string `json:"source,omitempty"`
-	Message  string `json:"message,omitempty"`
-	Error    string `json:"error,omitempty"`
-	ExitCode int    `json:"exit_code,omitempty"`
-}
-
-// outputJSON writes the result as JSON to stdout (last line)
-func outputJSON(result UpdateNowResult) {
-	output, err := json.Marshal(result)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to encode JSON: %v\n", err)
-		return
-	}
-	fmt.Println(string(output))
-}
-
 func main() {
 	// Define CLI flags using pflag
 	configFile := flag.String("config", "./config.yaml", "Path to config file")
-	cronExpr := flag.String("cron", "", "Cron expression (overrides config file)")
-	updateNow := flag.Bool("update-now", false, "Execute immediate update and exit with JSON output")
-	timeout := flag.Duration("timeout", 5*time.Minute, "Update timeout duration (e.g., '5m', '300s')")
 	showVersion := flag.Bool("version", false, "Show version information")
 	flag.BoolP("help", "h", false, "Show help")
 
@@ -66,9 +33,9 @@ func main() {
 		fmt.Println("Usage: nanobot-auto-updater [options]")
 		fmt.Println("\nOptions:")
 		flag.PrintDefaults()
-		fmt.Println("\nJSON Output Format (--update-now):")
-		fmt.Println("  Success: {\"success\": true, \"version\": \"X.Y.Z\", \"source\": \"github|pypi\", \"message\": \"Update completed\"}")
-		fmt.Println("  Failure: {\"success\": false, \"error\": \"description\", \"exit_code\": 1}")
+		fmt.Println("\nArchitecture: v0.3 HTTP API + Monitor Service")
+		fmt.Println("  HTTP API: http://localhost:8080/api/v1/trigger-update")
+		fmt.Println("  Authentication: Bearer Token (configured in config.yaml)")
 		os.Exit(0)
 	}
 
@@ -87,28 +54,6 @@ func main() {
 		fmt.Fprintf(os.Stderr, "  - pushover.api_token (optional, for notifications)\n")
 		fmt.Fprintf(os.Stderr, "  - pushover.user_key (optional, for notifications)\n")
 		os.Exit(1)
-	}
-
-	// Override cron from CLI flag if provided
-	if *cronExpr != "" {
-		if err := config.ValidateCron(*cronExpr); err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-			os.Exit(1)
-		}
-		cfg.Cron = *cronExpr
-	}
-
-	// Daemonize if running in --update-now mode (called by nanobot)
-	// This ensures the updater process survives when nanobot is terminated
-	// Can be disabled with NO_DAEMON=1 environment variable for debugging
-	if *updateNow && os.Getenv("NO_DAEMON") != "1" {
-		if daemonized, err := lifecycle.MakeDaemon(); err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: failed to daemonize: %v\n", err)
-			// Continue anyway - may work if parent doesn't exit immediately
-		} else if daemonized {
-			// This process will exit, daemon has been started
-			return
-		}
 	}
 
 	// Create logs directory
@@ -132,332 +77,15 @@ func main() {
 		"bearer_token_length", len(cfg.API.BearerToken),
 	)
 
-	// Check UV installation
-	logger.Info("Checking uv installation")
-	if err := updater.CheckUvInstalled(); err != nil {
-		logger.Error("uv installation check failed", "error", err.Error())
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-		os.Exit(1)
-	}
-	logger.Info("uv is installed and available")
-
-	// Initialize notifier with config
-	notifCfg := notifier.Config{
-		ApiToken: cfg.Pushover.ApiToken,
-		UserKey:  cfg.Pushover.UserKey,
-	}
-	notif := notifier.NewWithConfig(notifCfg, logger)
-
-	logger.Info("Application starting",
+	slog.Info("Application starting",
 		"version", Version,
 		"config", *configFile,
-		"cron", cfg.Cron,
-		"update_now", *updateNow,
-		"timeout", timeout.String(),
 	)
 
-	// 模式检测 (配置验证已确保不会同时存在两种模式)
-	useMultiInstance := len(cfg.Instances) > 0
+	// TODO: Start HTTP API server and Monitor service
+	// This will be implemented in Phase 12
+	slog.Info("HTTP API server and Monitor service will be started here (Phase 12)")
 
-	if useMultiInstance {
-		logger.Info("Running in multi-instance mode", "instance_count", len(cfg.Instances))
-
-		// Output configuration details for each instance
-		for i, inst := range cfg.Instances {
-			logger.Info("Instance configuration",
-				"instance_number", i+1,
-				"name", inst.Name,
-				"port", inst.Port,
-				"start_command", inst.StartCommand)
-		}
-	} else {
-		logger.Info("Running in legacy single-instance mode", "port", cfg.Nanobot.Port)
-	}
-
-	if *updateNow {
-		logger.Info("Executing immediate update", "timeout", timeout.String())
-
-		// Create context with configurable timeout
-		ctx, cancel := context.WithTimeout(context.Background(), *timeout)
-		defer cancel()
-
-		// 多实例模式
-		if useMultiInstance {
-			manager := instance.NewInstanceManager(cfg, logger)
-
-			updateResult, err := manager.UpdateAll(ctx)
-
-			// 双层错误检查
-			if err != nil {
-				// UV 更新失败 (严重错误)
-				logger.Error("Multi-instance update failed", "error", err.Error())
-
-				notif.NotifyFailure("Multi-Instance Update", err)
-
-				outputResult := UpdateNowResult{
-					Success:  false,
-					Error:    err.Error(),
-					ExitCode: 1,
-				}
-				outputJSON(outputResult)
-				os.Exit(1)
-			}
-
-			// 实例失败 (优雅降级)
-			if updateResult.HasErrors() {
-				logger.Warn("Multi-instance update completed with errors",
-					"stopped_success", len(updateResult.Stopped),
-					"started_success", len(updateResult.Started),
-					"stop_failed", len(updateResult.StopFailed),
-					"start_failed", len(updateResult.StartFailed))
-
-				notif.NotifyUpdateResult(updateResult)
-
-				outputResult := UpdateNowResult{
-					Success:  false,
-					Error:    fmt.Sprintf("Update completed with %d instance failures", len(updateResult.StopFailed)+len(updateResult.StartFailed)),
-					ExitCode: 1,
-				}
-				outputJSON(outputResult)
-				os.Exit(1)
-			}
-
-			// 完全成功
-			logger.Info("Multi-instance update completed successfully",
-				"stopped_count", len(updateResult.Stopped),
-				"started_count", len(updateResult.Started))
-
-			outputResult := UpdateNowResult{
-				Success: true,
-				Message: fmt.Sprintf("Update completed successfully for %d instances", len(updateResult.Stopped)),
-			}
-			outputJSON(outputResult)
-			os.Exit(0)
-		}
-
-		// Legacy 单实例模式
-		// Initialize lifecycle manager
-		lifecycleCfg := lifecycle.Config{
-			Port:           cfg.Nanobot.Port,
-			StartupTimeout: cfg.Nanobot.StartupTimeout,
-		}
-		lifecycleMgr := lifecycle.NewManager(lifecycleCfg, logger)
-
-		result := UpdateNowResult{}
-
-		// Stop nanobot before update
-		if err := lifecycleMgr.StopForUpdate(ctx); err != nil {
-			logger.Error("Failed to stop nanobot", "error", err.Error())
-
-			// Send failure notification
-			notif.NotifyFailure("Stop nanobot", err)
-
-			result = UpdateNowResult{
-				Success:  false,
-				Error:    fmt.Sprintf("Failed to stop nanobot: %s", err.Error()),
-				ExitCode: 1,
-			}
-			outputJSON(result)
-			os.Exit(1)
-		}
-
-		// Execute update
-		u := updater.NewUpdater(logger)
-		u.SetRepoPath(cfg.Nanobot.RepoPath)
-
-		// Log context before update
-		logger.Info("Update context",
-			"working_dir", getWorkingDir(),
-			"timeout", timeout.String(),
-			"daemon_env", os.Getenv("NANOBOT_UPDATER_DAEMON"),
-			"no_daemon_env", os.Getenv("NO_DAEMON"),
-			"uv_version", updater.GetUvVersion(),
-			"pid", os.Getpid())
-
-		updateResult, err := u.Update(ctx)
-		if err != nil {
-			logger.Error("Update failed",
-				"result", updateResult,
-				"error", err.Error(),
-				"timeout", timeout.String(),
-				"daemon_mode", os.Getenv("NANOBOT_UPDATER_DAEMON"),
-				"no_daemon", os.Getenv("NO_DAEMON"),
-				"working_dir", getWorkingDir(),
-				"uv_version", updater.GetUvVersion())
-
-			// Send failure notification
-			notif.NotifyFailure("Update", err)
-
-			result = UpdateNowResult{
-				Success:  false,
-				Error:    err.Error(),
-				ExitCode: 1,
-			}
-			outputJSON(result)
-			os.Exit(1)
-		}
-
-		// Start nanobot after successful update
-		if err := lifecycleMgr.StartAfterUpdate(ctx); err != nil {
-			// Log warning but don't fail - update was successful
-			logger.Warn("Failed to start nanobot after update", "error", err.Error())
-		}
-
-		// Sync local git repo after successful update
-		if err := u.SyncRepo(ctx); err != nil {
-			// Log warning but don't fail - update was successful
-			logger.Warn("Failed to sync local repo", "error", err.Error())
-		}
-
-		result = UpdateNowResult{
-			Success: true,
-			Source:  string(updateResult),
-			Message: "Update completed",
-		}
-		logger.Info("Update completed", "result", updateResult)
-
-		// Send success notification
-		notif.NotifySuccess("Update", fmt.Sprintf("Source: %s\nVersion may have changed.", updateResult))
-
-		outputJSON(result)
-		os.Exit(0)
-	}
-
-	// Initialize scheduler with overlap prevention
-	sched := scheduler.New(logger)
-
-	// Register the update job
-	err = sched.AddJob(cfg.Cron, func() {
-		logger.Info("Starting scheduled update job")
-
-		// 多实例模式
-		if useMultiInstance {
-			manager := instance.NewInstanceManager(cfg, logger)
-
-			result, err := manager.UpdateAll(context.Background())
-
-			// 双层错误检查
-			if err != nil {
-				// UV 更新失败 (严重错误)
-				logger.Error("Scheduled multi-instance update failed",
-					"error", err.Error())
-
-				if notifyErr := notif.NotifyFailure("Scheduled Multi-Instance Update", err); notifyErr != nil {
-					logger.Error("Failed to send failure notification", "error", notifyErr.Error())
-				}
-				return
-			}
-
-			// 实例失败 (优雅降级)
-			if result.HasErrors() {
-				logger.Error("Scheduled multi-instance update completed with errors",
-					"stopped_success", len(result.Stopped),
-					"started_success", len(result.Started),
-					"stop_failed", len(result.StopFailed),
-					"start_failed", len(result.StartFailed))
-
-				if notifyErr := notif.NotifyUpdateResult(result); notifyErr != nil {
-					logger.Error("Failed to send update result notification", "error", notifyErr.Error())
-				}
-				return
-			}
-
-			// 完全成功
-			logger.Info("Scheduled multi-instance update completed successfully",
-				"stopped_count", len(result.Stopped),
-				"started_count", len(result.Started))
-			return
-		}
-
-		// Legacy 单实例模式
-		// Create updater instance
-		u := updater.NewUpdater(logger)
-		u.SetRepoPath(cfg.Nanobot.RepoPath)
-
-		result, err := u.Update(context.Background())
-		if err != nil {
-			logger.Error("Scheduled update failed",
-				"result", result,
-				"error", err.Error())
-
-			// Send failure notification
-			if notifyErr := notif.NotifyFailure("Scheduled Update", err); notifyErr != nil {
-				logger.Error("Failed to send failure notification", "error", notifyErr.Error())
-			}
-			return
-		}
-
-		logger.Info("Scheduled update completed successfully", "result", result)
-
-		// Sync local git repo after successful update
-		if err := u.SyncRepo(context.Background()); err != nil {
-			logger.Warn("Failed to sync local repo after scheduled update", "error", err.Error())
-		}
-	})
-	if err != nil {
-		logger.Error("Failed to register scheduled job", "error", err.Error())
-		os.Exit(1)
-	}
-
-	// Set up signal handling for graceful shutdown
-	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
-
-	// Start the scheduler
-	sched.Start()
-	logger.Info("Scheduler started", "cron", cfg.Cron, "pid", os.Getpid())
-
-	// Wait for shutdown signal
-	sig := <-sigChan
-	logger.Info("Shutdown signal received", "signal", sig.String())
-
-	// Gracefully stop scheduler
-	sched.Stop()
-	logger.Info("Application shutdown complete")
-}
-
-// Manual Test Cases:
-//
-// 1. Test default config loading:
-//    go run ./cmd/nanobot-auto-updater
-//    Should log: cron="0 3 * * *", config="./config.yaml"
-//
-// 2. Test --cron override:
-//    go run ./cmd/nanobot-auto-updater -cron "*/5 * * * *"
-//    Should log: cron="*/5 * * * *" (overridden)
-//
-// 3. Test --config flag:
-//    Create test config with cron: "0 5 * * *"
-//    go run ./cmd/nanobot-auto-updater -config test-config.yaml
-//    Should log: cron="0 5 * * *" (from test config)
-//
-// 4. Test --update-now flag:
-//    go run ./cmd/nanobot-auto-updater --update-now
-//    Should execute update and output JSON to stdout
-//
-// 5. Test --timeout flag:
-//    go run ./cmd/nanobot-auto-updater --update-now --timeout 2m
-//    Should use 2 minute timeout for update
-//
-// 6. Test invalid cron:
-//    go run ./cmd/nanobot-auto-updater -cron "invalid" 2>&1
-//    Should exit with error about invalid cron expression
-//
-// 7. Test -h/--help:
-//    go run ./cmd/nanobot-auto-updater -h
-//    go run ./cmd/nanobot-auto-updater --help
-//    Both should show usage information including JSON output format
-//
-// 8. Test --version:
-//    go run ./cmd/nanobot-auto-updater --version
-//    Should show version and exit immediately
-//
-
-// getWorkingDir returns the current working directory for logging
-func getWorkingDir() string {
-	dir, err := os.Getwd()
-	if err != nil {
-		return fmt.Sprintf("error: %v", err)
-	}
-	return dir
+	// Keep the application running
+	select {}
 }

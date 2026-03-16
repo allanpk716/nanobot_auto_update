@@ -5,82 +5,6 @@ import (
 	"time"
 )
 
-func TestValidateModeCompatibility(t *testing.T) {
-	tests := []struct {
-		name        string
-		config      Config
-		expectError bool
-		errorMsg    string
-	}{
-		{
-			name: "only nanobot config (legacy mode)",
-			config: Config{
-				Cron: "0 3 * * *",
-				Nanobot: NanobotConfig{
-					Port:           18790,
-					StartupTimeout: 30 * time.Second,
-				},
-			},
-			expectError: false,
-		},
-		{
-			name: "only instances config (new mode)",
-			config: Config{
-				Cron: "0 3 * * *",
-				Instances: []InstanceConfig{
-					{
-						Name:           "instance1",
-						Port:           18790,
-						StartCommand:   "nanobot.exe",
-						StartupTimeout: 30 * time.Second,
-					},
-				},
-			},
-			expectError: false,
-		},
-		{
-			name: "both nanobot and instances (conflict)",
-			config: Config{
-				Cron: "0 3 * * *",
-				Nanobot: NanobotConfig{
-					Port:           18790,
-					StartupTimeout: 30 * time.Second,
-				},
-				Instances: []InstanceConfig{
-					{
-						Name:           "instance1",
-						Port:           18791,
-						StartCommand:   "nanobot.exe",
-						StartupTimeout: 30 * time.Second,
-					},
-				},
-			},
-			expectError: true,
-			errorMsg:    "不能同时使用 'nanobot' section 和 'instances' 数组",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			err := tt.config.ValidateModeCompatibility()
-
-			if tt.expectError {
-				if err == nil {
-					t.Errorf("expected error containing %q, got nil", tt.errorMsg)
-					return
-				}
-				if tt.errorMsg != "" && !contains(err.Error(), tt.errorMsg) {
-					t.Errorf("expected error containing %q, got %q", tt.errorMsg, err.Error())
-				}
-			} else {
-				if err != nil {
-					t.Errorf("expected no error, got %v", err)
-				}
-			}
-		})
-	}
-}
-
 func TestValidateUniqueNames(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -203,15 +127,14 @@ func TestValidateUniquePorts(t *testing.T) {
 
 func TestConfigValidateWithInstances(t *testing.T) {
 	tests := []struct {
-		name        string
-		config      Config
-		expectError bool
+		name          string
+		config        Config
+		expectError   bool
 		errorContains []string
 	}{
 		{
 			name: "valid multi-instance config",
 			config: Config{
-				Cron: "0 3 * * *",
 				Instances: []InstanceConfig{
 					{
 						Name:           "instance1",
@@ -239,13 +162,8 @@ func TestConfigValidateWithInstances(t *testing.T) {
 			expectError: false,
 		},
 		{
-			name: "legacy config without instances",
+			name: "no instances (error)",
 			config: Config{
-				Cron: "0 3 * * *",
-				Nanobot: NanobotConfig{
-					Port:           18790,
-					StartupTimeout: 30 * time.Second,
-				},
 				API: APIConfig{
 					Port:        8080,
 					BearerToken: "this-is-a-secure-token-with-at-least-32-characters",
@@ -256,12 +174,12 @@ func TestConfigValidateWithInstances(t *testing.T) {
 					Timeout:  10 * time.Second,
 				},
 			},
-			expectError: false,
+			expectError:   true,
+			errorContains: []string{"at least one instance"},
 		},
 		{
 			name: "duplicate names and ports",
 			config: Config{
-				Cron: "0 3 * * *",
 				Instances: []InstanceConfig{
 					{
 						Name:           "instance1",
@@ -292,7 +210,6 @@ func TestConfigValidateWithInstances(t *testing.T) {
 		{
 			name: "invalid instance config",
 			config: Config{
-				Cron: "0 3 * * *",
 				Instances: []InstanceConfig{
 					{
 						Name:           "",
