@@ -1,6 +1,6 @@
 ---
 phase: 11-configuration-extension
-plan: 01
+plan: 01a
 type: tdd
 wave: 0
 depends_on: []
@@ -10,22 +10,16 @@ requirements: [CONF-01, CONF-02, CONF-03, CONF-04, CONF-05, CONF-06, SEC-03]
 user_setup: []
 must_haves:
   truths:
-    - "所有新增配置项有完整的单元测试覆盖"
-    - "测试数据文件包含有效和无效配置样本"
-    - "测试可以独立运行，不依赖外部资源"
+    - "所有新增配置项有完整的单元测试脚手架"
+    - "测试存根可以独立运行，不依赖外部资源"
+    - "测试存根遵循现有项目测试模式"
   artifacts:
     - path: "internal/config/api_test.go"
-      provides: "APIConfig 验证测试"
+      provides: "APIConfig 验证测试脚手架"
       min_lines: 50
     - path: "internal/config/monitor_test.go"
-      provides: "MonitorConfig 验证测试"
+      provides: "MonitorConfig 验证测试脚手架"
       min_lines: 50
-    - path: "testutil/testdata/config/api_valid.yaml"
-      provides: "有效 API 配置测试数据"
-    - path: "testutil/testdata/config/api_invalid_token.yaml"
-      provides: "Token 过短测试数据"
-    - path: "testutil/testdata/config/monitor_valid.yaml"
-      provides: "有效监控配置测试数据"
   key_links:
     - from: "internal/config/api_test.go"
       to: "internal/config/api.go"
@@ -38,10 +32,10 @@ must_haves:
 ---
 
 <objective>
-创建 Wave 0 测试脚手架，为后续配置验证实现提供测试基础设施
+创建 Wave 0 单元测试脚手架（第一部分），为 APIConfig 和 MonitorConfig 验证提供测试基础设施
 
 Purpose: 确保所有配置验证逻辑有完整的测试覆盖，遵循 TDD 原则
-Output: 测试文件 + 测试数据文件
+Output: 单元测试文件（存根状态）
 </objective>
 
 <execution_context>
@@ -206,168 +200,22 @@ From internal/config/instance_test.go:
   </done>
 </task>
 
-<task type="auto">
-  <name>Task 3: Create test data files for API config</name>
-  <files>testutil/testdata/config/api_valid.yaml, testutil/testdata/config/api_invalid_token.yaml, testutil/testdata/config/api_invalid_port.yaml</files>
-  <read_first>
-    - testutil/testdata/config/instances_valid.yaml (现有测试数据格式)
-    - .planning/phases/11-configuration-extension/11-RESEARCH.md (YAML 格式示例)
-  </read_first>
-  <action>
-    Create three YAML test data files:
-
-    1. testutil/testdata/config/api_valid.yaml:
-    ```yaml
-    cron: "0 3 * * *"
-
-    api:
-      port: 8080
-      bearer_token: "this-is-a-secure-token-with-at-least-32-characters"
-      timeout: "30s"
-    ```
-
-    2. testutil/testdata/config/api_invalid_token.yaml:
-    ```yaml
-    cron: "0 3 * * *"
-
-    api:
-      port: 8080
-      bearer_token: "too-short"  # Only 9 chars, violates SEC-03
-      timeout: "30s"
-    ```
-
-    3. testutil/testdata/config/api_invalid_port.yaml:
-    ```yaml
-    cron: "0 3 * * *"
-
-    api:
-      port: 70000  # Exceeds 65535
-      bearer_token: "this-is-a-secure-token-with-at-least-32-characters"
-      timeout: "30s"
-    ```
-
-    All files should:
-    - Follow existing YAML format from instances_valid.yaml
-    - Include required cron field
-    - Use string format for Duration fields ("30s", "15m")
-  </action>
-  <verify>
-    <automated>ls -l testutil/testdata/config/api_*.yaml | wc -l</automated>
-  </verify>
-  <done>
-    - 3 YAML files created in testutil/testdata/config/
-    - api_valid.yaml contains valid API config
-    - api_invalid_token.yaml contains token with 9 chars (too short)
-    - api_invalid_port.yaml contains port 70000 (out of range)
-    - Files are valid YAML (can be parsed)
-  </done>
-</task>
-
-<task type="auto">
-  <name>Task 4: Create test data files for Monitor config</name>
-  <files>testutil/testdata/config/monitor_valid.yaml, testutil/testdata/config/monitor_invalid_interval.yaml</files>
-  <read_first>
-    - testutil/testdata/config/api_valid.yaml (刚创建的测试数据格式)
-    - .planning/phases/11-configuration-extension/11-RESEARCH.md (Monitor YAML 格式示例)
-  </read_first>
-  <action>
-    Create two YAML test data files:
-
-    1. testutil/testdata/config/monitor_valid.yaml:
-    ```yaml
-    cron: "0 3 * * *"
-
-    monitor:
-      interval: "15m"
-      timeout: "10s"
-    ```
-
-    2. testutil/testdata/config/monitor_invalid_interval.yaml:
-    ```yaml
-    cron: "0 3 * * *"
-
-    monitor:
-      interval: "30s"  # Too short, minimum is 1m
-      timeout: "10s"
-    ```
-
-    Follow same YAML format conventions as Task 3.
-  </action>
-  <verify>
-    <automated>ls -l testutil/testdata/config/monitor_*.yaml | wc -l</automated>
-  </verify>
-  <done>
-    - 2 YAML files created in testutil/testdata/config/
-    - monitor_valid.yaml contains valid config (15m interval, 10s timeout)
-    - monitor_invalid_interval.yaml contains 30s interval (below minimum)
-    - Files are valid YAML
-  </done>
-</task>
-
-<task type="auto" tdd="true">
-  <name>Task 5: Create integration test stubs for full config loading</name>
-  <files>internal/config/config_test.go (扩展)</files>
-  <read_first>
-    - internal/config/config_test.go (现有测试)
-    - .planning/phases/11-configuration-extension/11-RESEARCH.md (完整配置示例)
-  </read_first>
-  <action>
-    Add new test functions to internal/config/config_test.go:
-
-    ```go
-    // Add after existing tests
-
-    func TestLoadAPIConfigFromYAML(t *testing.T) {
-        // TODO: Implement after Config.API field added
-        t.Skip("Waiting for Config.API integration")
-    }
-
-    func TestLoadMonitorConfigFromYAML(t *testing.T) {
-        // TODO: Implement after Config.Monitor field added
-        t.Skip("Waiting for Config.Monitor integration")
-    }
-
-    func TestConfigValidationWithNewFields(t *testing.T) {
-        // TODO: Test CONF-06 startup validation with all new fields
-        t.Skip("Waiting for full integration")
-    }
-    ```
-
-    These integration tests will:
-    - Load YAML files from testutil/testdata/config/
-    - Verify fields are correctly parsed into Config struct
-    - Verify validation errors for invalid configs
-  </action>
-  <verify>
-    <automated>go test -v ./internal/config/ -run "TestLoadAPI|TestLoadMonitor|TestConfigValidationWithNew"</automated>
-  </verify>
-  <done>
-    - config_test.go contains 3 new test function stubs
-    - All new tests currently skip
-    - Existing tests still pass
-    - Tests can run: `go test -v ./internal/config/`
-  </done>
-</task>
-
 </tasks>
 
 <verification>
-Wave 0 完成标准:
-- 所有测试脚手架文件已创建
-- 测试数据文件包含有效和无效样本
-- 测试可以运行（即使跳过）
+Wave 0a 完成标准:
+- 单元测试脚手架文件已创建
+- 测试存根可以运行（即使跳过）
 - 遵循现有测试模式
 </verification>
 
 <success_criteria>
 1. internal/config/api_test.go 存在，包含 5 个测试存根
 2. internal/config/monitor_test.go 存在，包含 3 个测试存根
-3. 5 个 YAML 测试数据文件已创建
-4. config_test.go 包含 3 个新的集成测试存根
-5. 所有测试可以运行: `go test -v ./internal/config/`
-6. 无测试失败（全部跳过是正常的）
+3. 所有测试可以运行: `go test -v ./internal/config/`
+4. 无测试失败（全部跳过是正常的）
 </success_criteria>
 
 <output>
-After completion, create `.planning/phases/11-configuration-extension/11-01-SUMMARY.md`
+After completion, create `.planning/phases/11-configuration-extension/11-01a-SUMMARY.md`
 </output>

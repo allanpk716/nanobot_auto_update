@@ -47,10 +47,11 @@ v0.3 里程碑将项目从定时更新工具转变为持续运行的监控服务
 4. 系统在启动时验证所有必需配置项存在且有效，缺失时返回明确错误信息
 5. 所有配置项有合理的默认值（除 token 外），应用可以成功启动
 
-**Plans:** 3 plans (Wave 0: test scaffolding, Wave 1: config structs, Wave 2: integration)
+**Plans:** 4 plans (Wave 0: test scaffolding split into 2, Wave 1: config structs, Wave 2: integration)
 
 Plans:
-- [ ] 11-01-PLAN.md — Create Wave 0 test scaffolding for configuration validation
+- [ ] 11-01a-PLAN.md — Create Wave 0 unit test scaffolding for API and Monitor validation
+- [ ] 11-01b-PLAN.md — Create Wave 0 test data files and integration test stubs
 - [ ] 11-02-PLAN.md — Implement APIConfig and MonitorConfig validation with TDD
 - [ ] 11-03-PLAN.md — Integrate new configs into main Config struct and startup validation
 
@@ -196,7 +197,7 @@ Plans:
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 11. Configuration Extension | 0/3 | Planned | - |
+| 11. Configuration Extension | 0/4 | Planned | - |
 | 12. Monitoring Service | 0/0 | Not started | - |
 | 13. HTTP API Server | 0/0 | Not started | - |
 | 14. Shared Update Lock | 0/0 | Not started | - |
@@ -276,13 +277,13 @@ Phase 11 (Config)
 
 ### Modified Components
 
-- **cmd/nanobot-auto-update/** (重大修改): 主函数从 cron 调度改为 errgroup 协调双服务
+- **cmd/nanobot-auto-updater/** (重大修改): 主函数从 cron 调度改为 errgroup 协调双服务
 - **internal/notifier/** (扩展): 新增 NotifyRecovery() 方法
 
 ### Removed Components
 
 - **internal/scheduler/** (删除): 移除 cron 调度器包
-- **cmd/nanobot-auto-update/** (删除): 移除 --update-now 参数处理
+- **cmd/nanobot-auto-updater/** (删除): 移除 --update-now 参数处理
 
 ---
 
@@ -316,4 +317,5 @@ See `research/SUMMARY.md` for detailed research findings:
 
 *Roadmap created: 2026-03-16*
 *Phase 11 planned: 2026-03-16*
+*Phase 11 revised: 2026-03-16 (split 11-01 into 11-01a and 11-01b)*
 *Next step: `/gsd:execute-phase 11`*
