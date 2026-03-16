@@ -1,0 +1,5 @@
+cron: "0 3 * * *"
+
+monitor:
+  interval: "15m"
+  timeout: "10s"

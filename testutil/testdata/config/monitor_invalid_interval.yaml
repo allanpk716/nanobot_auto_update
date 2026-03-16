@@ -1,0 +1,5 @@
+cron: "0 3 * * *"
+
+monitor:
+  interval: "30s"  # Too short, minimum is 1m
+  timeout: "10s"
