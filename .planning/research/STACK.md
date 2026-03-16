@@ -1,57 +1,58 @@
-# Stack Research
+# Stack Research: v0.4 实时日志查看
 
-**Domain:** HTTP API 服务和监控服务 (v0.3 新增功能)
+**Domain:** 进程输出捕获 + 内存缓冲 + Server-Sent Events 实时流
 **Researched:** 2026-03-16
 **Confidence:** HIGH
 
 ## Executive Summary
 
-v0.3 里程碑将项目从定时更新工具转变为监控服务 + HTTP API 触发更新模式。研究表明：
+v0.4 里程碑为 nanobot 实例添加实时日志查看功能。研究表明：
 
-1. **HTTP API 服务器** - 使用 Go 标准库 `net/http`，无需框架。单个 POST 端点 + 简单 Bearer Token 认证足够。
-2. **Google 连通性监控** - 使用 `net/http` + `context.WithTimeout()` 实现带超时的 HTTP GET 请求。
-3. **零新增依赖** - 所有功能通过 Go 1.24.11 标准库实现，与现有 viper/logrus 生态系统完美集成。
+1. **进程输出捕获** - 使用 Go 标准库 `os/exec.Cmd` 的 `StdoutPipe()` + `StderrPipe()`，结合 goroutine 并发读取
+2. **内存环形缓冲** - 使用 `github.com/smallnest/ringbuffer` (线程安全、实现 `io.ReadWriter` 接口)
+3. **Server-Sent Events** - 使用 `github.com/r3labs/sse/v2` (成熟稳定、与现有 `net/http` 服务器无缝集成)
 
-**关键决策：避免过度工程化。** 社区共识明确指向标准库优先，仅在复杂场景考虑框架。
+**关键架构决策：**
+- 不使用现有 `lifecycle/starter.go` 中的进程分离模式 (`cmd.Process.Release()`)
+- 需要保持进程附着以持续读取 stdout/stderr
+- 必须处理 `StdoutPipe()` 与 `cmd.Wait()` 的竞态条件 (GitHub Issue #19685)
 
 ---
 
 ## Recommended Stack
 
-### Core Technologies (v0.3 新增)
+### Core Technologies (v0.4 新增)
 
 | Technology | Version | Purpose | Why Recommended |
 |------------|---------|---------|-----------------|
-| Go 标准库 `net/http` | 1.24.11+ (现有) | HTTP API 服务器 | Go 社区普遍避免使用框架。标准库稳定、向后兼容、无依赖风险。Go 1.22+ 增强的 `http.ServeMux` 支持方法匹配和路径变量。 |
-| Go 标准库 `context` | 1.24.11+ (现有) | 超时和取消控制 | Go 惯用的超时处理方式，支持跨 API 边界传播取消信号。比 `http.Client.Timeout` 更灵活，避免 goroutine 泄漏。 |
-| 现有 Pushover 库 | `github.com/gregdel/pushover` v1.4.0 (现有) | 连通性失败/恢复通知 | 项目已集成，用于监控失败时发送通知。配置从环境变量迁移到 YAML 配置文件。 |
-| `time.Ticker` | 标准库 (现有) | 定时监控调度 | 替代 cron 库，实现每 15 分钟检查 Google 连通性。简单直接，无需第三方调度库。 |
+| `github.com/r3labs/sse/v2` | v2.0.0+ | Server-Sent Events 服务器 | 成熟稳定、简单易用、与现有 `net/http` 服务器无缝集成。支持多流订阅、自动重连、断开检测。相比 `tmaxmax/go-sse` 更轻量，社区使用广泛。 |
+| `github.com/smallnest/ringbuffer` | 最新 | 环形缓冲区 (5000 行日志) | 线程安全、实现 `io.ReadWriter` 接口、零分配、高性能。相比手写 slice 更高效，自动覆盖旧日志。支持阻塞/非阻塞模式。 |
+| `os/exec` (标准库) | Go 1.24.11+ | 进程输出捕获 | 标准库，使用 `cmd.StdoutPipe()` + `cmd.StderrPipe()` 捕获输出。配合 goroutine 并发读取。 |
+| `net/http` (现有) | Go 1.24.11+ | SSE 端点集成 | 现有 HTTP API 服务器，添加 `/logs/{instance}` SSE 端点。无需引入框架。 |
 
 ### Supporting Libraries (无需新增)
 
 | Library | Version | Purpose | When to Use |
 |---------|---------|---------|-------------|
-| 无需额外库 | - | Bearer Token 认证 | 手写中间件验证 `Authorization: Bearer <token>`，无需 JWT 或第三方认证库。 |
-| 无需额外库 | - | HTTP 客户端监控 | 使用 `net/http` + `context.WithTimeout()` 实现带超时的 HTTP GET 监控。 |
-| 无需额外库 | - | 健康检查端点 | 简单 `/health` 端点返回 200 OK，无需第三方健康检查库。 |
-| `encoding/json` | 标准库 (现有) | API 响应 JSON 编码 | 用于 POST `/api/v1/trigger-update` 返回结构化响应。 |
+| `bufio.Scanner` (标准库) | Go 1.24.11+ | 按行读取 stdout/stderr | 分割进程输出为独立日志行，配合 ring buffer 存储 |
+| `sync.Mutex` (标准库) | Go 1.24.11+ | 保护共享状态 | 保护 ring buffer 并发访问 (smallnest/ringbuffer 已内置线程安全) |
+| `context` (标准库) | Go 1.24.11+ | goroutine 生命周期控制 | 取消日志捕获 goroutine、SSE 连接超时控制 |
+| `log/slog` (现有) | Go 1.24.11+ | 结构化日志 | 记录日志捕获服务状态、错误信息 |
 
 ### Development Tools (现有)
 
 | Tool | Purpose | Notes |
 |------|---------|-------|
-| Go 1.24.11 | 编译和运行时 | 项目当前版本，标准库功能完整 |
-| `log/slog` | 结构化日志 | 项目已实现自定义格式，API 服务日志保持一致 |
-| `github.com/spf13/viper` | 配置管理 | 现有配置库，用于加载 API 和监控配置 |
+| Go 1.24.11 | 编译和运行时 | 项目当前版本 |
+| `github.com/spf13/viper` | 配置管理 | 现有配置库，可能需要扩展日志缓冲大小配置 |
+| `github.com/WQGroup/logger` | 日志记录 | 现有日志库，保持一致性 |
 
 ## Installation
 
 ```bash
-# v0.3 无需安装额外依赖
-# 所有新功能通过 Go 标准库实现
-
-# 将移除的依赖 (v0.3):
-# - github.com/robfig/cron/v3  # 不再需要定时调度
+# v0.4 需要安装的新依赖 (2 个)
+go get github.com/r3labs/sse/v2
+go get github.com/smallnest/ringbuffer
 
 # 现有依赖保持不变:
 # - github.com/gregdel/pushover (通知)
@@ -64,389 +65,502 @@ v0.3 里程碑将项目从定时更新工具转变为监控服务 + HTTP API 触
 
 | Recommended | Alternative | When to Use Alternative |
 |-------------|-------------|-------------------------|
-| 标准库 `net/http` | Gin/Echo/Chi/Fiber 框架 | 当需要复杂路由、验证框架、大量中间件时考虑框架。本项目仅需单个 POST 端点，标准库足够。 |
-| 手写 Bearer Token 中间件 | `github.com/auth0/go-jwt-middleware` | 当需要 JWT 验证、OAuth2、复杂认证流程时使用。本项目仅需简单 token 比对。 |
-| `net/http` + context | `github.com/projectdiscovery/retryablehttp` | 当需要自动重试、指数退避、复杂请求策略时使用。Google 监控失败仅需记录日志和通知。 |
-| 简单健康检查端点 | `github.com/core-go/health` / `github.com/brpaz/go-healthcheck` | 当需要检查数据库、Redis、多个外部依赖时使用。本项目仅需基础健康状态。 |
-| `time.Ticker` | 保持 `robfig/cron` | 当需要 cron 表达式灵活调度时保持。v0.3 改为固定 15 分钟间隔，`time.Ticker` 更简单。 |
+| `r3labs/sse/v2` | `tmaxmax/go-sse` | 当需要 LLM 流式响应解析 (`sse.Read`)、更现代的 API、spec-compliant 严格验证时使用 `tmaxmax/go-sse`。本项目仅需基础 SSE 服务器，`r3labs/sse` 更简单。 |
+| `smallnest/ringbuffer` | 手写 `[]string` + `Mutex` | 当需要自定义缓冲策略、复杂过期逻辑时考虑手写。本项目仅需固定大小环形缓冲，`ringbuffer` 更可靠高效。 |
+| `os/exec` + `StdoutPipe()` | `go-cmd/cmd` 包装器 | 当需要非阻塞命令执行、自动重试、复杂进程管理时使用 `go-cmd/cmd`。本项目使用标准库足够，避免额外依赖。 |
+| goroutine + channel | 单 goroutine 顺序读取 | 当 stdout/stderr 输出量小、无并发需求时顺序读取。本项目需要并发读取两个流，必须使用 goroutine。 |
+| SSE | WebSocket | 当需要双向通信、二进制数据传输、复杂协议时使用 WebSocket。本项目仅需服务器推送日志流，SSE 更简单、HTTP 友好。 |
 
 ## What NOT to Use
 
 | Avoid | Why | Use Instead |
 |-------|-----|-------------|
-| HTTP 框架 (Gin/Echo/Fiber) | 过度工程化，增加依赖风险，单个 POST 端点不需要框架 | 标准 `net/http` + `http.ServeMux` |
-| JWT 认证库 | Bearer token 仅需简单字符串比对，JWT 库过重 | 手写 10 行中间件验证 token |
-| `http.Client.Timeout` 字段 | 不会传播到 Request.Context，可能导致 goroutine 泄漏 | `context.WithTimeout()` + `req.WithContext()` |
-| 重试库 (retryablehttp, go-retry) | Google 监控失败后仅记录日志和通知，不需要自动重试 | 简单 `http.Get()` + 错误处理 |
-| 第三方健康检查库 | 项目无需检查数据库、Redis 等复杂依赖 | `/health` 端点返回 `{"status": "ok"}` |
-| `http.DefaultClient` | 超时为 0 (无超时)，生产环境可能导致永久挂起 | 创建自定义 `http.Client{Timeout: 10s}` |
-| `robfig/cron` (v0.3 移除) | 监控服务使用固定 15 分钟间隔，`time.Ticker` 更轻量 | `time.NewTicker(15 * time.Minute)` |
+| `cmd.Process.Release()` + `cmd.StdoutPipe()` | 进程分离后无法读取输出，`StdoutPipe()` 会在进程退出后关闭 | 保持进程附着 (`cmd.Wait()`)，在 goroutine 中持续读取 |
+| `cmd.Output()` 或 `cmd.CombinedOutput()` | 阻塞直到进程退出，无法实时读取日志 | `cmd.StdoutPipe()` + goroutine 并发读取 |
+| `io.ReadAll(stdoutPipe)` | 一次性读取所有输出，内存无限增长 | `bufio.Scanner` 逐行读取 + ring buffer 固定大小 |
+| `http.Flusher` 手写 SSE | 需要处理 HTTP 头、重连、事件 ID、心跳等细节 | `r3labs/sse` 库已处理所有边界情况 |
+| `http.DefaultClient` | 超时为 0 (无超时)，可能导致连接永久挂起 | 创建自定义 `http.Client{Timeout: 30s}` (现有代码已遵循) |
+| 全局变量存储日志缓冲 | 并发访问不安全、难以测试、违反单一职责 | 每个 instance 持有自己的 `*ringbuffer.RingBuffer` |
+| `time.Sleep()` 轮询读取 | CPU 浪费、延迟高 | 使用 `bufio.Scanner.Scan()` 阻塞等待新行 |
 
 ## Stack Patterns by Variant
 
-### Pattern 1: HTTP API 服务器 (标准库)
+### Pattern 1: 进程输出捕获 (并发读取 stdout/stderr)
 
 **实现方式:**
 ```go
-// 简单的 Bearer Token 认证中间件
-func authMiddleware(expectedToken string) func(http.Handler) http.Handler {
-    return func(next http.Handler) http.Handler {
-        return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-            authHeader := r.Header.Get("Authorization")
-            if authHeader != "Bearer "+expectedToken {
-                http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
-                return
-            }
-            next.ServeHTTP(w, r)
-        })
-    }
+// Source: Go 官方文档 + 社区最佳实践
+// 参考: https://github.com/golang/go/issues/19685 (竞态条件处理)
+
+import (
+    "bufio"
+    "os/exec"
+    "sync"
+)
+
+type LogCapture struct {
+    cmd       *exec.Cmd
+    buffer    *ringbuffer.RingBuffer
+    logger    *slog.Logger
+    ctx       context.Context
+    cancel    context.CancelFunc
+    wg        sync.WaitGroup
 }
 
-// API 处理器
-func (s *Server) handleTriggerUpdate(w http.ResponseWriter, r *http.Request) {
-    // Go 1.22+ ServeMux 已确保仅 POST 方法到达此处
-    // 触发更新逻辑
-    err := s.updater.TriggerUpdate(r.Context())
+func (lc *LogCapture) Start() error {
+    stdoutPipe, err := lc.cmd.StdoutPipe()
     if err != nil {
-        w.WriteHeader(http.StatusInternalServerError)
-        json.NewEncoder(w).Encode(map[string]string{
-            "status": "error",
-            "error":  err.Error(),
-        })
-        return
+        return fmt.Errorf("failed to create stdout pipe: %w", err)
     }
 
-    w.WriteHeader(http.StatusOK)
-    json.NewEncoder(w).Encode(map[string]string{
-        "status": "triggered",
-    })
+    stderrPipe, err := lc.cmd.StderrPipe()
+    if err != nil {
+        return fmt.Errorf("failed to create stderr pipe: %w", err)
+    }
+
+    // 启动进程
+    if err := lc.cmd.Start(); err != nil {
+        return fmt.Errorf("failed to start process: %w", err)
+    }
+
+    // 并发读取 stdout 和 stderr
+    lc.wg.Add(2)
+    go lc.readStream(stdoutPipe, "stdout")
+    go lc.readStream(stderrPipe, "stderr")
+
+    // 启动 goroutine 等待进程退出
+    go func() {
+        lc.wg.Wait() // 等待两个读取 goroutine 完成
+        err := lc.cmd.Wait()
+        if err != nil {
+            lc.logger.Warn("Process exited with error", "error", err)
+        } else {
+            lc.logger.Info("Process exited successfully")
+        }
+    }()
+
+    return nil
 }
 
-// 路由设置 (Go 1.22+ 方法匹配语法)
-mux := http.NewServeMux()
-mux.HandleFunc("POST /api/v1/trigger-update", s.handleTriggerUpdate)
-mux.HandleFunc("GET /health", s.handleHealth)
+func (lc *LogCapture) readStream(reader io.Reader, streamName string) {
+    defer lc.wg.Done()
 
-// 应用中间件
-handler := authMiddleware(cfg.API.AuthToken)(mux)
+    scanner := bufio.NewScanner(reader)
+    for scanner.Scan() {
+        select {
+        case <-lc.ctx.Done():
+            return
+        default:
+            line := scanner.Text()
+            // 写入 ring buffer (线程安全)
+            lc.buffer.Write([]byte(line + "\n"))
+        }
+    }
 
-// 启动服务器
-server := &http.Server{
-    Addr:         fmt.Sprintf(":%d", cfg.API.Port),
-    Handler:      handler,
-    ReadTimeout:  10 * time.Second,
-    WriteTimeout: 10 * time.Second,
+    if err := scanner.Err(); err != nil {
+        lc.logger.Error("Failed to read stream", "stream", streamName, "error", err)
+    }
+}
+
+func (lc *LogCapture) Stop() {
+    lc.cancel() // 取消所有 goroutine
+    lc.wg.Wait() // 等待清理完成
+    if lc.cmd.Process != nil {
+        lc.cmd.Process.Kill()
+    }
 }
 ```
 
-**为什么不用框架:**
-- Gin/Echo 提供 Router、Validator、Middleware 生态系统，但本项目仅 1 个端点
-- 社区共识：简单服务用标准库，复杂应用考虑框架 (来源: Three Dots Labs, Reddit 讨论)
-- Go 1.22+ ServeMux 已支持方法匹配、路径变量，功能差距缩小
+**关键点:**
+1. **必须并发读取** stdout 和 stderr，否则一个流阻塞会导致另一个流无法读取
+2. **使用 `sync.WaitGroup`** 等待两个读取 goroutine 完成后再调用 `cmd.Wait()`
+3. **避免竞态条件** - 参考 GitHub Issue #19685，在读取完成前不要调用 `cmd.Wait()`
+4. **Context 取消** - 支持优雅停止日志捕获
 
-### Pattern 2: Google 连通性监控 (带超时)
+**为什么不用 `cmd.CombinedOutput()`:**
+- `CombinedOutput()` 会阻塞直到进程退出
+- 无法实时读取日志流
+- 内存无限增长 (所有输出保存在内存中)
+
+### Pattern 2: 环形缓冲区 (固定大小日志存储)
 
 **实现方式:**
 ```go
-type Monitor struct {
-    client    *http.Client
-    targetURL string
-    interval  time.Duration
-    notifier  *notifier.Notifier
+// Source: smallnest/ringbuffer 官方文档
+// https://github.com/smallnest/ringbuffer
+
+import "github.com/smallnest/ringbuffer"
+
+type InstanceLogs struct {
+    buffer *ringbuffer.RingBuffer
+    mu     sync.Mutex // 额外保护读取操作
+}
+
+func NewInstanceLogs(maxLines int) *InstanceLogs {
+    // 假设每行平均 200 字节
+    bufferSize := maxLines * 200
+    return &InstanceLogs{
+        buffer: ringbuffer.New(bufferSize),
+    }
+}
+
+func (il *InstanceLogs) WriteLog(line string) {
+    // ringbuffer 已线程安全，直接写入
+    il.buffer.Write([]byte(line + "\n"))
+}
+
+func (il *InstanceLogs) ReadAll() ([]byte, error) {
+    il.mu.Lock()
+    defer il.mu.Unlock()
+
+    // 读取所有数据但不消费 (Peek)
+    data := make([]byte, il.buffer.Length())
+    _, err := il.buffer.Read(data)
+    if err != nil {
+        return nil, err
+    }
+    return data, nil
+}
+```
+
+**为什么使用 `smallnest/ringbuffer` 而非手写 `[]string`:**
+1. **自动覆盖** - 旧日志自动被新日志覆盖，无需手动管理索引
+2. **线程安全** - 内置并发保护，无需额外 `Mutex` (写入时)
+3. **零分配** - 固定大小内存，无频繁分配/释放
+4. **性能** - O(1) 写入和读取
+
+**配置建议:**
+```yaml
+log_buffer:
+  max_lines: 5000  # 保留最近 5000 行日志
+  line_average_size: 200  # 每行平均字节数 (用于计算缓冲区大小)
+```
+
+### Pattern 3: SSE 实时推送 (集成现有 HTTP 服务器)
+
+**实现方式:**
+```go
+// Source: r3labs/sse 官方文档 + 项目现有 HTTP 服务器
+// https://github.com/r3labs/sse
+
+import "github.com/r3labs/sse/v2"
+
+type LogStreamingService struct {
+    sseServer *sse.Server
+    instances map[string]*InstanceLogs
     logger    *slog.Logger
 }
 
-func NewMonitor(cfg MonitoringConfig, notifier *notifier.Notifier, logger *slog.Logger) *Monitor {
-    return &Monitor{
-        client: &http.Client{
-            Timeout: cfg.Timeout, // 整体超时 (10s)
-        },
-        targetURL: cfg.TargetURL,
-        interval:  cfg.CheckInterval,
-        notifier:  notifier,
+func NewLogStreamingService(logger *slog.Logger) *LogStreamingService {
+    server := sse.New()
+    server.CreateStream("logs") // 创建全局日志流
+
+    return &LogStreamingService{
+        sseServer: server,
+        instances: make(map[string]*InstanceLogs),
         logger:    logger,
     }
 }
 
-func (m *Monitor) Start(ctx context.Context) {
-    ticker := time.NewTicker(m.interval)
+// 集成到现有 HTTP 服务器 (main.go)
+func (s *LogStreamingService) RegisterRoutes(mux *http.ServeMux) {
+    // SSE 端点: GET /api/v1/logs/{instance}
+    mux.HandleFunc("GET /api/v1/logs/{instance}", s.handleLogStream)
+}
+
+func (s *LogStreamingService) handleLogStream(w http.ResponseWriter, r *http.Request) {
+    instanceName := r.PathValue("instance")
+
+    // 验证实例存在
+    logs, exists := s.instances[instanceName]
+    if !exists {
+        http.Error(w, `{"error":"instance not found"}`, http.StatusNotFound)
+        return
+    }
+
+    // 创建 SSE 流
+    streamID := fmt.Sprintf("logs-%s", instanceName)
+    s.sseServer.CreateStream(streamID)
+
+    // 在后台 goroutine 中推送日志
+    go s.streamLogs(r.Context(), streamID, logs)
+
+    // SSE 服务器处理连接
+    s.sseServer.ServeHTTP(w, r)
+}
+
+func (s *LogStreamingService) streamLogs(ctx context.Context, streamID string, logs *InstanceLogs) {
+    ticker := time.NewTicker(100 * time.Millisecond) // 每 100ms 推送一次
     defer ticker.Stop()
 
-    var lastStatus bool = true // 初始假设连通
+    var lastOffset int
 
     for {
         select {
         case <-ctx.Done():
-            m.logger.Info("监控服务停止")
+            s.logger.Info("SSE stream closed", "stream", streamID)
             return
         case <-ticker.C:
-            isConnected := m.checkConnectivity(ctx)
+            // 读取新日志并推送
+            data, err := logs.ReadNew(lastOffset)
+            if err != nil {
+                s.logger.Error("Failed to read logs", "error", err)
+                continue
+            }
 
-            // 状态变化时发送通知
-            if isConnected != lastStatus {
-                if isConnected {
-                    m.logger.Info("Google 连通性恢复")
-                    m.notifier.NotifySuccess("Google 连通性监控", "网络已恢复")
-                } else {
-                    m.logger.Error("Google 连通性失败")
-                    // NotifyFailure 会在内部记录错误
-                }
-                lastStatus = isConnected
+            if len(data) > 0 {
+                s.sseServer.Publish(streamID, &sse.Event{
+                    Data: data,
+                })
+                lastOffset += len(data)
             }
         }
     }
 }
-
-func (m *Monitor) checkConnectivity(ctx context.Context) bool {
-    // 使用 context 控制超时 (优先于 Client.Timeout)
-    ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
-    defer cancel()
-
-    req, err := http.NewRequestWithContext(ctx, "GET", m.targetURL, nil)
-    if err != nil {
-        m.logger.Error("创建监控请求失败", "error", err)
-        return false
-    }
-
-    resp, err := m.client.Do(req)
-    if err != nil {
-        m.logger.Warn("Google 连通性检查失败", "error", err)
-        return false
-    }
-    defer resp.Body.Close()
-
-    // 2xx 状态码视为成功
-    return resp.StatusCode >= 200 && resp.StatusCode < 300
-}
 ```
 
-**为什么不用重试库:**
-- Google 监控失败后不需要自动重试 (15 分钟后会再次检查)
-- 失败时仅需记录日志 + 发送通知，业务逻辑简单
-- `retryablehttp` 增加依赖但无法提供额外价值
-
-### Pattern 3: 配置结构扩展
-
-**新增配置 (v0.3):**
-```yaml
-# HTTP API 服务配置
-api:
-  enabled: true
-  port: 8080
-  auth_token: "your-secure-token-here"  # Bearer token
-
-# Google 连通性监控配置
-monitoring:
-  enabled: true
-  check_interval: 15m  # 每 15 分钟检查一次
-  target_url: "https://www.google.com"
-  timeout: 10s
-
-# Pushover 配置 (从环境变量迁移到配置文件)
-pushover:
-  api_token: "your-api-token"
-  user_key: "your-user-key"
-
-# 移除 cron 配置 (v0.3 不再使用)
-# cron: "0 3 * * *"  # DEPRECATED - 使用 HTTP API 触发更新
-```
-
-**Go 配置结构:**
+**集成到现有 HTTP API 服务器:**
 ```go
-type APIConfig struct {
-    Enabled   bool   `yaml:"enabled" mapstructure:"enabled"`
-    Port      int    `yaml:"port" mapstructure:"port"`
-    AuthToken string `yaml:"auth_token" mapstructure:"auth_token"`
-}
+// main.go 或 internal/api/server.go
 
-type MonitoringConfig struct {
-    Enabled       bool          `yaml:"enabled" mapstructure:"enabled"`
-    CheckInterval time.Duration `yaml:"check_interval" mapstructure:"check_interval"`
-    TargetURL     string        `yaml:"target_url" mapstructure:"target_url"`
-    Timeout       time.Duration `yaml:"timeout" mapstructure:"timeout"`
-}
+func main() {
+    // 现有 HTTP API 服务器
+    mux := http.NewServeMux()
 
-type Config struct {
-    API        APIConfig        `yaml:"api" mapstructure:"api"`
-    Monitoring MonitoringConfig `yaml:"monitoring" mapstructure:"monitoring"`
-    // ... 现有字段 (instances, pushover)
-}
-```
+    // 现有端点...
+    mux.HandleFunc("POST /api/v1/trigger-update", handleTriggerUpdate)
+    mux.HandleFunc("GET /health", handleHealth)
 
-**为什么不用配置验证库:**
-- 现有 `viper` 已提供 YAML 解析 + mapstructure 标签
-- 配置验证逻辑简单 (端口范围、URL 格式)，手写足够
-- 避免引入 `go-playground/validator` 等额外依赖
+    // 新增: 日志流服务
+    logStreaming := NewLogStreamingService(logger)
+    logStreaming.RegisterRoutes(mux)
 
-## Integration with Existing Codebase
+    // 应用认证中间件 (可选: 日志流可能不需要认证)
+    handler := authMiddleware(cfg.API.AuthToken)(mux)
 
-### 集成点 1: main.go 启动逻辑
-
-**现有逻辑 (v0.2):**
-```go
-// 定时调度器
-scheduler := scheduler.NewScheduler(cfg.Cron, logger)
-scheduler.Schedule(updater.Update)
-```
-
-**v0.3 新逻辑:**
-```go
-// 1. 启动 HTTP API 服务器
-if cfg.API.Enabled {
-    apiServer := api.NewServer(cfg.API, updater, logger)
-    go func() {
-        logger.Info("启动 HTTP API 服务器", "port", cfg.API.Port)
-        if err := apiServer.Start(); err != nil {
-            logger.Error("API 服务器失败", "error", err)
-        }
-    }()
-}
-
-// 2. 启动监控服务
-if cfg.Monitoring.Enabled {
-    monitor := monitoring.NewMonitor(cfg.Monitoring, notifier, logger)
-    go monitor.Start(context.Background())
-}
-
-// 3. 移除 cron 调度器 (不再需要)
-```
-
-### 集成点 2: config/config.go 扩展
-
-**新增默认值:**
-```go
-func (c *Config) defaults() {
-    // 现有默认值...
-    c.API.Enabled = true
-    c.API.Port = 8080
-    c.API.AuthToken = "" // 必须在配置文件中设置
-
-    c.Monitoring.Enabled = true
-    c.Monitoring.CheckInterval = 15 * time.Minute
-    c.Monitoring.TargetURL = "https://www.google.com"
-    c.Monitoring.Timeout = 10 * time.Second
-}
-```
-
-**新增验证:**
-```go
-func (c *Config) Validate() error {
-    var errs []error
-
-    // 现有验证...
-
-    // API 配置验证
-    if c.API.Enabled {
-        if c.API.Port < 1 || c.API.Port > 65535 {
-            errs = append(errs, fmt.Errorf("api.port must be 1-65535, got %d", c.API.Port))
-        }
-        if c.API.AuthToken == "" {
-            errs = append(errs, fmt.Errorf("api.auth_token is required when api.enabled=true"))
-        }
+    server := &http.Server{
+        Addr:         fmt.Sprintf(":%d", cfg.API.Port),
+        Handler:      handler,
+        ReadTimeout:  10 * time.Second,
+        WriteTimeout: 0, // SSE 需要长连接，设置为 0 (无超时)
+        // IdleTimeout: 120 * time.Second, // 保持连接活跃
     }
 
-    // 监控配置验证
-    if c.Monitoring.Enabled {
-        if c.Monitoring.CheckInterval < 1*time.Minute {
-            errs = append(errs, fmt.Errorf("monitoring.check_interval must be >= 1m, got %v", c.Monitoring.CheckInterval))
-        }
-        if _, err := url.Parse(c.Monitoring.TargetURL); err != nil {
-            errs = append(errs, fmt.Errorf("monitoring.target_url invalid: %w", err))
-        }
-    }
-
-    return errors.Join(errs...)
-}
-```
-
-### 集成点 3: notifier/notifier.go 变更
-
-**现有逻辑 (v0.2):**
-```go
-// New() 从环境变量读取 PUSHOVER_TOKEN 和 PUSHOVER_USER
-func New(logger *slog.Logger) *Notifier {
-    token := os.Getenv("PUSHOVER_TOKEN")
-    user := os.Getenv("PUSHOVER_USER")
-    // ...
-}
-```
-
-**v0.3 逻辑 (配置文件优先):**
-```go
-// NewWithConfig() 从配置文件读取，回退到环境变量
-func NewWithConfig(cfg PushoverConfig, logger *slog.Logger) *Notifier {
-    token := cfg.ApiToken
-    user := cfg.UserKey
-
-    // 回退到环境变量 (向后兼容)
-    if token == "" {
-        token = os.Getenv("PUSHOVER_TOKEN")
-    }
-    if user == "" {
-        user = os.Getenv("PUSHOVER_USER")
-    }
-
-    if token == "" || user == "" {
-        logger.Warn("Pushover 通知未配置")
-        return &Notifier{enabled: false, logger: logger}
-    }
-
-    logger.Info("Pushover 通知已启用")
-    return &Notifier{
-        client:    pushover.New(token),
-        recipient: pushover.NewRecipient(user),
-        logger:    logger,
-        enabled:   true,
+    logger.Info("Starting HTTP server", "port", cfg.API.Port)
+    if err := server.ListenAndServe(); err != nil {
+        logger.Error("HTTP server failed", "error", err)
     }
 }
 ```
+
+**关键配置:**
+- **`WriteTimeout: 0`** - SSE 需要长连接，不能设置写入超时
+- **`IdleTimeout: 120s`** - 保持空闲连接活跃，避免被服务器断开
+- **心跳机制** - 每 15 秒发送注释 `: heartbeat` 保持连接
+
+**为什么选择 `r3labs/sse` 而非 `tmaxmax/go-sse`:**
+1. **更简单** - `r3labs/sse` API 更直观，适合基础 SSE 服务器
+2. **成熟稳定** - 2015 年开始维护，社区使用广泛
+3. **轻量** - 无额外依赖，仅 SSE 功能
+4. **足够用** - 本项目无需 LLM 流式解析 (`tmaxmax/go-sse` 的优势)
+
+### Pattern 4: 进程管理变更 (不使用 Release)
+
+**现有代码 (lifecycle/starter.go):**
+```go
+// 现有模式: 进程分离
+cmd := exec.CommandContext(ctx, "cmd", "/c", command)
+cmd.Start()
+cmd.Process.Release() // 分离进程，父进程退出不影响子进程
+```
+
+**v0.4 新模式 (保持附着):**
+```go
+// 新模式: 保持进程附着以读取输出
+cmd := exec.CommandContext(ctx, "cmd", "/c", command)
+
+// 捕获 stdout/stderr
+stdoutPipe, _ := cmd.StdoutPipe()
+stderrPipe, _ := cmd.StderrPipe()
+
+cmd.Start()
+
+// 在 goroutine 中读取输出
+go readStream(stdoutPipe)
+go readStream(stderrPipe)
+
+// 不要调用 cmd.Process.Release()
+// 调用 cmd.Wait() 等待进程退出
+go func() {
+    cmd.Wait()
+    logger.Info("Process exited")
+}()
+```
+
+**架构影响:**
+- **需要重构 `lifecycle/starter.go`** - 添加可选参数控制是否捕获输出
+- **或者新建 `logcapture/capture.go`** - 专门处理带输出捕获的进程启动
+- **向后兼容** - 现有不需日志捕获的启动逻辑保持不变
 
 ## Version Compatibility
 
 | Package | Version | Compatible With | Notes |
 |---------|---------|-----------------|-------|
-| Go 1.24.11 | 标准库 | 项目当前版本 | `net/http`, `context`, `time.Ticker` 全部兼容 |
-| `net/http` | Go 1.22+ | Go 1.24.11 | ServeMux 方法匹配语法 `POST /path` 在 Go 1.22 引入 |
-| `context` | Go 1.0+ | Go 1.24.11 | `http.Request.WithContext()` 从 Go 1.0 支持 |
-| `time.Ticker` | Go 1.0+ | Go 1.24.11 | 标准库定时器 |
-| `encoding/json` | Go 1.0+ | Go 1.24.11 | JSON 编解码 |
+| Go 1.24.11 | 标准库 | 项目当前版本 | `os/exec`, `bufio`, `context`, `sync` 全部兼容 |
+| `github.com/r3labs/sse/v2` | v2.0.0+ | Go 1.24.11 | 成熟稳定，无已知兼容性问题 |
+| `github.com/smallnest/ringbuffer` | 最新 | Go 1.24.11 | 线程安全，无依赖 |
+| `net/http` (现有) | Go 1.22+ | Go 1.24.11 | ServeMux 方法匹配语法兼容 |
 
-## Dependencies to Remove (v0.3)
+## Integration with Existing Codebase
 
-| Package | Why Remove | Replacement |
-|---------|-----------|-------------|
-| `github.com/robfig/cron/v3` | v0.3 不再需要 cron 表达式调度 | `time.Ticker` (固定 15 分钟间隔) |
+### 集成点 1: InstanceManager 扩展
+
+**现有结构 (internal/instance/manager.go):**
+```go
+type Manager struct {
+    instances map[string]*InstanceLifecycle
+    logger    *slog.Logger
+}
+```
+
+**v0.4 扩展:**
+```go
+type Manager struct {
+    instances map[string]*InstanceLifecycle
+    logCapture map[string]*LogCapture // 新增: 每个 instance 的日志捕获器
+    logger    *slog.Logger
+}
+
+func (m *Manager) StartInstanceWithLogging(ctx context.Context, name string) error {
+    lifecycle := m.instances[name]
+
+    // 创建日志捕获器
+    capture := NewLogCapture(lifecycle.config, m.logger)
+    if err := capture.Start(); err != nil {
+        return err
+    }
+
+    m.logCapture[name] = capture
+    return nil
+}
+
+func (m *Manager) StopInstanceWithLogging(ctx context.Context, name string) error {
+    if capture, exists := m.logCapture[name]; exists {
+        capture.Stop()
+        delete(m.logCapture, name)
+    }
+
+    // 调用现有的停止逻辑
+    return m.instances[name].StopForUpdate(ctx)
+}
+```
+
+### 集成点 2: config 扩展
+
+**新增配置 (v0.4):**
+```yaml
+# 日志缓冲配置
+log_buffer:
+  max_lines: 5000
+  line_average_size: 200
+
+# 现有配置保持不变...
+instances:
+  - name: "gateway"
+    port: 18790
+    start_command: "python -m nanobot.gateway"
+```
+
+**Go 配置结构:**
+```go
+type LogBufferConfig struct {
+    MaxLines        int `yaml:"max_lines" mapstructure:"max_lines"`
+    LineAverageSize int `yaml:"line_average_size" mapstructure:"line_average_size"`
+}
+
+type Config struct {
+    LogBuffer LogBufferConfig `yaml:"log_buffer" mapstructure:"log_buffer"`
+    // ... 现有字段
+}
+```
+
+### 集成点 3: HTTP API 服务器扩展
+
+**现有服务器 (internal/api/server.go):**
+```go
+type Server struct {
+    config  config.APIConfig
+    updater *updater.Updater
+    logger  *slog.Logger
+}
+
+func (s *Server) Routes() *http.ServeMux {
+    mux := http.NewServeMux()
+    mux.HandleFunc("POST /api/v1/trigger-update", s.handleTriggerUpdate)
+    mux.HandleFunc("GET /health", s.handleHealth)
+    return mux
+}
+```
+
+**v0.4 扩展:**
+```go
+type Server struct {
+    config      config.APIConfig
+    updater     *updater.Updater
+    logStreamer *LogStreamingService // 新增
+    logger      *slog.Logger
+}
+
+func (s *Server) Routes() *http.ServeMux {
+    mux := http.NewServeMux()
+
+    // 现有端点
+    mux.HandleFunc("POST /api/v1/trigger-update", s.handleTriggerUpdate)
+    mux.HandleFunc("GET /health", s.handleHealth)
+
+    // 新增: 日志流端点
+    mux.HandleFunc("GET /api/v1/logs/{instance}", s.logStreamer.handleLogStream)
+
+    return mux
+}
+```
+
+## Dependencies to Add (v0.4)
+
+| Package | Version | Purpose |
+|---------|---------|---------|
+| `github.com/r3labs/sse/v2` | v2.0.0+ | SSE 服务器 |
+| `github.com/smallnest/ringbuffer` | 最新 | 环形缓冲区 |
 
 ## Sources
 
-### HTTP Server & Standard Library
+### Server-Sent Events (SSE)
 
-- [Choosing a Go Web Framework in 2026: A Minimalist's Guide](https://medium.com/@samayun_pathan/choosing-a-go-web-framework-in-2026-a-minimalists-guide-to-gin-fiber-chi-echo-and-beego-c79b31b8474d) — MEDIUM confidence (社区实践)
-- [When You Shouldn't Use Frameworks in Go (Three Dots Labs)](https://threedots.tech/episode/when-you-should-not-use-frameworks/) — HIGH confidence (权威博客)
-- [Why I Only Rely on the Go Standard Library for HTTP Services](https://blog.stackademic.com/why-i-only-rely-on-the-go-standard-library-for-http-services-a52868cdf816) — MEDIUM confidence (实践经验)
-- [Go's http.ServeMux Is All You Need](https://dev.to/leapcell/gos-httpservemux-is-all-you-need-1mam) — MEDIUM confidence (Go 1.22+ 特性)
-- [pkg.go.dev/net/http (官方文档)](https://pkg.go.dev/net/http) — HIGH confidence (Go 官方)
+- [r3labs/sse GitHub Repository](https://github.com/r3labs/sse) — HIGH confidence (官方文档)
+- [tmaxmax/go-sse GitHub Repository](https://github.com/tmaxmax/go-sse) — HIGH confidence (对比研究)
+- [How to Build Real-time Applications with Go and SSE (OneUptime, Feb 2026)](https://oneuptime.com/blog/post/2026-02-01-go-realtime-applications-sse/view) — MEDIUM confidence (最新实践)
+- [Real-Time Data Streaming with Server-Sent Events in Golang (Medium)](https://medium.com/@amineameur/real-time-data-streaming-with-server-sent-events-sse-in-golang-2ded26c9752e) — MEDIUM confidence (教程)
+- [Live website updates with Go, SSE, and htmx (ThreeDotsTech)](https://threedots.tech/post/live-website-updates-go-sse-htmx/) — HIGH confidence (权威博客)
 
-### Timeouts & Context
+### Ring Buffer
 
-- [The complete guide to Go net/http timeouts (Cloudflare Blog)](https://blog.cloudflare.com/the-complete-guide-to-golang-net-http-timeouts/) — HIGH confidence (权威指南)
-- [Go http client timeout vs context timeout (Stack Overflow)](https://stackoverflow.com/questions/64129364/go-http-client-timeout-vs-context-timeout) — HIGH confidence (社区共识)
-- [Timeouts in Go: A Comprehensive Guide (Better Stack)](https://betterstack.com/community/guides/scaling-go/golang-timeouts/) — MEDIUM confidence (最佳实践总结)
-- [GitHub Issue: Client.Timeout not propagated to Request Context](https://github.com/golang/go/issues/31657) — HIGH confidence (已知问题)
+- [smallnest/ringbuffer GitHub Repository](https://github.com/smallnest/ringbuffer) — HIGH confidence (官方文档)
+- [Ring buffer in Golang (logdy.dev)](https://logdy.dev/blog/post/ring-buffer-in-golang) — MEDIUM confidence (教程)
+- [A Practical Guide to Implementing a Generic Ring Buffer in Go (Medium)](https://medium.com/checker-engineering/a-practical-guide-to-implementing-a-generic-ring-buffer-in-go-866d27ec1a05) — MEDIUM confidence (理论)
 
-### Middleware & Authentication
+### Process Output Capture
 
-- [How to Implement Middleware in Go Web Applications (OneUptime, 2026-01)](https://oneuptime.com/blog/post/2026-01-26-go-middleware/view) — HIGH confidence (2026 最新文章)
-- [OlegGorj/golang-bearer-token (GitHub)](https://github.com/oleggorj/golang-bearer-token) — MEDIUM confidence (代码示例)
-- [Top 5 Authentication Solutions for Secure Go Apps in 2026 (WorkOS)](https://workos.com/blog/top-authentication-solutions-go-2026) — MEDIUM confidence (认证方案对比)
+- [os/exec - Go Packages (官方文档)](https://pkg.go.dev/os/exec) — HIGH confidence (Go 官方)
+- [os/exec: data race between StdoutPipe and Wait #19685](https://github.com/golang/go/issues/19685) — HIGH confidence (已知问题)
+- [Some Useful Patterns for Go's os/exec (DoltHub Blog)](https://www.dolthub.com/blog/2022-11-28-go-os-exec-patterns/) — MEDIUM confidence (最佳实践)
+- [go-cmd/cmd GitHub Repository](https://github.com/go-cmd/cmd) — LOW confidence (替代方案调研)
 
-### Monitoring & Health Checks
+### Log Buffering
 
-- [core-go/health (GitHub)](https://github.com/core-go/health) — LOW confidence (可选库调研)
-- [brpaz/go-healthcheck (GitHub)](https://github.com/brpaz/go-healthcheck) — LOW confidence (可选库调研)
-- [How to Implement Health Checks in Go for Kubernetes (OneUptime)](https://oneuptime.com/blog/post/2026-01-07-go-health-checks-kubernetes/view) — MEDIUM confidence (健康检查最佳实践)
+- [How to Implement Log Buffering (OneUptime, Jan 2026)](https://oneuptime.com/blog/post/2026-01-30-log-buffering/view) — MEDIUM confidence (最新实践)
 
 ---
-*Stack research for: v0.3 HTTP API 服务和监控服务*
+
+*Stack research for: v0.4 实时日志查看功能*
 *Researched: 2026-03-16*
-*Confidence: HIGH (基于 Go 官方文档、Cloudflare 权威指南、社区共识)*
+*Confidence: HIGH (基于官方文档、权威博客、GitHub Issues)*

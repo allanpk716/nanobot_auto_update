@@ -1,8 +1,8 @@
 # Feature Research
 
-**Domain:** HTTP API Service + Monitoring Service
+**Domain:** Real-time log viewing via Server-Sent Events (SSE)
 **Researched:** 2026-03-16
-**Confidence:** MEDIUM
+**Confidence:** HIGH (multiple authoritative sources, official documentation, established patterns)
 
 ## Feature Landscape
 
@@ -12,14 +12,13 @@ Features users assume exist. Missing these = product feels incomplete.
 
 | Feature | Why Expected | Complexity | Notes |
 |---------|--------------|------------|-------|
-| Bearer Token Authentication | Standard auth for HTTP APIs. Users expect secure, token-based access control. | LOW | Single static token in Authorization header. Simple comparison, no JWT complexity needed. |
-| JSON Response Format | APIs must return structured data. JSON is the de facto standard. | LOW | Use standard Go encoding/json. Include status field + message/data structure. |
-| HTTP Status Codes (2xx, 4xx, 5xx) | Proper status codes communicate success/failure clearly to clients. | LOW | 200 for success, 401 for auth failure, 500 for server errors. Use standard net/http codes. |
-| Monitoring Service Runs Continuously | Always-on background service is core expectation for monitoring. | LOW | Use Go goroutine + time.Ticker. 15-minute intervals, runs forever until stopped. |
-| HTTP GET Health Checks | Standard pattern for connectivity monitoring. Simple, reliable, universally understood. | LOW | http.Client with timeout. Check response status code only (no body parsing needed). |
-| Failure Notifications | Users expect to be notified when monitoring detects problems. | LOW | Reuse existing Pushover integration. Send alert on connectivity failure. |
-| Service Logging | All services must log operations for debugging and audit. | LOW | Already using WQGroup/logger. Add component-level logging (monitor/api). |
-| Configuration from YAML | Existing pattern. Users expect to configure in config.yaml. | LOW | Extend existing config structure with new sections (api, monitoring). |
+| Auto-scroll to latest logs | Real-time viewers must show newest entries automatically; users expect "tail -f" behavior | LOW | Toggle button to pause/resume (Grafana, Logcat pattern) |
+| Pause/Resume streaming | Users need to inspect specific log lines without new entries disrupting view | LOW | Essential for debugging; standard in Grafana Explore, journalctl, Logcat |
+| Instance selection | Project has multi-instance management; log viewer must support selecting which instance to view | MEDIUM | Depends on existing instance selection feature; route param or dropdown |
+| Basic text search/filter | Finding specific log entries is fundamental; users expect Ctrl+F or simple search box | MEDIUM | Grep-like pattern matching; regex support optional for MVP |
+| Circular buffer (fixed memory) | Log viewer cannot consume unbounded memory; recent logs only (e.g., 5000 lines) | LOW | Ring buffer pattern prevents OOM; standard practice in log aggregation |
+| Real-time updates | Logs must appear immediately as generated; no manual refresh | MEDIUM | SSE provides this by design; built-in reconnection on disconnect |
+| Clear/distinguish stdout vs stderr | Differentiating error output from normal output is critical for debugging | LOW | Color coding or prefix/tag to differentiate streams |
 
 ### Differentiators (Competitive Advantage)
 
@@ -27,13 +26,13 @@ Features that set the product apart. Not required, but valuable.
 
 | Feature | Value Proposition | Complexity | Notes |
 |---------|-------------------|------------|-------|
-| Recovery Notifications | Alert when connectivity is restored. Provides complete incident lifecycle visibility. | LOW | Track previous state. Send notification on failure→success transition. |
-| Structured JSON Error Responses | Include error code + human message. Easier for clients to parse and display errors. | MEDIUM | Define error codes enum. Include `error_code`, `message`, `details` fields. |
-| Request/Response Logging | Log API requests and responses for audit trail. Helps debugging integration issues. | MEDIUM | Log method, path, status code, duration. Be careful with log volume. |
-| Configurable Monitoring Interval | Allow users to customize check frequency (default 15 min). Flexibility for different use cases. | LOW | Add `monitoring.interval` to config. Use time.Duration parsing. |
-| Configurable Monitoring Target | Allow users to change what URL to monitor. Some may prefer different endpoints. | LOW | Add `monitoring.target_url` to config. Default to https://www.google.com. |
-| Graceful Service Shutdown | Handle Ctrl+C cleanly. Stop monitoring, finish in-flight API requests. | MEDIUM | Use context.Context + signal.Notify. Implement shutdown timeout. |
-| Health Check Endpoint | Expose /health for the API service itself. Allows external monitoring. | LOW | GET /health returns 200 + JSON status. No auth required. |
+| Built-in Web UI | No external tools needed; single binary serves both API and UI | MEDIUM | Embed static files in Go binary; simple HTML/CSS/JS interface |
+| Instance-specific log buffers | Each nanobot instance maintains its own log history | MEDIUM | Map of instance name → circular buffer; isolated log streams |
+| Timestamp preservation | Maintain original log timestamps from nanobot process, not arrival time | LOW | Prefix logs with nanosecond timestamps; critical for debugging timing issues |
+| Connection status indicator | Visual feedback when SSE connection is active/reconnecting/disconnected | LOW | Browser EventSource readyState; improves user confidence |
+| Log line highlighting | Highlight errors (stderr) or search matches in different colors | MEDIUM | CSS classes for visual distinction; aids rapid scanning |
+| Gzip compression for SSE | Reduce bandwidth for high-volume log streams | LOW | Be careful: can disable streaming in some browsers; test thoroughly |
+| Configurable buffer size | Allow users to adjust log retention (default 5000, config in YAML) | LOW | Instance-level config option; trade memory for history depth |
 
 ### Anti-Features (Commonly Requested, Often Problematic)
 
@@ -41,160 +40,187 @@ Features that seem good but create problems.
 
 | Feature | Why Requested | Why Problematic | Alternative |
 |---------|---------------|-----------------|-------------|
-| JWT Token Authentication | "More secure" than static token. Industry standard for user auth. | Overkill for single-user internal service. Adds complexity (token rotation, expiration, signing keys). | Static Bearer token in config. Simple, sufficient for internal tool. |
-| Multiple Monitoring Targets | Monitor multiple URLs simultaneously. Redundancy improves reliability. | Increases complexity exponentially (state management per target, notification grouping, error aggregation). Already covered by existing multi-instance pattern. | Single target per service instance. Use separate instances for different targets if needed. |
-| Monitoring Response Body Content | "Verify the response contains expected data." More thorough than status code check. | Creates fragility. Content changes, formatting differences, false positives. Google homepage content varies by region/user agent. | Check HTTP status code only (200 OK). Simple, reliable, sufficient for connectivity test. |
-| Complex Alert Thresholds | Alert after N consecutive failures. Avoid false positives from transient issues. | Adds state machine complexity. Delays real alerts. Transient failures are rare for Google connectivity. | Alert on first failure. Immediate notification. Fast response time is priority. |
-| Rate Limiting on API | Prevent abuse. Protect service from overload. | Unnecessary for internal single-user service. Adds complexity (token bucket, client tracking). | Trust internal network. If needed, add simple request timeout. |
-| Database for Monitoring History | Store historical data for analysis, trending, reporting. | Massive scope creep. Requires DB, schema, migrations, retention policy. Out of project scope. | Logs provide recent history. Keep service stateless. No persistent data. |
-| API Versioning (/api/v2/) | Future-proof for API changes. Standard practice for public APIs. | Over-engineering for internal tool. Single endpoint, unlikely to change significantly. | Simple /api/v1/ prefix. Sufficient for current scope. Can version later if truly needed. |
-| Retry Logic for HTTP Requests | "Make monitoring more resilient to transient failures." | Hides real connectivity issues. Delays failure detection. Defeats purpose of monitoring. | Single request with timeout. Fail fast, alert immediately. |
-| Circuit Breaker Pattern | "Prevent cascading failures when Google is down." | Unnecessary for single-purpose monitoring. Adds complexity (state machine, cooldown period). | Simple check + alert pattern. Let monitoring fail and notify. No downstream dependencies to protect. |
-| Real-time Web Dashboard | "Visual interface to see monitoring status." | Massive scope creep. Requires frontend, WebSocket, state management. | Logs + JSON API responses. Keep it simple. Use existing log files. |
+| Full log history (unlimited buffer) | "I want to see all logs since instance started" | Unbounded memory growth → OOM crash; Go process killed by OS | Fixed circular buffer (5000 lines); export to file if needed |
+| Bidirectional communication (WebSocket) | "Client should send filter commands to server" | SSE is simpler for one-way streaming; WebSocket adds complexity for minimal gain | SSE for streaming; separate HTTP API endpoints for control operations |
+| Log persistence to disk | "Save all logs for later analysis" | Not the goal of real-time viewer; file I/O overhead; disk space management | Keep existing log file logging; real-time viewer is for live debugging only |
+| Complex query language | "SQL-like queries on logs" | Over-engineering for MVP; steep learning curve; performance issues | Simple text search/grep; defer advanced queries to future version |
+| Authentication/Authorization | "Protect log endpoint with login" | Existing HTTP API likely already has auth (or local-only); adds complexity for internal tool | Rely on existing API auth; localhost-only binding; firewall rules |
+| Binary log format support | "Efficient binary encoding" | SSE is text-only; adds serialization complexity; debugging harder | Plain text logs; structured JSON logs if needed (still text-based) |
+| Multiple simultaneous log views | "Merge logs from multiple instances in one view" | Makes log correlation harder; interleaving logic complex; confusing UX | Instance selection; one instance at a time; clearer debugging |
 
 ## Feature Dependencies
 
 ```
-HTTP API Service
-    └──requires──> Bearer Token Authentication
-    └──requires──> JSON Response Format
-    └──requires──> Configuration (YAML)
-    └──requires──> Logging
+[Real-time SSE streaming]
+    └──requires──> [stdout/stderr capture from nanobot process]
+                       └──requires──> [Process lifecycle management (existing v0.2 feature)]
 
-Monitoring Service
-    └──requires──> HTTP GET Health Checks
-    └──requires──> Configuration (YAML)
-    └──requires──> Logging
-    └──requires──> Pushover Integration (for notifications)
+[Circular buffer]
+    └──requires──> [Memory management strategy]
+    └──requires──> [Instance-specific buffer map]
 
-Recovery Notifications
-    └──requires──> Monitoring Service (must track state)
-    └──requires──> Pushover Integration
+[Instance selection]
+    └──requires──> [Multi-instance configuration (v0.2 feature)]
+    └──requires──> [Instance name → log buffer mapping]
 
-Graceful Service Shutdown
-    └──requires──> HTTP API Service (must stop accepting requests)
-    └──requires──> Monitoring Service (must stop goroutine)
+[Web UI]
+    └──requires──> [SSE endpoint]
+    └──requires──> [Static file serving (Go http.FileServer)]
 
-Health Check Endpoint (/health)
-    └──enhances──> HTTP API Service (allows external monitoring)
+[Pause/Resume]
+    └──requires──> [Client-side buffer (browser holds logs while paused)]
+    └──requires──> [Auto-scroll toggle button]
 
-Request/Response Logging
-    └──enhances──> HTTP API Service (improves debugging)
+[Text search]
+    └──requires──> [Client-side search implementation (browser Ctrl+F or custom JS)]
+    └──enhances──> [Log highlighting feature]
+
+[Log highlighting]
+    └──enhances──> [Text search]
+    └──requires──> [CSS styling for match highlighting]
 ```
 
 ### Dependency Notes
 
-- **HTTP API requires Bearer Token Authentication:** Security baseline. API cannot be exposed without access control.
-- **HTTP API requires JSON Response Format:** Structured responses are expected by all API clients. Alternative (plain text) would break integration.
-- **Monitoring Service requires Pushover Integration:** Notifications are core value. Without them, monitoring is just silent logging.
-- **Recovery Notifications requires Monitoring Service:** Must track previous state (failed vs healthy) to detect recovery transition.
-- **Health Check Endpoint enhances HTTP API Service:** Nice-to-have for operational visibility, but API works without it.
-- **Request/Response Logging enhances HTTP API Service:** Improves debugging but increases log volume. Optional optimization.
+- **SSE requires stdout/stderr capture:** Must intercept nanobot process output before SSE can stream it. Use `cmd.StdoutPipe()` and `cmd.StderrPipe()` in Go.
+- **Circular buffer requires instance map:** Each instance needs isolated buffer; global buffer would mix logs from different instances.
+- **Instance selection requires v0.2 feature:** Existing multi-instance management provides instance list; log viewer extends it.
+- **Pause/Resume uses client-side buffering:** Server keeps streaming; client discards or buffers based on pause state. Simpler than server-side pause.
+- **Text search enhances highlighting:** Search can trigger highlighting; both use similar DOM manipulation patterns.
+- **Web UI conflicts with authentication (if complex):** Simple auth (API key in URL param) is fine; OAuth/SAML would overcomplicate internal tool.
 
 ## MVP Definition
 
-### Launch With (v0.3)
+### Launch With (v0.4)
 
-Minimum viable product — what's needed to validate the architecture change from cron to HTTP API + monitoring.
+Minimum viable product — what's needed to validate the concept.
 
-- [x] Bearer Token Authentication — Essential for API security. Non-negotiable.
-- [x] JSON Response Format — Standard API expectation. Required for client integration.
-- [x] HTTP Status Codes — Basic HTTP compliance. Cannot skip.
-- [x] Monitoring Service Runs Continuously — Core architecture change. Replaces cron.
-- [x] HTTP GET Health Checks (Google) — Primary monitoring feature. Cannot skip.
-- [x] Failure Notifications — Core value proposition. Must alert on connectivity issues.
-- [x] Service Logging — Required for debugging and operations.
-- [x] Configuration from YAML — Consistency with existing pattern.
-- [x] POST /api/v1/trigger-update Endpoint — Primary API feature. Triggers nanobot update.
+- [x] stdout/stderr capture from nanobot process — Core requirement; without this, no logs to show
+- [x] Circular buffer per instance (5000 lines) — Prevents memory issues; standard practice
+- [x] SSE endpoint for streaming logs (`/api/instances/{name}/logs/stream`) — Real-time delivery mechanism
+- [x] Instance selection — Multi-instance context requires this; cannot view all logs at once
+- [x] Basic Web UI with auto-scroll — Simple HTML page with EventSource connection
+- [x] Pause/Resume toggle — Essential for inspecting logs; standard pattern
+- [x] Distinguish stdout vs stderr (color coding) — Critical for debugging; visual differentiation
 
-### Add After Validation (v0.3.x)
+### Add After Validation (v0.4.x)
 
-Features to add once core is working in production.
+Features to add once core is working.
 
-- [ ] Recovery Notifications — Trigger: Users ask "how do I know when it's fixed?" HIGH value, LOW complexity.
-- [ ] Graceful Service Shutdown — Trigger: Need to restart service cleanly. Improves ops experience.
-- [ ] Configurable Monitoring Interval — Trigger: Users want faster/slower checks. Common customization request.
-- [ ] Health Check Endpoint (/health) — Trigger: External monitoring systems need to check service health.
+- [ ] Text search/filter — Users will request this quickly; common pattern (Grafana, journalctl)
+- [ ] Log line highlighting — Improves usability; relatively simple CSS addition
+- [ ] Connection status indicator — Helps users understand when streaming is active vs disconnected
+- [ ] Configurable buffer size — Power users may want more history; easy config addition
+- [ ] Timestamp preservation — Ensure logs show when they were generated, not when received
 
-### Future Consideration (v0.4+)
+### Future Consideration (v0.5+)
 
-Features to defer until architecture is proven and stable.
+Features to defer until product-market fit is established.
 
-- [ ] Structured JSON Error Responses — Better DX, but requires error code taxonomy.
-- [ ] Request/Response Logging — Audit trail, but increases log volume significantly.
-- [ ] Configurable Monitoring Target — Flexibility, but most users will use default.
+- [ ] Log export (download as file) — Useful for sharing logs; requires UI button and endpoint
+- [ ] Regex search support — Advanced users only; adds complexity to search UI
+- [ ] Log level filtering (INFO/WARN/ERROR) — Requires structured logging from nanobot; may not apply
+- [ ] Dark mode UI — Nice to have; CSS theming; low priority
+- [ ] Multiple log views (side-by-side comparison) — Complex UI; unclear value proposition
 
 ## Feature Prioritization Matrix
 
 | Feature | User Value | Implementation Cost | Priority |
 |---------|------------|---------------------|----------|
-| Bearer Token Authentication | HIGH | LOW | P1 |
-| JSON Response Format | HIGH | LOW | P1 |
-| HTTP Status Codes | HIGH | LOW | P1 |
-| Monitoring Service (continuous) | HIGH | LOW | P1 |
-| HTTP GET Health Checks | HIGH | LOW | P1 |
-| Failure Notifications | HIGH | LOW | P1 |
-| POST /api/v1/trigger-update | HIGH | LOW | P1 |
-| Service Logging | HIGH | LOW | P1 |
-| Configuration from YAML | HIGH | LOW | P1 |
-| Recovery Notifications | HIGH | LOW | P2 |
-| Graceful Service Shutdown | MEDIUM | MEDIUM | P2 |
-| Health Check Endpoint | MEDIUM | LOW | P2 |
-| Configurable Monitoring Interval | MEDIUM | LOW | P2 |
-| Structured JSON Error Responses | MEDIUM | MEDIUM | P3 |
-| Request/Response Logging | LOW | MEDIUM | P3 |
-| Configurable Monitoring Target | LOW | LOW | P3 |
+| stdout/stderr capture | HIGH | MEDIUM | P1 |
+| SSE streaming endpoint | HIGH | MEDIUM | P1 |
+| Circular buffer per instance | HIGH | LOW | P1 |
+| Instance selection | HIGH | LOW | P1 |
+| Auto-scroll | HIGH | LOW | P1 |
+| Pause/Resume | HIGH | LOW | P1 |
+| Basic Web UI | HIGH | MEDIUM | P1 |
+| stdout/stderr distinction | HIGH | LOW | P1 |
+| Text search/filter | MEDIUM | MEDIUM | P2 |
+| Log highlighting | MEDIUM | LOW | P2 |
+| Connection status | MEDIUM | LOW | P2 |
+| Timestamp preservation | MEDIUM | LOW | P2 |
+| Configurable buffer size | LOW | LOW | P3 |
+| Log export | LOW | MEDIUM | P3 |
+| Regex search | LOW | MEDIUM | P3 |
+| Log level filtering | LOW | HIGH | P3 |
 
 **Priority key:**
-- P1: Must have for launch (v0.3)
-- P2: Should have, add when possible (v0.3.x)
-- P3: Nice to have, future consideration (v0.4+)
+- P1: Must have for launch (MVP)
+- P2: Should have, add when possible (post-MVP)
+- P3: Nice to have, future consideration (v0.5+)
 
 ## Competitor Feature Analysis
 
-| Feature | Datadog Synthetics | New Relic Synthetics | SigNoz | Our Approach |
-|---------|-------------------|----------------------|--------|--------------|
-| Monitoring Type | Multi-location synthetic checks | Synthetic API tests | Full-stack APM with metrics | Single-location HTTP GET |
-| Authentication | OAuth, API keys, mTLS | API keys, OAuth | OpenTelemetry tokens | Static Bearer token |
-| Alerting | Multi-channel, AI-powered | Threshold-based, integrations | Alert rules, silences | Pushover notifications only |
-| Response Analysis | Body, headers, timing metrics | Body validation, assertions | Metrics + traces + logs | Status code only |
-| Complexity | HIGH (enterprise SaaS) | HIGH (enterprise SaaS) | HIGH (full observability) | LOW (single-purpose tool) |
-| Pricing | Usage-based, expensive | Usage-based, expensive | Free tier + paid | N/A (self-hosted, free) |
+| Feature | Grafana Explore | journalctl | Logcat (Android) | Our Approach |
+|---------|-----------------|------------|------------------|--------------|
+| Real-time streaming | ✓ (Live tail) | ✓ (-f flag) | ✓ (Auto-scroll) | ✓ (SSE) |
+| Pause/Resume | ✓ (Pause button) | ✗ (Ctrl+C) | ✓ (Toggle button) | ✓ (Toggle button) |
+| Instance selection | N/A | N/A | N/A | ✓ (Multi-instance context) |
+| Text search | ✓ (Query language) | ✓ (grep) | ✓ (Search box) | ✓ (Simple search; no query language) |
+| Auto-scroll | ✓ | ✓ | ✓ (Default) | ✓ (Default, with toggle) |
+| stdout/stderr distinction | ✓ (Colors) | ✗ | ✓ (Colors) | ✓ (Color coding) |
+| Circular buffer | ✓ (Configurable) | ✗ (Persistent) | ✓ (Ring buffer) | ✓ (5000 lines, configurable) |
+| Web UI | ✓ (Full dashboard) | ✗ (CLI only) | ✓ (Android Studio) | ✓ (Simple embedded UI) |
+| Export logs | ✓ (Download) | ✓ (Redirect to file) | ✓ (Export) | ✗ (Future: v0.5+) |
+| Authentication | ✓ (Full RBAC) | ✗ (Local only) | ✗ (Local only) | ✗ (Rely on localhost/external auth) |
 
 **Our Differentiation:**
-- Extreme simplicity: Single endpoint, single monitoring target, single notification channel
-- No external dependencies: No database, no SaaS subscription, no vendor lock-in
-- Tight scope: Does one thing well (connectivity monitoring + update triggering)
-- Low resource usage: Designed for lightweight Windows background service
+- **Instance-aware:** Built for multi-instance nanobot management (unique context)
+- **Single binary:** No external dependencies; embed UI in Go executable
+- **SSE over WebSocket:** Simpler implementation; firewall-friendly; built-in reconnection
+- **Opinionated simplicity:** Fixed buffer; no query language; focus on real-time viewing, not analysis
 
 ## Sources
 
-**API Monitoring Best Practices:**
-- [SigNoz: The Ultimate Guide to API Monitoring in 2026](https://signoz.io/blog/api-monitoring-complete-guide/) — MEDIUM confidence (verified multiple sources agree on JSON, status codes, auth patterns)
-- [Dotcom-Monitor: API Monitoring Metrics, Best Practices](https://www.dotcom-monitor.com/blog/api-monitoring/) — MEDIUM confidence (industry standard practices)
+**SSE Best Practices & Implementation:**
+- [Real-Time Data Streaming with Server-Sent Events (SSE) - Dev.to](https://dev.to/serifcolakel/real-time-data-streaming-with-server-sent-events-sse-1gb2)
+- [Server-Sent Events: A Practical Guide for the Real World](https://tigerabrodi.blog/server-sent-events-a-practical-guide-for-the-real-world)
+- [Using server-sent events - MDN Web Docs](https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events/Using_server-sent_events)
+- [Server-Sent Events (SSE): A Beginner's Guide - Part II (LinkedIn)](https://www.linkedin.com/pulse/server-sent-events-sse-beginners-guide-part-ii-began-balakrishnan-sxove) — Best practices: limit clients in memory, Redis offload, gzip caution
+- [Mastering SSE with Python and Go - Dev.to](https://dev.to/philip_zhang_854092d88473/mastering-server-sent-events-sse-with-python-and-go-for-real-time-data-streaming-38bf)
 
-**Monitoring Anti-Patterns:**
-- [Netdata: Monitor Everything is an Anti-Pattern!](https://www.netdata.cloud/blog/monitor-everything-is-an-anti-pattern/) — HIGH confidence (authoritative source, detailed architectural analysis)
-- [AWS DevOps Guidance: Anti-patterns for Continuous Monitoring](https://docs.aws.amazon.com/wellarchitected/latest/devops-guidance/anti-patterns-for-continuous-monitoring.html) — HIGH confidence (official AWS documentation)
+**SSE vs WebSocket Comparison:**
+- [Streaming HTTP vs. WebSocket vs. SSE - Dev.to](https://dev.to/mechcloud_academy/streaming-http-vs-websocket-vs-sse-a-comparison-for-real-time-data-1geo)
+- [Ably: WebSockets vs SSE](https://ably.com/blog/websockets-vs-sse)
+- [freeCodeCamp: SSE vs WebSockets](https://www.freecodecamp.org/news/server-sent-events-vs-websockets/)
+- [SoftwareMill: SSE vs WebSockets](https://softwaremill.com/sse-vs-websockets-comparing-real-time-communication-protocols/)
 
-**Alert Fatigue Research:**
-- [OneUptime: Alert Fatigue Is Killing Your On-Call Team](https://oneuptime.com/blog/post/2026-03-05-alert-fatigue-ai-on-call/view) — MEDIUM confidence (industry trend analysis)
-- [LogicMonitor: 2026 Observability & AI Trends](https://www.logicmonitor.com/blog/observability-ai-trends-2026) — MEDIUM confidence (survey data, 36% alert fatigue statistic)
+**Log Viewer UI Features:**
+- [Logs in Explore - Grafana](https://grafana.com/docs/grafana/latest/visualizations/explore/logs-integration/) — Pause button, live tailing
+- [How to disable the autoscroll feature in Logcat? - Stack Overflow](https://stackoverflow.com/questions/6788491/how-to-disable-the-autoscroll-feature-in-logcat)
+- [How to Monitor Error Logs in Real-Time - Last9](https://last9.io/blog/how-to-monitor-error-logs-in-real-time/) — Interactive interfaces with scroll, pause, search
+- [24 Open-source Free Log Viewers - Medevel](https://medevel.com/log-viewer-apps-24/) — Compilation of log viewer features
+- [Grafana Logs Table UI](https://grafana.com/whats-new/2023-12-13-logs-table-ui/) — Point-and-click interface design
 
-**HTTP Status Codes:**
-- [Dev.to: The Ultimate Guide to HTTP Status Codes in REST APIs](https://dev.to/gianfcop98/the-ultimate-guide-to-http-status-codes-in-rest-apis-40cp) — MEDIUM confidence (verified against official HTTP spec)
-- [Postman: What are HTTP status codes?](https://blog.postman.com/what-are-http-status-codes/) — HIGH confidence (authoritative API tool vendor)
+**Observability & Table Stakes:**
+- [The New Table Stakes of Observability - Observability 360](https://observability-360.com/article/ViewArticle?id=new-table-stakes-of-observability) — Logs, Metrics, Traces as table stakes
+- [2026 Predictions: Unified Observability - Splunk](https://www.splunk.com/en_us/blog/ciso-circle/unified-observability-business-leadership-benefits.html) — Real-time protection as essential
 
-**Golang HTTP API Patterns:**
-- [Encore.dev: How to Build a REST API with Go in 2026](https://encore.dev/articles/build-rest-api-go-2026) — MEDIUM confidence (current best practices)
-- [JetBrains Guide: Authentication for Go Applications](https://www.jetbrains.com/guide/go/tutorials/authentication-for-go-apps/auth/) — HIGH confidence (official JetBrains documentation)
+**Circular Buffer & Memory Management:**
+- [When to Consider Using a Circular Buffer - AlgoCademy](https://algocademy.com/blog/when-to-consider-using-a-circular-buffer-a-comprehensive-guide/)
+- [Circular buffer - Wikipedia](https://en.wikipedia.org/wiki/Circular_buffer)
+- [Implement Circular Buffer in ASP.NET Core](https://ssojet.com/data-structures/implement-circular-buffer-in-aspnet-core)
 
-**Confidence Assessment:**
-- Stack research: MEDIUM (relied on web search + industry sources, verified key claims across multiple sources)
-- Features landscape: MEDIUM (based on general API monitoring domain knowledge, specific to our narrow use case)
-- Anti-patterns: HIGH (strong consensus across multiple authoritative sources)
+**Go SSE Implementation:**
+- [How to Implement Server-Sent Events in Go - freeCodeCamp](https://www.freecodecamp.org/news/how-to-implement-server-sent-events-in-go/)
+- [How to Implement Server-Sent Events in Go - ITNEXT](https://itnext.io/how-to-implement-server-sent-events-in-go-f9d8a2e7d5ee)
+- [How I Implemented Server Sent Events in GO - Medium](https://medium.com/@kristian15994/how-i-implemented-server-sent-events-in-go-3a55edcf4607)
+- [Build Real-time Applications with Go and SSE - OneUptime](https://oneuptime.com/blog/post/2026-02-01-go-realtime-applications-sse/view)
+- [GoFrame SSE Implementation Guide](https://goframe.org/articles/go-sse-implementation-guide)
+
+**Go stdout/stderr Capture:**
+- [how to properly capture all stdout/stderr - Stack Overflow](https://stackoverflow.com/questions/38229584/how-to-properly-capture-all-stdout-stderr)
+- [Golang: Handling System Calls and Capturing stderr](https://tiagomelo.info/go/syscall/2023/12/15/golang-handling-system-calls-capturing-stderr-tiago-melo-vqgsf.html)
+- [Prefix Streaming stdout & stderr in Go](https://kvz.io/blog/2013-07-12-prefix-streaming-stdout-and-stderr-in-golang)
+- [Capturing console output in Go tests](https://rednafi.com/go/capture-console-output/)
+
+**Security & Authentication:**
+- [What is User Authentication? Best Practices (2026) - Authgear](https://www.authgear.com/post/what-is-user-authentication-guide-2026)
+- [API Security Trends 2026 - Curity.io](https://curity.io/blog/api-security-trends-2026/)
+- [Best Practices for Log Management in 2026 - LogManager](https://logmanager.com/blog/log-management/log-management-best-practices/)
+- [Zero Trust in 2026 - Exabeam](https://www.exabeam.com/explainers/zero-trust/zero-trust-in-2026-principles-technologies-best-practices/)
 
 ---
 
-*Feature research for: HTTP API Service + Monitoring Service*
+*Feature research for: Real-time log viewing via SSE*
 *Researched: 2026-03-16*
