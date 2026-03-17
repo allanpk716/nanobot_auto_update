@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v0.4
 milestone_name: Real-time Logs
 status: planning
-stopped_at: Completed 20-02-PLAN.md
-last_updated: "2026-03-17T07:46:11.657Z"
+stopped_at: Completed 21-01-PLAN.md
+last_updated: "2026-03-17T12:57:00.241Z"
 last_activity: 2026-03-17 — Completed 20-02-PLAN.md
 progress:
   total_phases: 5
   completed_phases: 2
-  total_plans: 4
-  completed_plans: 4
+  total_plans: 6
+  completed_plans: 5
 ---
 
 ---
@@ -71,6 +71,7 @@ Progress: [██████████] 100%
 | Phase 19 P02 | 10min | 1 tasks | 3 files |
 | Phase 20 P01 | 6min | 1 tasks | 2 files |
 | Phase 20 P02 | 8min | 1 tasks | 2 files |
+| Phase 21 P01 | 118 | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -88,6 +89,9 @@ Recent decisions affecting current work:
 - [Phase 20]: Use os.Pipe() instead of cmd.StdoutPipe() to avoid race condition
 - [Phase 20]: Use select+default pattern in captureLogs for non-blocking scan with context cancellation
 - [Phase 20]: Wait 1 second for goroutines to finish in tests (increased from 500ms for Windows)
+- [Phase 21]: Clear subscribers continue receiving new logs (subscribers map unchanged)
+- [Phase 21]: Zero out entire entries array for clean state
+- [Phase 21]: Use mutex.Lock() for thread-safe state reset
 
 ### Pending Todos
 
@@ -103,6 +107,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-17T07:40:18.678Z
-Stopped at: Completed 20-02-PLAN.md
+Last session: 2026-03-17T12:57:00.237Z
+Stopped at: Completed 21-01-PLAN.md
 Resume file: None
