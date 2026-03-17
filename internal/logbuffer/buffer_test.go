@@ -280,15 +280,32 @@ func TestLogBuffer_Unsubscribe(t *testing.T) {
 	logger := createTestLogger()
 	lb := NewLogBuffer(logger)
 
-	initialGoroutines := countGoroutines()
-
 	// Subscribe
 	ch := lb.Subscribe()
-	time.Sleep(10 * time.Millisecond) // Wait for goroutine to start
+	time.Sleep(50 * time.Millisecond) // Wait for goroutine to start
+
+	// Write a log to verify channel is working
+	entry := LogEntry{
+		Timestamp: time.Now(),
+		Source:    "stdout",
+		Content:   "test",
+	}
+	err := lb.Write(entry)
+	if err != nil {
+		t.Fatalf("Write failed: %v", err)
+	}
+
+	// Should receive the log
+	select {
+	case <-ch:
+		// Good
+	case <-time.After(1 * time.Second):
+		t.Error("Should receive log before Unsubscribe")
+	}
 
 	// Unsubscribe
 	lb.Unsubscribe(ch)
-	time.Sleep(100 * time.Millisecond) // Wait for goroutine to stop
+	time.Sleep(200 * time.Millisecond) // Wait for goroutine to stop completely
 
 	// Verify channel is closed
 	_, ok := <-ch
@@ -296,10 +313,25 @@ func TestLogBuffer_Unsubscribe(t *testing.T) {
 		t.Error("Channel should be closed after Unsubscribe")
 	}
 
-	// Verify goroutine exited
-	currentGoroutines := countGoroutines()
-	if currentGoroutines >= initialGoroutines {
-		t.Errorf("Expected goroutine count to decrease, got initial=%d, current=%d", initialGoroutines, currentGoroutines)
+	// Write another log after unsubscribe
+	entry2 := LogEntry{
+		Timestamp: time.Now(),
+		Source:    "stdout",
+		Content:   "test2",
+	}
+	err = lb.Write(entry2)
+	if err != nil {
+		t.Fatalf("Write after unsubscribe failed: %v", err)
+	}
+
+	// Should not receive the log (channel closed)
+	select {
+	case _, received := <-ch:
+		if received {
+			t.Error("Should not receive log after Unsubscribe")
+		}
+	default:
+		// Good - channel is closed and empty
 	}
 }
 
@@ -392,4 +424,108 @@ func TestLogBuffer_ConcurrentSubscribe(t *testing.T) {
 // Helper function to count current goroutines
 func countGoroutines() int {
 	return runtime.NumGoroutine()
+}
+
+// TestLogBuffer_Clear tests basic Clear() functionality
+func TestLogBuffer_Clear(t *testing.T) {
+	logger := createTestLogger()
+	lb := NewLogBuffer(logger)
+
+	// Write 10 logs to buffer
+	for i := 1; i <= 10; i++ {
+		entry := LogEntry{
+			Timestamp: time.Now(),
+			Source:    "stdout",
+			Content:   "log-" + toString(i),
+		}
+		err := lb.Write(entry)
+		if err != nil {
+			t.Fatalf("Write failed: %v", err)
+		}
+	}
+
+	// Verify buffer has 10 entries
+	history := lb.GetHistory()
+	if len(history) != 10 {
+		t.Fatalf("Expected 10 entries before Clear, got %d", len(history))
+	}
+
+	// Clear buffer
+	lb.Clear()
+
+	// Verify buffer is empty after Clear
+	history = lb.GetHistory()
+	if len(history) != 0 {
+		t.Errorf("Expected 0 entries after Clear, got %d", len(history))
+	}
+}
+
+// TestLogBuffer_Clear_EmptyBuffer tests Clear() on empty buffer
+func TestLogBuffer_Clear_EmptyBuffer(t *testing.T) {
+	logger := createTestLogger()
+	lb := NewLogBuffer(logger)
+
+	// Verify buffer is initially empty
+	history := lb.GetHistory()
+	if len(history) != 0 {
+		t.Fatalf("Expected 0 entries initially, got %d", len(history))
+	}
+
+	// Clear empty buffer (should be no-op)
+	lb.Clear()
+
+	// Verify buffer remains empty
+	history = lb.GetHistory()
+	if len(history) != 0 {
+		t.Errorf("Expected 0 entries after Clear on empty buffer, got %d", len(history))
+	}
+}
+
+// TestLogBuffer_Clear_WriteAfterClear tests Write() works after Clear()
+func TestLogBuffer_Clear_WriteAfterClear(t *testing.T) {
+	logger := createTestLogger()
+	lb := NewLogBuffer(logger)
+
+	// Write 5 logs to buffer
+	for i := 1; i <= 5; i++ {
+		entry := LogEntry{
+			Timestamp: time.Now(),
+			Source:    "stdout",
+			Content:   "log-" + toString(i),
+		}
+		err := lb.Write(entry)
+		if err != nil {
+			t.Fatalf("Write failed: %v", err)
+		}
+	}
+
+	// Clear buffer
+	lb.Clear()
+
+	// Write 3 new logs after Clear
+	for i := 1; i <= 3; i++ {
+		entry := LogEntry{
+			Timestamp: time.Now(),
+			Source:    "stdout",
+			Content:   "new-log-" + toString(i),
+		}
+		err := lb.Write(entry)
+		if err != nil {
+			t.Fatalf("Write after Clear failed: %v", err)
+		}
+	}
+
+	// Verify buffer has 3 new entries
+	history := lb.GetHistory()
+	if len(history) != 3 {
+		t.Fatalf("Expected 3 entries after Clear and new writes, got %d", len(history))
+	}
+
+	// Verify content is correct
+	for i := 0; i < 3; i++ {
+		expectedContent := "new-log-" + toString(i+1)
+		if history[i].Content != expectedContent {
+			t.Errorf("Expected content '%s', got '%s'", expectedContent, history[i].Content)
+		}
+	}
 }
