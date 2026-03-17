@@ -339,3 +339,45 @@ func TestInstanceLifecycle_StartWithCapture(t *testing.T) {
 	// 2. Passes the buffer to StartNanobotWithCapture (cannot directly verify in unit test)
 	// This test ensures the method signature and flow is correct
 }
+
+// TestInstanceLifecycle_StopPreservesBuffer verifies INST-04:
+// StopForUpdate does NOT clear the LogBuffer
+func TestInstanceLifecycle_StopPreservesBuffer(t *testing.T) {
+	cfg := config.InstanceConfig{
+		Name:         "test-instance",
+		Port:         18790,
+		StartCommand: "nanobot gateway",
+	}
+
+	baseLogger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
+	il := NewInstanceLifecycle(cfg, baseLogger)
+
+	// Write some logs to the buffer
+	logBuffer := il.GetLogBuffer()
+	logBuffer.Write(logbuffer.LogEntry{Content: "test-log-1", Source: "stdout"})
+	logBuffer.Write(logbuffer.LogEntry{Content: "test-log-2", Source: "stdout"})
+
+	// Verify buffer has 2 entries
+	history := logBuffer.GetHistory()
+	if len(history) != 2 {
+		t.Fatalf("Expected 2 entries before stop, got %d", len(history))
+	}
+
+	// Call StopForUpdate (instance not running, returns nil)
+	ctx := context.Background()
+	err := il.StopForUpdate(ctx)
+	if err != nil {
+		t.Fatalf("StopForUpdate returned error: %v", err)
+	}
+
+	// INST-04: Verify buffer STILL has 2 entries (preserved on stop)
+	history = logBuffer.GetHistory()
+	if len(history) != 2 {
+		t.Errorf("INST-04 violated: Expected 2 entries after stop, got %d (buffer should be preserved)", len(history))
+	}
+
+	// Verify content is unchanged
+	if history[0].Content != "test-log-1" || history[1].Content != "test-log-2" {
+		t.Errorf("Buffer content changed after stop: %+v", history)
+	}
+}
