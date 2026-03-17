@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/HQGroup/nanobot-auto-updater/internal/config"
-	"github.com/HQGroup/nanobot-auto-updater/internal/logbuffer"
 )
 
 // TestNewInstanceManager tests InstanceManager initialization

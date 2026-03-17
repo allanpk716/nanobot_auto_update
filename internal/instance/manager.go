@@ -6,6 +6,7 @@ import (
 	"log/slog"
 
 	"github.com/HQGroup/nanobot-auto-updater/internal/config"
+	"github.com/HQGroup/nanobot-auto-updater/internal/logbuffer"
 	"github.com/HQGroup/nanobot-auto-updater/internal/updater"
 )
 
@@ -138,4 +139,19 @@ func extractNames(errs []*InstanceError) []string {
 		names[i] = err.InstanceName
 	}
 	return names
+}
+
+// GetLogBuffer returns the LogBuffer for the specified instance.
+// INST-02: Used by HTTP API to access instance buffers for SSE streaming.
+func (m *InstanceManager) GetLogBuffer(instanceName string) (*logbuffer.LogBuffer, error) {
+	for _, inst := range m.instances {
+		if inst.config.Name == instanceName {
+			return inst.GetLogBuffer(), nil
+		}
+	}
+	return nil, &InstanceError{
+		InstanceName: instanceName,
+		Operation:    "get_log_buffer",
+		Err:          fmt.Errorf("instance not found"),
+	}
 }
