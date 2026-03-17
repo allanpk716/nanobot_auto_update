@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/HQGroup/nanobot-auto-updater/internal/config"
+	"github.com/HQGroup/nanobot-auto-updater/internal/logbuffer"
 )
 
 // TestNewInstanceManager tests InstanceManager initialization
@@ -191,5 +192,57 @@ func TestInstanceErrorTypeAssertion(t *testing.T) {
 	// Verify errors.Is works with the SAME underlying error instance
 	if !errors.Is(simulatedErr, underlyingErr) {
 		t.Error("errors.Is should find underlying error")
+	}
+}
+
+// TestInstanceManager_GetLogBuffer verifies INST-02:
+// InstanceManager can return LogBuffer by instance name
+func TestInstanceManager_GetLogBuffer(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+
+	cfg := &config.Config{
+		Instances: []config.InstanceConfig{
+			{Name: "instance1", Port: 8080, StartCommand: "cmd1"},
+			{Name: "instance2", Port: 8081, StartCommand: "cmd2"},
+		},
+	}
+
+	manager := NewInstanceManager(cfg, logger)
+
+	// Test: GetLogBuffer returns correct buffer for existing instance
+	buf1, err := manager.GetLogBuffer("instance1")
+	if err != nil {
+		t.Fatalf("GetLogBuffer(instance1) returned error: %v", err)
+	}
+	if buf1 == nil {
+		t.Fatal("GetLogBuffer(instance1) returned nil buffer")
+	}
+
+	// Test: Different instances have different buffers
+	buf2, err := manager.GetLogBuffer("instance2")
+	if err != nil {
+		t.Fatalf("GetLogBuffer(instance2) returned error: %v", err)
+	}
+	if buf1 == buf2 {
+		t.Error("Different instances should have different LogBuffer instances")
+	}
+
+	// Test: GetLogBuffer returns error for non-existent instance
+	_, err = manager.GetLogBuffer("nonexistent")
+	if err == nil {
+		t.Fatal("GetLogBuffer(nonexistent) should return error")
+	}
+
+	// Verify error is InstanceError
+	var instanceErr *InstanceError
+	if !errors.As(err, &instanceErr) {
+		t.Errorf("Error should be InstanceError, got %T", err)
+	} else {
+		if instanceErr.InstanceName != "nonexistent" {
+			t.Errorf("InstanceError.InstanceName = %q, want 'nonexistent'", instanceErr.InstanceName)
+		}
+		if instanceErr.Operation != "get_log_buffer" {
+			t.Errorf("InstanceError.Operation = %q, want 'get_log_buffer'", instanceErr.Operation)
+		}
 	}
 }
