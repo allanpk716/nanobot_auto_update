@@ -153,7 +153,7 @@ Phases execute in numeric order: 19 → 20 → 21 → 22 → 23
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 19. Log Buffer Core | 2/2 | Complete    | 2026-03-17 |
-| 20. Log Capture Integration | 0/2 | Not started | - |
+| 20. Log Capture Integration | 1/2 | In Progress|  |
 | 21. Instance Management Integration | 0/TBD | Not started | - |
 | 22. SSE Streaming API | 0/TBD | Not started | - |
 | 23. Web UI and Error Handling | 0/TBD | Not started | - |

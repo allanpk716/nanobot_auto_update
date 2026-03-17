@@ -3,31 +3,15 @@ gsd_state_version: 1.0
 milestone: v0.4
 milestone_name: Real-time Logs
 status: planning
-stopped_at: Completed 19-02-PLAN.md
-last_updated: "2026-03-17T02:55:57.957Z"
-last_activity: 2026-03-17 — Completed 19-01-PLAN.md
+stopped_at: Completed 20-01-PLAN.md
+last_updated: "2026-03-17T07:27:33Z"
+last_activity: 2026-03-17 — Completed 20-01-PLAN.md
 progress:
   total_phases: 5
   completed_phases: 1
   total_plans: 2
-  completed_plans: 2
-  percent: 100
----
-
----
-gsd_state_version: 1.0
-milestone: v0.4
-milestone_name: Real-time Logs
-status: planning
-stopped_at: Completed 19-01-PLAN.md
-last_updated: "2026-03-17T02:29:48.805Z"
-last_activity: 2026-03-16 — v0.4 roadmap created
-progress:
-  [██████████] 100%
-  completed_phases: 0
-  total_plans: 2
   completed_plans: 1
-  percent: 0
+  percent: 50
 ---
 
 # Project State
@@ -36,15 +20,15 @@ progress:
 
 See: .planning/PROJECT.md (updated 2026-03-16)
 
-**Core value:** 自动保持 nanobot 处于最新版本，无需用户手动干预
-**Current focus:** Phase 19: Log Buffer Core
+**Core value:** 自动保持 nanobot 处于最新版本,无需用户手动干预
+**Current focus:** Phase 20: Log Capture Integration
 
 ## Current Position
 
-Phase: 19 of 23 (Log Buffer Core)
-Plan: 1 of 2 in current phase
+Phase: 20 of 23 (Log Capture Integration)
+Plan: 2 of 2 in current phase
 Status: In Progress
-Last activity: 2026-03-17 — Completed 19-01-PLAN.md
+Last activity: 2026-03-17 — Completed 20-01-PLAN.md
 
 Progress: [█████░░░░░] 50%
 
@@ -70,6 +54,7 @@ Progress: [█████░░░░░] 50%
 *Updated after each plan completion*
 | Phase 19 P01 | 173 | 1 tasks | 2 files |
 | Phase 19 P02 | 10min | 1 tasks | 3 files |
+| Phase 20 P01 | 6min | 1 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -78,11 +63,12 @@ Progress: [█████░░░░░] 50%
 Decisions are logged in PROJECT.md Key Decisions table.
 Recent decisions affecting current work:
 
-for v0.4.
 - [Phase 19]: Self-implement circular buffer using [5000]LogEntry array to avoid external dependencies and serialization overhead
 - [Phase 19]: Use sync.RWMutex for thread-safe concurrent access (read-heavy workload)
 - [Phase 19]: Use channel pattern with capacity 100 for subscription (vs callback functions) — Channel pattern matches Go concurrency idioms, integrates naturally with Phase 22 SSE, allows non-blocking send via select+default
 - [Phase 19]: Drop logs for slow subscribers rather than block Write operations — Ensures Phase 20 log capture never blocked by slow SSE clients, critical for system stability
+- [Phase 20]: Use bufio.Scanner instead of bufio.Reader for line-by-line reading — Scanner handles line boundaries automatically, simpler API
+- [Phase 20]: Use select+default pattern for non-blocking scan with context cancellation — Allows checking ctx.Done() before each scan, ensures timely goroutine exit
 
 ### Pending Todos
 
@@ -98,6 +84,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-17T02:49:24.373Z
-Stopped at: Completed 19-02-PLAN.md
+Last session: 2026-03-17T07:27:33Z
+Stopped at: Completed 20-01-PLAN.md
 Resume file: None
