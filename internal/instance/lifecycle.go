@@ -81,8 +81,13 @@ func (il *InstanceLifecycle) StopForUpdate(ctx context.Context) error {
 // StartAfterUpdate starts the instance after update.
 // Uses instance-specific command and port configuration.
 // Returns InstanceError if start operation fails.
+// INST-05: Clears LogBuffer before starting
+// INST-03: Uses StartNanobotWithCapture with instance's LogBuffer
 func (il *InstanceLifecycle) StartAfterUpdate(ctx context.Context) error {
 	il.logger.Info("Starting instance after update")
+
+	// INST-05: Clear LogBuffer on restart (fresh start)
+	il.logBuffer.Clear()
 
 	// Handle default startup timeout
 	startupTimeout := il.config.StartupTimeout
@@ -92,7 +97,8 @@ func (il *InstanceLifecycle) StartAfterUpdate(ctx context.Context) error {
 	}
 
 	// Start the instance using lifecycle package with instance-specific command and port
-	if err := lifecycle.StartNanobot(ctx, il.config.StartCommand, il.config.Port, startupTimeout, il.logger); err != nil {
+	// INST-03: Use StartNanobotWithCapture with instance's LogBuffer
+	if err := lifecycle.StartNanobotWithCapture(ctx, il.config.StartCommand, il.config.Port, startupTimeout, il.logger, il.logBuffer); err != nil {
 		il.logger.Error("Failed to start instance", "error", err)
 		return &InstanceError{
 			InstanceName: il.config.Name,
@@ -102,7 +108,7 @@ func (il *InstanceLifecycle) StartAfterUpdate(ctx context.Context) error {
 		}
 	}
 
-	il.logger.Info("Instance started successfully")
+	il.logger.Info("Instance started successfully with log capture")
 	return nil
 }
 

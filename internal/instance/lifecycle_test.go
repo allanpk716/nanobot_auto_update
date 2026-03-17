@@ -258,21 +258,21 @@ func TestInstanceLifecycle_IndependentLogBuffers(t *testing.T) {
 }
 
 // TestInstanceLifecycle_StartClearsBuffer verifies INST-05:
-// StartAfterUpdate clears LogBuffer before starting
+// StartAfterUpdate clears LogBuffer before starting (old logs discarded)
 func TestInstanceLifecycle_StartClearsBuffer(t *testing.T) {
 	cfg := config.InstanceConfig{
 		Name:         "test-instance",
 		Port:         18793,
-		StartCommand: "nonexistent-command-for-test",
+		StartCommand: "echo test-output", // Simple command that outputs something
 	}
 
 	baseLogger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
 	il := NewInstanceLifecycle(cfg, baseLogger)
 
-	// Write some logs to the buffer
+	// Write some logs to the buffer BEFORE starting
 	logBuffer := il.GetLogBuffer()
-	logBuffer.Write(logbuffer.LogEntry{Content: "test-log-1", Source: "stdout"})
-	logBuffer.Write(logbuffer.LogEntry{Content: "test-log-2", Source: "stdout"})
+	logBuffer.Write(logbuffer.LogEntry{Content: "old-log-1", Source: "stdout"})
+	logBuffer.Write(logbuffer.LogEntry{Content: "old-log-2", Source: "stdout"})
 
 	// Verify buffer has 2 entries
 	history := logBuffer.GetHistory()
@@ -280,16 +280,29 @@ func TestInstanceLifecycle_StartClearsBuffer(t *testing.T) {
 		t.Fatalf("Expected 2 entries before start, got %d", len(history))
 	}
 
-	// Call StartAfterUpdate (will fail due to invalid command, but should clear buffer)
-	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	// Call StartAfterUpdate - it should:
+	// 1. Clear the buffer (INST-05)
+	// 2. Start the process (which may write new logs)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
-	_ = il.StartAfterUpdate(ctx) // Error expected, we only care about buffer clearing
+	_ = il.StartAfterUpdate(ctx) // Error expected (port won't open), but we want to verify buffer behavior
 
-	// INST-05: Verify buffer is cleared after StartAfterUpdate
+	// Wait a short time for process to exit and logs to be captured
+	time.Sleep(200 * time.Millisecond)
+
+	// INST-05: Verify old logs are gone, only new logs from the process remain
 	history = logBuffer.GetHistory()
-	if len(history) != 0 {
-		t.Errorf("INST-05 violated: Expected 0 entries after start (buffer should be cleared), got %d", len(history))
+
+	// The old logs ("old-log-1", "old-log-2") should NOT be in the buffer
+	for _, entry := range history {
+		if entry.Content == "old-log-1" || entry.Content == "old-log-2" {
+			t.Errorf("INST-05 violated: Old log should have been cleared: %s", entry.Content)
+		}
 	}
+
+	// The buffer should have been cleared, so even if the process wrote logs,
+	// we should only see logs from the NEW process, not the old logs
+	// (This test verifies the Clear() happened before process start)
 }
 
 // TestInstanceLifecycle_StartWithCapture verifies INST-03:
