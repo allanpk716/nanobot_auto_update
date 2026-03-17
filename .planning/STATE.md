@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v0.4
 milestone_name: Real-time Logs
 status: planning
-stopped_at: Completed 20-01-PLAN.md
-last_updated: "2026-03-17T07:27:33Z"
-last_activity: 2026-03-17 — Completed 20-01-PLAN.md
+stopped_at: Completed 20-02-PLAN.md
+last_updated: "2026-03-17T07:40:18.681Z"
+last_activity: 2026-03-17 — Completed 20-02-PLAN.md
 progress:
   total_phases: 5
   completed_phases: 1
   total_plans: 2
-  completed_plans: 1
-  percent: 50
+  completed_plans: 2
+  percent: 100
 ---
 
 # Project State
@@ -27,10 +27,10 @@ See: .planning/PROJECT.md (updated 2026-03-16)
 
 Phase: 20 of 23 (Log Capture Integration)
 Plan: 2 of 2 in current phase
-Status: In Progress
-Last activity: 2026-03-17 — Completed 20-01-PLAN.md
+Status: Completed
+Last activity: 2026-03-17 — Completed 20-02-PLAN.md
 
-Progress: [█████░░░░░] 50%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
@@ -55,6 +55,7 @@ Progress: [█████░░░░░] 50%
 | Phase 19 P01 | 173 | 1 tasks | 2 files |
 | Phase 19 P02 | 10min | 1 tasks | 3 files |
 | Phase 20 P01 | 6min | 1 tasks | 2 files |
+| Phase 20 P02 | 8min | 1 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -69,6 +70,9 @@ Recent decisions affecting current work:
 - [Phase 19]: Drop logs for slow subscribers rather than block Write operations — Ensures Phase 20 log capture never blocked by slow SSE clients, critical for system stability
 - [Phase 20]: Use bufio.Scanner instead of bufio.Reader for line-by-line reading — Scanner handles line boundaries automatically, simpler API
 - [Phase 20]: Use select+default pattern for non-blocking scan with context cancellation — Allows checking ctx.Done() before each scan, ensures timely goroutine exit
+- [Phase 20]: Use os.Pipe() instead of cmd.StdoutPipe() to avoid race condition
+- [Phase 20]: Use select+default pattern in captureLogs for non-blocking scan with context cancellation
+- [Phase 20]: Wait 1 second for goroutines to finish in tests (increased from 500ms for Windows)
 
 ### Pending Todos
 
@@ -84,6 +88,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-17T07:27:33Z
-Stopped at: Completed 20-01-PLAN.md
+Last session: 2026-03-17T07:40:18.678Z
+Stopped at: Completed 20-02-PLAN.md
 Resume file: None
