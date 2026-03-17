@@ -51,23 +51,16 @@ func (lb *LogBuffer) Unsubscribe(ch <-chan LogEntry) {
 	lb.mu.Lock()
 	defer lb.mu.Unlock()
 
-	// Try to find the channel in the map
-	// Go allows comparing channels with ==
-	found := false
+	// Find the channel in the map and remove it
+	// Note: In Go, chan T and <-chan T can be compared if they refer to the same channel
 	for subscriber, cancel := range lb.subscribers {
-		// Convert both to receive-only for comparison
-		// Note: In Go, chan T and <-chan T can be compared if they refer to the same channel
-		var subRO <-chan LogEntry = subscriber
-		if subRO == ch {
+		if subscriber == ch {
 			cancel()                      // Cancel context to stop goroutine
 			delete(lb.subscribers, subscriber) // Remove from map
-			found = true
 			lb.logger.Debug("Unsubscribed successfully")
-			break
+			return
 		}
 	}
 
-	if !found {
-		lb.logger.Warn("Unsubscribe called with unknown channel")
-	}
+	lb.logger.Warn("Unsubscribe called with unknown channel")
 }
