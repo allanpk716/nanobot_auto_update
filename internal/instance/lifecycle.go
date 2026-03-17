@@ -8,24 +8,32 @@ import (
 
 	"github.com/HQGroup/nanobot-auto-updater/internal/config"
 	"github.com/HQGroup/nanobot-auto-updater/internal/lifecycle"
+	"github.com/HQGroup/nanobot-auto-updater/internal/logbuffer"
 )
 
 // InstanceLifecycle wraps lifecycle operations with instance-specific context.
 // Each instance has its own logger with instance name pre-injected for traceability.
+// INST-01: Each instance has its own LogBuffer for log capture
 type InstanceLifecycle struct {
-	config config.InstanceConfig
-	logger *slog.Logger
+	config    config.InstanceConfig
+	logger    *slog.Logger
+	logBuffer *logbuffer.LogBuffer // INST-01: LogBuffer for this instance
 }
 
 // NewInstanceLifecycle creates an instance lifecycle manager with context-aware logging.
 // The logger is enriched with instance name and component fields.
+// INST-01: Creates LogBuffer for this instance
 func NewInstanceLifecycle(cfg config.InstanceConfig, baseLogger *slog.Logger) *InstanceLifecycle {
 	// Inject instance context into logger for all log messages
 	instanceLogger := baseLogger.With("instance", cfg.Name).With("component", "instance-lifecycle")
 
+	// INST-01: Create LogBuffer for this instance
+	logBuffer := logbuffer.NewLogBuffer(instanceLogger)
+
 	return &InstanceLifecycle{
-		config: cfg,
-		logger: instanceLogger,
+		config:    cfg,
+		logger:    instanceLogger,
+		logBuffer: logBuffer,
 	}
 }
 
@@ -96,4 +104,10 @@ func (il *InstanceLifecycle) StartAfterUpdate(ctx context.Context) error {
 
 	il.logger.Info("Instance started successfully")
 	return nil
+}
+
+// GetLogBuffer returns the instance's LogBuffer.
+// INST-01: Used by InstanceManager to access instance buffers
+func (il *InstanceLifecycle) GetLogBuffer() *logbuffer.LogBuffer {
+	return il.logBuffer
 }
