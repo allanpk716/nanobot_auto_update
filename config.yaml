@@ -3,7 +3,7 @@
 # HTTP API 服务配置（v0.3 新增，推荐）
 api:
   port: 8080                    # API 服务端口
-  bearer_token: "change-this-to-your-secret-token-at-least-32-characters"  # 认证令牌（必填，≥32字符）
+  bearer_token: "APl09hC28--uIqszguMw4p04nWa-53z3C0zEYQ5XEyDLc5XtY-fZeCuaiVutIquD"  # 认证令牌（必填，≥32字符）
   timeout: 30s                  # 请求超时时间
 
 # 监控服务配置（v0.3 新增，推荐）
@@ -14,9 +14,17 @@ monitor:
 # 多实例配置（v0.2+ 引入，必需）
 # 至少需要配置一个实例
 instances:
-  - name: "nanobot-instance-1"
+  - name: "nanobot-me"
     port: 18790
     start_command: "nanobot gateway"
+    startup_timeout: 30s
+  - name: "nanobot-wangyan"
+    port: 18791
+    start_command: "nanobot gateway --config C:\Users\allan716\.nanobot-wangyan\config.json --port 18791"
+    startup_timeout: 30s
+  - name: "nanobot-work-helper"
+    port: 18792
+    start_command: "nanobot gateway --config C:\Users\allan716\.nanobot-work-helper\config.json --port 18792"
     startup_timeout: 30s
 
 # Pushover 通知设置（可选）
