@@ -94,3 +94,20 @@ func (lb *LogBuffer) GetHistory() []LogEntry {
 
 	return result
 }
+
+// Clear resets the buffer to empty state
+// INST-05: Support instance restart behavior - old logs discarded before restart
+// Note: Subscribers continue receiving new logs after Clear() (subscribers map unchanged)
+func (lb *LogBuffer) Clear() {
+	lb.mu.Lock()
+	defer lb.mu.Unlock()
+
+	// Reset buffer state
+	lb.head = 0
+	lb.size = 0
+
+	// Zero out entries array
+	lb.entries = [5000]LogEntry{}
+
+	lb.logger.Debug("Buffer cleared")
+}
