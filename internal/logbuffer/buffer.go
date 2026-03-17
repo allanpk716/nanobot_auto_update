@@ -1,6 +1,7 @@
 package logbuffer
 
 import (
+	"context"
 	"log/slog"
 	"sync"
 	"time"
@@ -19,18 +20,20 @@ type LogEntry struct {
 // BUFF-02: System limits buffer size to 5000 log lines
 // BUFF-03: System uses thread-safe circular buffer implementation
 type LogBuffer struct {
-	mu      sync.RWMutex
-	entries [5000]LogEntry // Fixed capacity of 5000 entries (BUFF-02)
-	head    int            // Next write position (0-4999)
-	size    int            // Current entry count (0-5000)
-	logger  *slog.Logger
+	mu          sync.RWMutex
+	entries     [5000]LogEntry                   // Fixed capacity of 5000 entries (BUFF-02)
+	head        int                              // Next write position (0-4999)
+	size        int                              // Current entry count (0-5000)
+	subscribers map[chan LogEntry]context.CancelFunc // Subscriber channels with cancel funcs
+	logger      *slog.Logger
 }
 
 // NewLogBuffer creates a new log buffer with fixed capacity of 5000 entries
 func NewLogBuffer(logger *slog.Logger) *LogBuffer {
 	return &LogBuffer{
-		entries: [5000]LogEntry{}, // Pre-allocate 5000 entry capacity
-		logger:  logger.With("component", "logbuffer"),
+		entries:     [5000]LogEntry{}, // Pre-allocate 5000 entry capacity
+		subscribers: make(map[chan LogEntry]context.CancelFunc),
+		logger:      logger.With("component", "logbuffer"),
 	}
 }
 
@@ -48,6 +51,19 @@ func (lb *LogBuffer) Write(entry LogEntry) error {
 	// Increment size until buffer is full
 	if lb.size < 5000 {
 		lb.size++
+	}
+
+	// Non-blocking send to all subscribers (CONTEXT.md constraint)
+	// Slow subscribers: drop log if channel full (don't block)
+	for ch := range lb.subscribers {
+		select {
+		case ch <- entry:
+			// Send successful
+		default:
+			// Channel full, drop this log for this subscriber (don't block)
+			lb.logger.Warn("Subscriber channel full, dropping log",
+				"channel_capacity", cap(ch))
+		}
 	}
 
 	return nil
