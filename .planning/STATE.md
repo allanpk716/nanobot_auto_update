@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v0.4
 milestone_name: Real-time Logs
 status: planning
-stopped_at: Completed 21-01-PLAN.md
-last_updated: "2026-03-17T12:57:00.241Z"
+stopped_at: Completed 21-02-PLAN.md
+last_updated: "2026-03-17T13:32:33.451Z"
 last_activity: 2026-03-17 — Completed 20-02-PLAN.md
 progress:
   total_phases: 5
-  completed_phases: 2
+  completed_phases: 3
   total_plans: 6
-  completed_plans: 5
+  completed_plans: 6
 ---
 
 ---
@@ -72,6 +72,7 @@ Progress: [██████████] 100%
 | Phase 20 P01 | 6min | 1 tasks | 2 files |
 | Phase 20 P02 | 8min | 1 tasks | 2 files |
 | Phase 21 P01 | 118 | 2 tasks | 2 files |
+| Phase 21 P02 | 8min | 4 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -92,6 +93,9 @@ Recent decisions affecting current work:
 - [Phase 21]: Clear subscribers continue receiving new logs (subscribers map unchanged)
 - [Phase 21]: Zero out entire entries array for clean state
 - [Phase 21]: Use mutex.Lock() for thread-safe state reset
+- [Phase 21]: Clear LogBuffer before process start (fresh start after update)
+- [Phase 21]: Preserve LogBuffer on stop (keep logs for debugging)
+- [Phase 21]: Delegate GetLogBuffer from manager to lifecycle instance
 
 ### Pending Todos
 
@@ -107,6 +111,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-17T12:57:00.237Z
-Stopped at: Completed 21-01-PLAN.md
+Last session: 2026-03-17T13:32:33.447Z
+Stopped at: Completed 21-02-PLAN.md
 Resume file: None
