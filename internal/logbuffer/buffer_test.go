@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"runtime"
 	"sync"
 	"testing"
 	"time"
@@ -163,4 +164,232 @@ func createTestLogger() *slog.Logger {
 // Helper function to convert int to string
 func toString(i int) string {
 	return fmt.Sprintf("%d", i)
+}
+
+// TestLogBuffer_Subscribe tests Subscribe method returns read-only channel and starts goroutine
+func TestLogBuffer_Subscribe(t *testing.T) {
+	logger := createTestLogger()
+	lb := NewLogBuffer(logger)
+
+	// Get initial goroutine count
+	initialGoroutines := countGoroutines()
+
+	// Subscribe should return a read-only channel
+	ch := lb.Subscribe()
+
+	// Verify channel type is read-only LogEntry channel
+	_, ok := interface{}(ch).(<-chan LogEntry)
+	if !ok {
+		t.Error("Subscribe should return <-chan LogEntry")
+	}
+
+	// Verify goroutine was started
+	time.Sleep(10 * time.Millisecond) // Wait for goroutine to start
+	currentGoroutines := countGoroutines()
+	if currentGoroutines <= initialGoroutines {
+		t.Errorf("Expected goroutine count to increase, got initial=%d, current=%d", initialGoroutines, currentGoroutines)
+	}
+}
+
+// TestLogBuffer_History tests new subscriber receives all buffered history logs
+func TestLogBuffer_History(t *testing.T) {
+	logger := createTestLogger()
+	lb := NewLogBuffer(logger)
+
+	// Write 10 logs to buffer
+	for i := 1; i <= 10; i++ {
+		entry := LogEntry{
+			Timestamp: time.Now(),
+			Source:    "stdout",
+			Content:   "log-" + toString(i),
+		}
+		err := lb.Write(entry)
+		if err != nil {
+			t.Fatalf("Write failed: %v", err)
+		}
+	}
+
+	// Subscribe and receive 10 history logs
+	ch := lb.Subscribe()
+	receivedCount := 0
+	timeout := time.After(2 * time.Second)
+
+	for receivedCount < 10 {
+		select {
+		case entry := <-ch:
+			receivedCount++
+			expectedContent := "log-" + toString(receivedCount)
+			if entry.Content != expectedContent {
+				t.Errorf("Expected content '%s', got '%s'", expectedContent, entry.Content)
+			}
+		case <-timeout:
+			t.Fatalf("Timeout waiting for history logs, received %d/10", receivedCount)
+		}
+	}
+
+	// Verify all 10 history logs received
+	if receivedCount != 10 {
+		t.Errorf("Expected 10 history logs, received %d", receivedCount)
+	}
+}
+
+// TestLogBuffer_RealTime tests subscriber receives real-time logs after subscription
+func TestLogBuffer_RealTime(t *testing.T) {
+	logger := createTestLogger()
+	lb := NewLogBuffer(logger)
+
+	// Subscribe first
+	ch := lb.Subscribe()
+
+	// Wait for history logs (empty buffer, should complete immediately)
+	time.Sleep(50 * time.Millisecond)
+
+	// Write 5 logs after subscription
+	for i := 1; i <= 5; i++ {
+		entry := LogEntry{
+			Timestamp: time.Now(),
+			Source:    "stdout",
+			Content:   "realtime-" + toString(i),
+		}
+		err := lb.Write(entry)
+		if err != nil {
+			t.Fatalf("Write failed: %v", err)
+		}
+	}
+
+	// Receive 5 real-time logs
+	receivedCount := 0
+	timeout := time.After(2 * time.Second)
+
+	for receivedCount < 5 {
+		select {
+		case entry := <-ch:
+			receivedCount++
+			expectedContent := "realtime-" + toString(receivedCount)
+			if entry.Content != expectedContent {
+				t.Errorf("Expected content '%s', got '%s'", expectedContent, entry.Content)
+			}
+		case <-timeout:
+			t.Fatalf("Timeout waiting for real-time logs, received %d/5", receivedCount)
+		}
+	}
+}
+
+// TestLogBuffer_Unsubscribe tests Unsubscribe closes channel and stops goroutine
+func TestLogBuffer_Unsubscribe(t *testing.T) {
+	logger := createTestLogger()
+	lb := NewLogBuffer(logger)
+
+	initialGoroutines := countGoroutines()
+
+	// Subscribe
+	ch := lb.Subscribe()
+	time.Sleep(10 * time.Millisecond) // Wait for goroutine to start
+
+	// Unsubscribe
+	lb.Unsubscribe(ch)
+	time.Sleep(100 * time.Millisecond) // Wait for goroutine to stop
+
+	// Verify channel is closed
+	_, ok := <-ch
+	if ok {
+		t.Error("Channel should be closed after Unsubscribe")
+	}
+
+	// Verify goroutine exited
+	currentGoroutines := countGoroutines()
+	if currentGoroutines >= initialGoroutines {
+		t.Errorf("Expected goroutine count to decrease, got initial=%d, current=%d", initialGoroutines, currentGoroutines)
+	}
+}
+
+// TestLogBuffer_SlowSubscriber tests slow subscriber (not reading channel) doesn't block Write
+func TestLogBuffer_SlowSubscriber(t *testing.T) {
+	logger := createTestLogger()
+	lb := NewLogBuffer(logger)
+
+	// Subscribe but don't read channel (simulating slow subscriber)
+	_ = lb.Subscribe()
+
+	// Write 200 logs (exceeds channel capacity 100)
+	start := time.Now()
+	for i := 1; i <= 200; i++ {
+		entry := LogEntry{
+			Timestamp: time.Now(),
+			Source:    "stdout",
+			Content:   "log-" + toString(i),
+		}
+		err := lb.Write(entry)
+		if err != nil {
+			t.Fatalf("Write failed: %v", err)
+		}
+	}
+	elapsed := time.Since(start)
+
+	// Verify all writes complete within 1 second (not blocked)
+	if elapsed > 1*time.Second {
+		t.Errorf("Write operations took too long: %v (should not block)", elapsed)
+	}
+}
+
+// TestLogBuffer_ConcurrentSubscribe tests 10 concurrent subscribers all receive logs
+func TestLogBuffer_ConcurrentSubscribe(t *testing.T) {
+	logger := createTestLogger()
+	lb := NewLogBuffer(logger)
+
+	numSubscribers := 10
+	channels := make([]<-chan LogEntry, numSubscribers)
+
+	// Start 10 subscribers
+	for i := 0; i < numSubscribers; i++ {
+		channels[i] = lb.Subscribe()
+	}
+
+	// Wait for all goroutines to start
+	time.Sleep(50 * time.Millisecond)
+
+	// Write 100 logs
+	for i := 1; i <= 100; i++ {
+		entry := LogEntry{
+			Timestamp: time.Now(),
+			Source:    "stdout",
+			Content:   "log-" + toString(i),
+		}
+		err := lb.Write(entry)
+		if err != nil {
+			t.Fatalf("Write failed: %v", err)
+		}
+	}
+
+	// Verify all subscribers receive 100 logs
+	var wg sync.WaitGroup
+	for i := 0; i < numSubscribers; i++ {
+		wg.Add(1)
+		go func(idx int) {
+			defer wg.Done()
+			receivedCount := 0
+			timeout := time.After(5 * time.Second)
+
+			for receivedCount < 100 {
+				select {
+				case <-channels[idx]:
+					receivedCount++
+				case <-timeout:
+					t.Errorf("Subscriber %d timeout, received %d/100 logs", idx, receivedCount)
+					return
+				}
+			}
+
+			if receivedCount != 100 {
+				t.Errorf("Subscriber %d expected 100 logs, received %d", idx, receivedCount)
+			}
+		}(i)
+	}
+
+	wg.Wait()
+}
+
+// Helper function to count current goroutines
+func countGoroutines() int {
+	return runtime.NumGoroutine()
 }
