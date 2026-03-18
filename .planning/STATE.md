@@ -2,30 +2,15 @@
 gsd_state_version: 1.0
 milestone: v0.4
 milestone_name: Real-time Logs
-status: planning
-stopped_at: Completed 22-01-PLAN.md
-last_updated: "2026-03-18T02:47:49.132Z"
-last_activity: 2026-03-17 — Completed 20-02-PLAN.md
+status: completed
+stopped_at: Completed 22-02-PLAN.md
+last_updated: "2026-03-18T02:53:57.811Z"
+last_activity: 2026-03-18 — Completed 22-02-PLAN.md
 progress:
   total_phases: 5
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 8
-  completed_plans: 7
----
-
----
-gsd_state_version: 1.0
-milestone: v0.4
-milestone_name: Real-time Logs
-status: planning
-stopped_at: Completed 20-02-PLAN.md
-last_updated: "2026-03-17T07:40:18.681Z"
-last_activity: 2026-03-17 — Completed 20-02-PLAN.md
-progress:
-  total_phases: 5
-  completed_phases: 1
-  total_plans: 2
-  completed_plans: 2
+  completed_plans: 8
   percent: 100
 ---
 
@@ -36,23 +21,23 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-16)
 
 **Core value:** 自动保持 nanobot 处于最新版本,无需用户手动干预
-**Current focus:** Phase 20: Log Capture Integration
+**Current focus:** Phase 22: SSE Streaming API
 
 ## Current Position
 
-Phase: 20 of 23 (Log Capture Integration)
+Phase: 22 of 23 (SSE Streaming API)
 Plan: 2 of 2 in current phase
 Status: Completed
-Last activity: 2026-03-17 — Completed 20-02-PLAN.md
+Last activity: 2026-03-18 — Completed 22-02-PLAN.md
 
 Progress: [██████████] 100%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 18 (v1.0: 10 plans, v0.2: 8 plans)
-- Average duration: N/A (not tracked in previous milestones)
-- Total execution time: N/A
+- Total plans completed: 20 (v1.0: 10 plans, v0.2: 8 plans, v0.4: 2 plans)
+- Average duration: 13 minutes (Phase 22)
+- Total execution time: 26 minutes (Phase 22 total)
 
 **By Phase:**
 
@@ -60,20 +45,25 @@ Progress: [██████████] 100%
 |-------|-------|-------|----------|
 | v1.0 (Phases 1-4) | 10 | N/A | N/A |
 | v0.2 (Phases 5-18) | 8 | N/A | N/A |
-| v0.4 (Phases 19-23) | 0 | - | - |
+| v0.4 (Phases 19-22) | 2 | 26min | 13min |
 
 **Recent Trend:**
-- Last 5 plans: N/A
-- Trend: N/A
+- Last 5 plans: 6-13 minutes
+- Trend: Stable, good velocity
 
 *Updated after each plan completion*
-| Phase 19 P01 | 173 | 1 tasks | 2 files |
+
+| Phase | Plan | Duration | Tasks | Files |
+|-------|------|----------|-------|-------|
+| Phase 19 P01 | 173s | 1 tasks | 2 files |
 | Phase 19 P02 | 10min | 1 tasks | 3 files |
 | Phase 20 P01 | 6min | 1 tasks | 2 files |
 | Phase 20 P02 | 8min | 1 tasks | 2 files |
-| Phase 21 P01 | 118 | 2 tasks | 2 files |
+| Phase 21 P01 | 118s | 2 tasks | 2 files |
 | Phase 21 P02 | 8min | 4 tasks | 4 files |
-| Phase 22-sse-streaming-api P01 | 9min | 2 tasks | 2 files |
+| Phase 22 P01 | 13min | 2 tasks | 2 files |
+| Phase 22 P02 | 13min | 2 tasks | 3 files |
+| Phase 22 P02 | 13min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -97,11 +87,12 @@ Recent decisions affecting current work:
 - [Phase 21]: Clear LogBuffer before process start (fresh start after update)
 - [Phase 21]: Preserve LogBuffer on stop (keep logs for debugging)
 - [Phase 21]: Delegate GetLogBuffer from manager to lifecycle instance
-- [Phase 22-01]: Use Go standard library net/http for SSE implementation (no external dependencies)
-- [Phase 22-01]: Send connected event with instance name on client connection
-- [Phase 22-01]: Use SSE comment format for heartbeat (: ping\n\n) to avoid client processing
-- [Phase 22-01]: Use defer for Unsubscribe cleanup to guarantee resource release
-- [Phase 22-01]: WriteTimeout: 0 for SSE endpoint (infinite connection duration)
+- [Phase 22]: WriteTimeout=0 for SSE long connections (SSE-07)
+- [Phase 22]: Graceful shutdown with 10-second timeout
+- [Phase 22]: Signal handling for clean exit (SIGINT/SIGTERM)
+- [Phase 22]: WriteTimeout=0 for SSE long connections (SSE-07)
+- [Phase 22]: Graceful shutdown with 10-second timeout
+- [Phase 22]: Signal handling for clean exit (SIGINT/SIGTERM)
 
 ### Pending Todos
 
@@ -117,6 +108,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-18T02:47:49.128Z
-Stopped at: Completed 22-01-PLAN.md
+Last session: 2026-03-18T02:53:57.808Z
+Stopped at: Completed 22-02-PLAN.md
 Resume file: None
