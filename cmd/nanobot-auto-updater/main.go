@@ -1,13 +1,19 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
 	flag "github.com/spf13/pflag"
 
+	"github.com/HQGroup/nanobot-auto-updater/internal/api"
 	"github.com/HQGroup/nanobot-auto-updater/internal/config"
+	"github.com/HQGroup/nanobot-auto-updater/internal/instance"
 	"github.com/HQGroup/nanobot-auto-updater/internal/logging"
 )
 
@@ -82,10 +88,46 @@ func main() {
 		"config", *configFile,
 	)
 
-	// TODO: Start HTTP API server and Monitor service
-	// This will be implemented in Phase 12
-	slog.Info("HTTP API server and Monitor service will be started here (Phase 12)")
+	// Create InstanceManager
+	instanceManager := instance.NewInstanceManager(cfg, logger)
 
-	// Keep the application running
-	select {}
+	// Create API server (SSE-07: WriteTimeout=0)
+	var apiServer *api.Server
+	if cfg.API.Port != 0 {
+		var err error
+		apiServer, err = api.NewServer(&cfg.API, instanceManager, logger)
+		if err != nil {
+			logger.Error("Failed to create API server", "error", err)
+			os.Exit(1)
+		}
+
+		// Start API server in goroutine
+		go func() {
+			logger.Info("Starting API server", "port", cfg.API.Port)
+			if err := apiServer.Start(); err != nil {
+				logger.Error("API server error", "error", err)
+			}
+		}()
+	}
+
+	// Setup graceful shutdown signal handling
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+
+	// Wait for shutdown signal
+	<-sigChan
+	logger.Info("Shutdown signal received")
+
+	// Graceful shutdown with timeout
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	// Shutdown API server
+	if apiServer != nil {
+		if err := apiServer.Shutdown(shutdownCtx); err != nil {
+			logger.Error("API server shutdown error", "error", err)
+		}
+	}
+
+	logger.Info("Shutdown completed")
 }
