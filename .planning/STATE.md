@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v0.4
 milestone_name: Real-time Logs
 status: planning
-stopped_at: Phase 22 UI-SPEC approved
-last_updated: "2026-03-17T14:18:30.995Z"
+stopped_at: Completed 22-01-PLAN.md
+last_updated: "2026-03-18T02:47:49.132Z"
 last_activity: 2026-03-17 — Completed 20-02-PLAN.md
 progress:
   total_phases: 5
   completed_phases: 3
-  total_plans: 6
-  completed_plans: 6
+  total_plans: 8
+  completed_plans: 7
 ---
 
 ---
@@ -73,6 +73,7 @@ Progress: [██████████] 100%
 | Phase 20 P02 | 8min | 1 tasks | 2 files |
 | Phase 21 P01 | 118 | 2 tasks | 2 files |
 | Phase 21 P02 | 8min | 4 tasks | 4 files |
+| Phase 22-sse-streaming-api P01 | 9min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -96,6 +97,11 @@ Recent decisions affecting current work:
 - [Phase 21]: Clear LogBuffer before process start (fresh start after update)
 - [Phase 21]: Preserve LogBuffer on stop (keep logs for debugging)
 - [Phase 21]: Delegate GetLogBuffer from manager to lifecycle instance
+- [Phase 22-01]: Use Go standard library net/http for SSE implementation (no external dependencies)
+- [Phase 22-01]: Send connected event with instance name on client connection
+- [Phase 22-01]: Use SSE comment format for heartbeat (: ping\n\n) to avoid client processing
+- [Phase 22-01]: Use defer for Unsubscribe cleanup to guarantee resource release
+- [Phase 22-01]: WriteTimeout: 0 for SSE endpoint (infinite connection duration)
 
 ### Pending Todos
 
@@ -111,6 +117,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-17T14:18:30.992Z
-Stopped at: Phase 22 UI-SPEC approved
-Resume file: .planning/phases/22-sse-streaming-api/22-UI-SPEC.md
+Last session: 2026-03-18T02:47:49.128Z
+Stopped at: Completed 22-01-PLAN.md
+Resume file: None
