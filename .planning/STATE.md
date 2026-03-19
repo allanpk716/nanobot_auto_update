@@ -2,16 +2,14 @@
 gsd_state_version: 1.0
 milestone: v0.4
 milestone_name: Real-time Logs
-status: completed
-stopped_at: Completed 22-02-PLAN.md
-last_updated: "2026-03-18T02:59:47.201Z"
-last_activity: 2026-03-18 — Completed 22-02-PLAN.md
+status: unknown
+stopped_at: Completed 23-01-PLAN.md
+last_updated: "2026-03-19T01:47:48.593Z"
 progress:
-  total_phases: 5
-  completed_phases: 4
-  total_plans: 8
-  completed_plans: 8
-  percent: 100
+  total_phases: 10
+  completed_phases: 9
+  total_plans: 24
+  completed_plans: 22
 ---
 
 # Project State
@@ -21,20 +19,17 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-16)
 
 **Core value:** 自动保持 nanobot 处于最新版本,无需用户手动干预
-**Current focus:** Phase 22: SSE Streaming API
+**Current focus:** Phase 23 — web-ui-and-error-handling
 
 ## Current Position
 
-Phase: 22 of 23 (SSE Streaming API)
-Plan: 2 of 2 in current phase
-Status: Completed
-Last activity: 2026-03-18 — Completed 22-02-PLAN.md
-
-Progress: [██████████] 100%
+Phase: 23 (web-ui-and-error-handling) — EXECUTING
+Plan: 2 of 3
 
 ## Performance Metrics
 
 **Velocity:**
+
 - Total plans completed: 20 (v1.0: 10 plans, v0.2: 8 plans, v0.4: 2 plans)
 - Average duration: 13 minutes (Phase 22)
 - Total execution time: 26 minutes (Phase 22 total)
@@ -48,6 +43,7 @@ Progress: [██████████] 100%
 | v0.4 (Phases 19-22) | 2 | 26min | 13min |
 
 **Recent Trend:**
+
 - Last 5 plans: 6-13 minutes
 - Trend: Stable, good velocity
 
@@ -64,6 +60,7 @@ Progress: [██████████] 100%
 | Phase 22 P01 | 13min | 2 tasks | 2 files |
 | Phase 22 P02 | 13min | 2 tasks | 3 files |
 | Phase 22 P02 | 13min | 2 tasks | 3 files |
+| Phase 23 P01 | 4min | 2 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -93,6 +90,10 @@ Recent decisions affecting current work:
 - [Phase 22]: WriteTimeout=0 for SSE long connections (SSE-07)
 - [Phase 22]: Graceful shutdown with 10-second timeout
 - [Phase 22]: Signal handling for clean exit (SIGINT/SIGTERM)
+- [Phase 23]: Use embed.FS to embed static files in Go binary for single-file deployment
+- [Phase 23]: Use native HTML/CSS/JS instead of frontend framework (simple log viewer ~300 lines)
+- [Phase 23]: Implement smart auto-scroll with 50px tolerance to detect manual scrolling
+- [Phase 23]: Use high contrast red (#dc2626) for stderr logs to ensure visibility
 
 ### Pending Todos
 
@@ -108,6 +109,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-18T02:53:57.808Z
-Stopped at: Completed 22-02-PLAN.md
+Last session: 2026-03-19T01:47:48.589Z
+Stopped at: Completed 23-01-PLAN.md
 Resume file: None
