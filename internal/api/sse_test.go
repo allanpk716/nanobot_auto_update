@@ -111,10 +111,15 @@ func TestSSEEventFormat(t *testing.T) {
 	}
 }
 
-// TestSSEInstanceNotFound tests instance not found returns 404 (SSE-01, ERR-04)
+// TestSSEInstanceNotFound tests instance not found returns 404 (SSE-01, ERR-02)
 func TestSSEInstanceNotFound(t *testing.T) {
+	// Setup: capture log output to verify warning is logged
+	var logOutput strings.Builder
+	logger := slog.New(slog.NewTextHandler(&logOutput, &slog.HandlerOptions{
+		Level: slog.LevelWarn,
+	}))
+
 	im := createTestInstanceManager()
-	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 
 	handler := NewSSEHandler(im, logger)
 
@@ -124,11 +129,18 @@ func TestSSEInstanceNotFound(t *testing.T) {
 
 	handler.Handle(rec, req)
 
+	// Verify: 404 status code
 	if rec.Code != http.StatusNotFound {
 		t.Errorf("Expected 404 Not Found, got %d", rec.Code)
 	}
 	if !strings.Contains(rec.Body.String(), "not found") {
 		t.Errorf("Expected 'not found' error message, got %s", rec.Body.String())
+	}
+
+	// Verify: Warning is logged (ERR-02)
+	logs := logOutput.String()
+	if !strings.Contains(logs, "Instance not found") {
+		t.Errorf("Expected warning log for instance not found, got: %s", logs)
 	}
 }
 
@@ -157,10 +169,15 @@ func TestSSEHeartbeat(t *testing.T) {
 	cancel()
 }
 
-// TestSSEClientDisconnect tests client disconnect cleanup (SSE-04)
+// TestSSEClientDisconnect tests client disconnect cleanup (SSE-04, ERR-02)
 func TestSSEClientDisconnect(t *testing.T) {
+	// Setup: capture log output to verify info-level message
+	var logOutput strings.Builder
+	logger := slog.New(slog.NewTextHandler(&logOutput, &slog.HandlerOptions{
+		Level: slog.LevelInfo,
+	}))
+
 	im := createTestInstanceManager()
-	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 
 	handler := NewSSEHandler(im, logger)
 
@@ -184,8 +201,14 @@ func TestSSEClientDisconnect(t *testing.T) {
 	// Wait for cleanup
 	time.Sleep(100 * time.Millisecond)
 
-	// Verification: Cannot directly verify if Unsubscribe is called, but can indirectly verify by checking goroutine leaks
-	// Here we trust that defer will execute correctly
+	// Verify: Info-level disconnect message is logged (ERR-02)
+	logs := logOutput.String()
+	if !strings.Contains(logs, "SSE client disconnected") {
+		t.Errorf("Expected info log for client disconnect, got: %s", logs)
+	}
+
+	// Verify: No goroutine leaks (indirectly verified by clean exit)
+	// Note: defer Unsubscribe ensures cleanup
 }
 
 // createTestInstanceManager creates a test InstanceManager with instances
