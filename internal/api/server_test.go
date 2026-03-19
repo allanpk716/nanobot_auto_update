@@ -3,7 +3,10 @@ package api
 import (
 	"context"
 	"log/slog"
+	"net/http"
+	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -107,5 +110,85 @@ func TestNewServerValidation(t *testing.T) {
 	_, err = NewServer(cfg, im, logger)
 	if err == nil {
 		t.Error("Expected error for zero port")
+	}
+}
+
+// TestWebUIRoutes tests web UI routes are registered (Phase 23: UI-01)
+func TestWebUIRoutes(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+
+	cfg := &config.APIConfig{
+		Port:        8083,
+		BearerToken: "test-token-32-characters-long-enough",
+		Timeout:     5 * time.Second,
+	}
+
+	im := instance.NewInstanceManager(&config.Config{
+		Instances: []config.InstanceConfig{
+			{Name: "test", Port: 8080, StartCommand: "test"},
+		},
+	}, logger)
+
+	server, err := NewServer(cfg, im, logger)
+	if err != nil {
+		t.Fatalf("NewServer failed: %v", err)
+	}
+
+	// Create test request for /logs/{instance}
+	req := httptest.NewRequest("GET", "/logs/test", nil)
+	req.SetPathValue("instance", "test")
+	rec := httptest.NewRecorder()
+
+	// Serve request
+	server.httpServer.Handler.ServeHTTP(rec, req)
+
+	// Verify response
+	if rec.Code != http.StatusOK {
+		t.Errorf("Expected 200 OK for /logs/test, got %d", rec.Code)
+	}
+
+	contentType := rec.Header().Get("Content-Type")
+	if !strings.Contains(contentType, "text/html") {
+		t.Errorf("Expected Content-Type to contain text/html, got %s", contentType)
+	}
+
+	body := rec.Body.String()
+	if !strings.Contains(body, "<!DOCTYPE html>") {
+		t.Error("Expected HTML doctype")
+	}
+}
+
+// TestWebUIInstanceNotFound tests 404 for non-existent instance
+func TestWebUIInstanceNotFound(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+
+	cfg := &config.APIConfig{
+		Port:        8084,
+		BearerToken: "test-token-32-characters-long-enough",
+		Timeout:     5 * time.Second,
+	}
+
+	im := instance.NewInstanceManager(&config.Config{
+		Instances: []config.InstanceConfig{
+			{Name: "test", Port: 8080, StartCommand: "test"},
+		},
+	}, logger)
+
+	server, err := NewServer(cfg, im, logger)
+	if err != nil {
+		t.Fatalf("NewServer failed: %v", err)
+	}
+
+	// Create test request for non-existent instance
+	req := httptest.NewRequest("GET", "/logs/nonexistent", nil)
+	req.SetPathValue("instance", "nonexistent")
+	rec := httptest.NewRecorder()
+
+	// Serve request
+	server.httpServer.Handler.ServeHTTP(rec, req)
+
+	// Verify 404 response
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("Expected 404 Not Found, got %d", rec.Code)
 	}
 }

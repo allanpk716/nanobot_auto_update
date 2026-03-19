@@ -9,6 +9,7 @@ import (
 
 	"github.com/HQGroup/nanobot-auto-updater/internal/config"
 	"github.com/HQGroup/nanobot-auto-updater/internal/instance"
+	"github.com/HQGroup/nanobot-auto-updater/internal/web"
 )
 
 // Server represents the HTTP API server
@@ -34,6 +35,9 @@ func NewServer(cfg *config.APIConfig, im *instance.InstanceManager, logger *slog
 	// Create router
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/v1/logs/{instance}/stream", sseHandler.Handle)
+
+	// Web UI endpoint (Phase 23: UI-01)
+	mux.HandleFunc("GET /logs/{instance}", web.NewWebPageHandler(im, logger))
 
 	// Create HTTP server
 	// SSE-07: WriteTimeout=0 to support SSE long connections
