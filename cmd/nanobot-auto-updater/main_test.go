@@ -204,31 +204,22 @@ func TestMultiInstanceConfigLoading(t *testing.T) {
 	}
 }
 
-// TestLegacyConfigLoading 验证 legacy 配置加载
-func TestLegacyConfigLoading(t *testing.T) {
-	cfg, err := config.Load("../../tmp/test_legacy.yaml")
-	if err != nil {
-		t.Fatalf("Failed to load legacy config: %v", err)
-	}
-
-	if len(cfg.Instances) != 0 {
-		t.Errorf("Expected 0 instances in legacy mode, got %d", len(cfg.Instances))
-	}
-
-	if cfg.Nanobot.Port != 18790 {
-		t.Errorf("Expected port 18790, got %d", cfg.Nanobot.Port)
-	}
-}
+// TestLegacyConfigLoading 已被移除
+// Phase 6 之后不再支持 legacy 单实例配置格式
+// 所有配置必须使用 instances 数组格式
+// 旧的 config.yaml 格式需要迁移到新格式
 
 // TestModeDetection 验证模式检测逻辑
+// 注意: Phase 6 之后所有配置必须使用 instances 数组格式
+// legacy 单实例格式不再支持
 func TestModeDetection(t *testing.T) {
 	tests := []struct {
-		name             string
-		configFile       string
-		expectMultiInst  bool
+		name            string
+		configFile      string
+		expectMultiInst bool
 	}{
 		{"multi-instance mode", "../../tmp/test_multi_instance.yaml", true},
-		{"legacy mode", "../../tmp/test_legacy.yaml", false},
+		// legacy mode 测试已移除 - 不再支持单实例配置格式
 	}
 
 	for _, tt := range tests {
