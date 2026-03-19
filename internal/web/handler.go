@@ -2,6 +2,7 @@ package web
 
 import (
 	"embed"
+	"encoding/json"
 	"fmt"
 	"io/fs"
 	"log/slog"
@@ -62,5 +63,21 @@ func NewWebPageHandler(im *instance.InstanceManager, logger *slog.Logger) http.H
 		// Set content type and serve
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.Write(content)
+	}
+}
+
+// NewInstanceListHandler creates handler for GET /api/v1/instances
+// UI-07: Returns list of configured instance names for selector dropdown
+func NewInstanceListHandler(im *instance.InstanceManager, logger *slog.Logger) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		names := im.GetInstanceNames()
+
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(map[string]interface{}{
+			"instances": names,
+		}); err != nil {
+			logger.Error("Failed to encode instance list", "error", err)
+			http.Error(w, "Internal server error", http.StatusInternalServerError)
+		}
 	}
 }
