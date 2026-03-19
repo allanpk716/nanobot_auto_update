@@ -155,3 +155,13 @@ func (m *InstanceManager) GetLogBuffer(instanceName string) (*logbuffer.LogBuffe
 		Err:          fmt.Errorf("instance not found"),
 	}
 }
+
+// GetInstanceNames returns the names of all configured instances.
+// UI-07: Used by Web UI to populate instance selector dropdown.
+func (m *InstanceManager) GetInstanceNames() []string {
+	names := make([]string, 0, len(m.instances))
+	for _, inst := range m.instances {
+		names = append(names, inst.config.Name)
+	}
+	return names
+}

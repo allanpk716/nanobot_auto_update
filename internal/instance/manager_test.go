@@ -245,3 +245,58 @@ func TestInstanceManager_GetLogBuffer(t *testing.T) {
 		}
 	}
 }
+
+// TestGetInstanceNames verifies UI-07:
+// GetInstanceNames returns all configured instance names
+func TestGetInstanceNames(t *testing.T) {
+	tests := []struct {
+		name      string
+		instances []config.InstanceConfig
+		want      []string
+	}{
+		{
+			name:      "empty manager",
+			instances: nil,
+			want:      []string{},
+		},
+		{
+			name: "single instance",
+			instances: []config.InstanceConfig{
+				{Name: "instance1", Port: 8080, StartCommand: "cmd1"},
+			},
+			want: []string{"instance1"},
+		},
+		{
+			name: "multiple instances",
+			instances: []config.InstanceConfig{
+				{Name: "alpha", Port: 8080, StartCommand: "cmd1"},
+				{Name: "beta", Port: 8081, StartCommand: "cmd2"},
+				{Name: "gamma", Port: 8082, StartCommand: "cmd3"},
+			},
+			want: []string{"alpha", "beta", "gamma"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+			cfg := &config.Config{Instances: tt.instances}
+			manager := NewInstanceManager(cfg, logger)
+
+			got := manager.GetInstanceNames()
+
+			// Check length
+			if len(got) != len(tt.want) {
+				t.Errorf("GetInstanceNames() returned %d names, want %d", len(got), len(tt.want))
+				return
+			}
+
+			// Check order and values
+			for i, name := range got {
+				if name != tt.want[i] {
+					t.Errorf("GetInstanceNames()[%d] = %q, want %q", i, name, tt.want[i])
+				}
+			}
+		})
+	}
+}
