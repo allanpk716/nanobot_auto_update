@@ -5,6 +5,7 @@ import (
 	"io"
 	"log/slog"
 	"runtime"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -362,6 +363,54 @@ func TestLogBuffer_SlowSubscriber(t *testing.T) {
 	if elapsed > 1*time.Second {
 		t.Errorf("Write operations took too long: %v (should not block)", elapsed)
 	}
+}
+
+// TestWriteDropsOnSubscriberFull verifies slow subscriber doesn't block Write
+// ERR-03: System logs warning when subscriber channel is full and drops log
+func TestWriteDropsOnSubscriberFull(t *testing.T) {
+	// Setup: Create buffer with custom logger to capture WARN logs
+	var logOutput strings.Builder
+	logger := slog.New(slog.NewTextHandler(&logOutput, &slog.HandlerOptions{
+		Level: slog.LevelWarn,
+	}))
+	lb := NewLogBuffer(logger)
+
+	// Subscribe with small channel (capacity 100 by default)
+	ch := lb.Subscribe()
+
+	// Write more entries than channel capacity (100)
+	// First 100 will fill the channel, remaining will be dropped
+	for i := 1; i <= 150; i++ {
+		entry := LogEntry{
+			Timestamp: time.Now(),
+			Source:    "stdout",
+			Content:   "log-" + toString(i),
+		}
+		err := lb.Write(entry)
+		// Verify Write returns nil (doesn't block or error)
+		if err != nil {
+			t.Errorf("Write should not return error, got: %v", err)
+		}
+	}
+
+	// Verify WARN logs were emitted for dropped logs
+	logs := logOutput.String()
+	if !strings.Contains(logs, "Subscriber channel full, dropping log") {
+		t.Errorf("Expected WARN log for dropped logs, got: %s", logs)
+	}
+
+	// Cleanup: Read channel to prevent goroutine leak
+	timeout := time.After(1 * time.Second)
+ReadLoop:
+	for {
+		select {
+		case <-ch:
+			// Continue reading
+		case <-timeout:
+			break ReadLoop
+		}
+	}
+	lb.Unsubscribe(ch)
 }
 
 // TestLogBuffer_ConcurrentSubscribe tests 10 concurrent subscribers all receive logs

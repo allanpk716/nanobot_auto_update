@@ -37,9 +37,14 @@ func NewLogBuffer(logger *slog.Logger) *LogBuffer {
 	}
 }
 
-// Write writes a log entry to the circular buffer
+// Write writes a log entry to the circular buffer.
 // BUFF-03: Thread-safe implementation using mutex
 // BUFF-04: Automatic FIFO overwrite when buffer is full
+// ERR-03: On write failure, logs error and drops the log line (doesn't block caller).
+//
+// Note: Current implementation uses fixed array, so write to array cannot fail.
+// The non-blocking subscriber send may drop logs for slow consumers (logged at WARN).
+// Write always returns nil for current implementation, error return is for future extensibility.
 func (lb *LogBuffer) Write(entry LogEntry) error {
 	lb.mu.Lock()
 	defer lb.mu.Unlock()
