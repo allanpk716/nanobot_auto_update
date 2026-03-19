@@ -136,17 +136,30 @@ instances:
 
 ---
 
-## Current Milestone: v0.4 实时日志查看
+## Current Milestone: v0.5 (待规划)
+
+**Previous Milestone: v0.4 实时日志查看** — Completed 2026-03-19
 
 **Goal:** 为 nanobot 实例提供实时日志查看功能，通过 HTTP API 和 Web UI 访问
 
-**Target features:**
-- 捕获 nanobot 进程的 stdout/stderr 输出
-- 内存缓冲，保留最近 5000 行日志
-- Server-Sent Events (SSE) 实时推送日志流
-- 内置 Web UI 页面查看日志
-- 按实例名称选择查看日志
+**Implemented features:**
+- ✓ LogBuffer (环形缓冲, 5000行容量, 并发安全)
+- ✓ Log capture (stdout/stderr 分离, 实时写入缓冲)
+- ✓ Instance manager integration (实例管理集成)
+- ✓ SSE streaming API (/api/logs/:instance/stream)
+- ✓ Embedded Web UI (/logs/:instance)
+- ✓ Instance selector with auto-reconnect
+- ✓ Pause/resume auto-scroll
+- ✓ Stdout/stderr color styling (blue/red)
+- ✓ Connection status indicator
+- ✓ Comprehensive error handling (pipe read, SSE send, buffer write)
+
+**Tech additions:**
+- Server-Sent Events (SSE) for real-time streaming
+- Go embed.FS for static file serving
+- Ring buffer with subscriber pattern
+- Non-blocking error handling with graceful degradation
 
 ---
 
-*Last updated: 2026-03-16 after v0.4 milestone start*
+*Last updated: 2026-03-19 after v0.4 milestone completion*
