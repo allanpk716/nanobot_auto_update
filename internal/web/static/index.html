@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nanobot Logs</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <header>
+        <div class="header-content">
+            <h1>Nanobot Logs</h1>
+            <div class="controls">
+                <label for="instance-select">选择实例：</label>
+                <select id="instance-select">
+                    <option value="">加载中...</option>
+                </select>
+                <span id="connection-status" class="status-connecting">连接中...</span>
+                <button id="scroll-toggle">暂停滚动</button>
+            </div>
+        </div>
+    </header>
+
+    <main>
+        <div id="logs" role="log" aria-live="polite">
+            <div class="empty-state">
+                <h2>等待日志...</h2>
+                <p>实例启动后，日志将实时显示在此处。</p>
+            </div>
+        </div>
+    </main>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>
