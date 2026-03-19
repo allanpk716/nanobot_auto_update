@@ -174,6 +174,121 @@ func TestStartNanobotWithCapture_ProcessExit(t *testing.T) {
 	}
 }
 
+// errorReader is an io.Reader that returns an error after some data
+type errorReader struct {
+	data     string
+	readPos  int
+	errAfter int // Return error after reading this many bytes
+	err      error
+}
+
+func (r *errorReader) Read(p []byte) (n int, err error) {
+	if r.readPos >= r.errAfter {
+		return 0, r.err
+	}
+
+	remaining := r.data[r.readPos:r.errAfter]
+	if len(remaining) == 0 {
+		return 0, io.EOF
+	}
+
+	toRead := len(p)
+	if toRead > len(remaining) {
+		toRead = len(remaining)
+	}
+
+	copy(p, remaining[:toRead])
+	r.readPos += toRead
+	return toRead, nil
+}
+
+func TestCaptureLogsPipeError(t *testing.T) {
+	// Setup: Create LogBuffer with custom logger to capture log output
+	logBuf := logbuffer.NewLogBuffer(createTestLogger())
+
+	// Create error reader that returns error after some data
+	testErr := io.ErrUnexpectedEOF
+	reader := &errorReader{
+		data:     "line1\nline2\nline3\n",
+		errAfter: 10, // Error after reading 10 bytes (during "line2")
+		err:      testErr,
+	}
+
+	ctx := context.Background()
+
+	// Create a buffer to capture log output
+	var logOutput strings.Builder
+	testLogger := slog.New(slog.NewTextHandler(&logOutput, &slog.HandlerOptions{
+		Level: slog.LevelDebug,
+	}))
+
+	// Execute: Run captureLogs
+	captureLogs(ctx, reader, "stdout", logBuf, testLogger)
+
+	// Verify: Error is logged (ERR-01)
+	logs := logOutput.String()
+	if !strings.Contains(logs, "Log capture scanner error") {
+		t.Errorf("expected 'Log capture scanner error' in logs, got: %s", logs)
+	}
+	if !strings.Contains(logs, "source=stdout") {
+		t.Errorf("expected source to be logged, got: %s", logs)
+	}
+
+	// Verify: Function continues and doesn't panic (test didn't crash)
+	// Verify: Some logs before error were captured
+	history := logBuf.GetHistory()
+	if len(history) == 0 {
+		t.Error("expected some logs to be captured before error")
+	}
+}
+
+func TestCaptureLogsContinuesAfterError(t *testing.T) {
+	// Setup: Verify that captureLogs handles errors gracefully without panic
+	// This test verifies ERR-01: System continues running after log capture error
+	logBuf := logbuffer.NewLogBuffer(createTestLogger())
+
+	// Create reader that will cause scanner error
+	testErr := io.ErrUnexpectedEOF
+	reader := &errorReader{
+		data:     "line1\nline2\n",
+		errAfter: 5, // Error early
+		err:      testErr,
+	}
+
+	ctx := context.Background()
+	testLogger := createTestLogger()
+
+	// Execute: This should NOT panic or call os.Exit
+	defer func() {
+		if r := recover(); r != nil {
+			t.Errorf("captureLogs panicked: %v", r)
+		}
+	}()
+
+	captureLogs(ctx, reader, "stderr", logBuf, testLogger)
+
+	// Verify: Some logs were captured before error
+	history := logBuf.GetHistory()
+	if len(history) == 0 {
+		t.Error("expected some logs to be captured before error occurred")
+	}
+
+	// Verify: System is still functional (buffer can still accept writes)
+	entry := logbuffer.LogEntry{
+		Timestamp: time.Now(),
+		Source:    "test",
+		Content:   "after error",
+	}
+	if err := logBuf.Write(entry); err != nil {
+		t.Errorf("buffer should still be functional after capture error: %v", err)
+	}
+
+	history = logBuf.GetHistory()
+	if len(history) == 0 {
+		t.Error("buffer should accept writes after capture error")
+	}
+}
+
 func TestStartNanobotWithCapture_InvalidCommand(t *testing.T) {
 	// Setup
 	logBuf := logbuffer.NewLogBuffer(createTestLogger())
