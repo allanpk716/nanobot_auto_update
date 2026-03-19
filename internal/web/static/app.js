@@ -2,6 +2,7 @@
 const instanceName = window.location.pathname.split('/').pop();
 
 // State variables
+let currentInstance = instanceName;
 let autoScroll = true;
 let eventSource = null;
 let reconnectAttempts = 0;
@@ -11,6 +12,75 @@ const logsContainer = document.getElementById('logs');
 const connectionStatus = document.getElementById('connection-status');
 const scrollToggle = document.getElementById('scroll-toggle');
 const instanceSelect = document.getElementById('instance-select');
+
+// Load instance selector from API
+async function loadInstanceSelector() {
+    try {
+        const response = await fetch('/api/v1/instances');
+        const data = await response.json();
+        const select = document.getElementById('instance-select');
+
+        select.innerHTML = '';
+
+        data.instances.forEach(name => {
+            const option = document.createElement('option');
+            option.value = name;
+            option.textContent = name;
+            select.appendChild(option);
+        });
+
+        // Select current instance from URL
+        if (data.instances.includes(instanceName)) {
+            select.value = instanceName;
+        }
+
+        // If no instances, show message
+        if (data.instances.length === 0) {
+            const option = document.createElement('option');
+            option.textContent = 'No instances configured';
+            option.disabled = true;
+            select.appendChild(option);
+        }
+    } catch (error) {
+        console.error('Failed to load instance list:', error);
+    }
+}
+
+// Select instance and reconnect
+function selectInstance(instanceNameParam) {
+    if (eventSource) {
+        eventSource.close();
+        eventSource = null;
+    }
+
+    // Clear log container
+    logsContainer.innerHTML = '';
+
+    // Update URL without reload
+    window.history.pushState({}, '', '/logs/' + instanceNameParam);
+
+    currentInstance = instanceNameParam;
+    autoScroll = true;
+    updateScrollButtonText();
+
+    // Show empty state
+    showEmptyState();
+
+    // Connect to new instance
+    connectSSE(instanceNameParam);
+}
+
+// Show empty state message
+function showEmptyState() {
+    if (logsContainer.children.length === 0) {
+        logsContainer.innerHTML = '<div class="empty-state"><h2>等待日志...</h2><p>实例启动后,日志将实时显示在此处。</p></div>';
+    }
+}
+
+// Update scroll button text
+function updateScrollButtonText() {
+    scrollToggle.textContent = autoScroll ? '暂停滚动' : '恢复滚动';
+}
 
 // Connect to SSE stream
 function connectSSE(instance) {
@@ -129,6 +199,11 @@ scrollToggle.addEventListener('click', function() {
     updateScrollButtonText();
 });
 
+// Instance selector change handler
+instanceSelect.addEventListener('change', function(e) {
+    selectInstance(e.target.value);
+});
+
 // Update scroll toggle button text
 function updateScrollButtonText() {
     if (autoScroll) {
@@ -140,6 +215,12 @@ function updateScrollButtonText() {
 
 // Initialize on DOMContentLoaded
 document.addEventListener('DOMContentLoaded', function() {
+    // Load instance selector
+    loadInstanceSelector();
+
+    // Show empty state
+    showEmptyState();
+
     // Connect to SSE stream
     connectSSE(instanceName);
 
