@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v0.4
 milestone_name: Real-time Logs
 status: unknown
-stopped_at: Completed 23-01-PLAN.md
-last_updated: "2026-03-19T01:47:48.593Z"
+stopped_at: Completed 23-02-PLAN.md
+last_updated: "2026-03-19T01:55:01.009Z"
 progress:
   total_phases: 10
   completed_phases: 9
   total_plans: 24
-  completed_plans: 22
+  completed_plans: 23
 ---
 
 # Project State
@@ -94,6 +94,9 @@ Recent decisions affecting current work:
 - [Phase 23]: Use native HTML/CSS/JS instead of frontend framework (simple log viewer ~300 lines)
 - [Phase 23]: Implement smart auto-scroll with 50px tolerance to detect manual scrolling
 - [Phase 23]: Use high contrast red (#dc2626) for stderr logs to ensure visibility
+- [Phase 23-02]: GetInstanceNames returns instance names in configuration order
+- [Phase 23-02]: Auto-scroll with 50px tolerance, detect manual scrolling
+- [Phase 23-02]: Instance switching closes EventSource, clears logs, reconnects new instance
 
 ### Pending Todos
 
@@ -109,6 +112,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-19T01:47:48.589Z
-Stopped at: Completed 23-01-PLAN.md
+Last session: 2026-03-19T01:55:01.004Z
+Stopped at: Completed 23-02-PLAN.md
 Resume file: None
