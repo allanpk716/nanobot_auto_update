@@ -16,10 +16,11 @@ type PushoverConfig struct {
 
 // Config holds the main application configuration.
 type Config struct {
-	Instances []InstanceConfig `yaml:"instances" mapstructure:"instances"`
-	Pushover  PushoverConfig   `yaml:"pushover" mapstructure:"pushover"`
-	API       APIConfig        `yaml:"api" mapstructure:"api"`         // HTTP API server config (CONF-02, CONF-03)
-	Monitor   MonitorConfig    `yaml:"monitor" mapstructure:"monitor"` // Monitoring service config (CONF-04, CONF-05)
+	Instances  []InstanceConfig  `yaml:"instances" mapstructure:"instances"`
+	Pushover   PushoverConfig    `yaml:"pushover" mapstructure:"pushover"`
+	API        APIConfig         `yaml:"api" mapstructure:"api"`         // HTTP API server config (CONF-02, CONF-03)
+	Monitor    MonitorConfig     `yaml:"monitor" mapstructure:"monitor"` // Monitoring service config (CONF-04, CONF-05)
+	HealthCheck HealthCheckConfig `yaml:"health_check" mapstructure:"health_check"` // Instance health monitoring config (HEALTH-01)
 }
 
 // defaults sets the default values for the configuration.
@@ -36,6 +37,9 @@ func (c *Config) defaults() {
 	// Monitor defaults (CONF-04, CONF-05)
 	c.Monitor.Interval = 15 * time.Minute
 	c.Monitor.Timeout = 10 * time.Second
+
+	// HealthCheck defaults (HEALTH-01)
+	c.HealthCheck.Interval = 1 * time.Minute
 }
 
 // validateUniqueNames checks for duplicate instance names.
@@ -98,6 +102,11 @@ func (c *Config) Validate() error {
 		errs = append(errs, err)
 	}
 
+	// Validate HealthCheck config (HEALTH-01)
+	if err := c.HealthCheck.Validate(); err != nil {
+		errs = append(errs, err)
+	}
+
 	return errors.Join(errs...)
 }
 
@@ -138,6 +147,9 @@ func Load(configPath string) (*Config, error) {
 	// Set defaults for Monitor config (CONF-04, CONF-05)
 	v.SetDefault("monitor.interval", cfg.Monitor.Interval)
 	v.SetDefault("monitor.timeout", cfg.Monitor.Timeout)
+
+	// Set defaults for HealthCheck config (HEALTH-01)
+	v.SetDefault("health_check.interval", cfg.HealthCheck.Interval)
 
 	// Read config file (optional - use defaults if missing)
 	if err := v.ReadInConfig(); err != nil {
