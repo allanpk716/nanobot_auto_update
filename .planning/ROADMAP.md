@@ -51,7 +51,7 @@
 
 核心监控和自动化功能，补全服务基础设施。
 
-- [ ] **Phase 24: Auto-start** - 应用启动时自动启动所有配置的实例
+- [x] **Phase 24: Auto-start** - 应用启动时自动启动所有配置的实例 (completed 2026-03-20)
 - [ ] **Phase 25: Instance Health Monitoring** - 定期检查实例运行状态
 - [ ] **Phase 26: Network Monitoring Core** - 定期测试 Google 连通性
 - [ ] **Phase 27: Network Monitoring Notifications** - 连通性变化时发送通知
@@ -73,7 +73,7 @@
 3. 某个实例启动失败时，其他实例仍然继续启动
 4. 所有实例启动完成后，用户可以在日志中看到汇总状态（成功/失败数量）
 
-**Plans:** 3/4 plans executed
+**Plans:** 4/4 plans complete
 
 Plans:
 - [ ] 24-01-PLAN.md - 配置扩展：添加 AutoStart 字段
@@ -168,7 +168,7 @@ Plans:
 | 21. Instance Management Integration | v0.4 | 2/2 | Complete | 2026-03-17 |
 | 22. SSE Streaming API | v0.4 | 2/2 | Complete | 2026-03-18 |
 | 23. Web UI and Error Handling | v0.4 | 3/3 | Complete | 2026-03-19 |
-| 24. Auto-start | 3/4 | In Progress|  | - |
+| 24. Auto-start | 4/4 | Complete   | 2026-03-20 | - |
 | 25. Instance Health Monitoring | v0.5 | 0/0 | Not started | - |
 | 26. Network Monitoring Core | v0.5 | 0/0 | Not started | - |
 | 27. Network Monitoring Notifications | v0.5 | 0/0 | Not started | - |
