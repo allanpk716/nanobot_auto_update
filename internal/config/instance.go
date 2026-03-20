@@ -11,6 +11,7 @@ type InstanceConfig struct {
 	Port           uint32        `mapstructure:"port"`
 	StartCommand   string        `mapstructure:"start_command"`
 	StartupTimeout time.Duration `mapstructure:"startup_timeout"`
+	AutoStart      *bool         `mapstructure:"auto_start"` // nil = default true
 }
 
 // Validate validates the InstanceConfig values.
@@ -36,4 +37,13 @@ func (ic *InstanceConfig) Validate() error {
 	}
 
 	return nil
+}
+
+// ShouldAutoStart returns whether the instance should be automatically started.
+// nil AutoStart defaults to true, explicit values are honored.
+func (ic *InstanceConfig) ShouldAutoStart() bool {
+	if ic.AutoStart == nil {
+		return true // default: auto-start
+	}
+	return *ic.AutoStart
 }
