@@ -2,15 +2,15 @@
 
 ## Milestones
 
-- ✅ **v1.0 MVP** - Phases 1-4 (shipped 2026-02-18)
-- ✅ **v0.2 Multi-Instance** - Phases 5-18 (shipped 2026-03-16)
-- ✅ **v0.4 Real-time Logs** - Phases 19-23 (shipped 2026-03-20)
-- 🚧 **v0.5 Core Monitoring and Automation** - Phases 24-28 (in progress)
+- **v1.0 MVP** - Phases 1-4 (shipped 2026-02-18)
+- **v0.2 Multi-Instance** - Phases 5-18 (shipped 2026-03-16)
+- **v0.4 Real-time Logs** - Phases 19-23 (shipped 2026-03-20)
+- **v0.5 Core Monitoring and Automation** - Phases 24-28 (in progress)
 
 ## Phases
 
 <details>
-<summary>✅ v1.0 MVP (Phases 1-4) — SHIPPED 2026-02-18</summary>
+<summary>v1.0 MVP (Phases 1-4) - SHIPPED 2026-02-18</summary>
 
 - [x] Phase 1: 基础配置和日志 (3 plans)
 - [x] Phase 01.1: Nanobot 生命周期管理 (2 plans)
@@ -21,14 +21,14 @@
 </details>
 
 <details>
-<summary>✅ v0.2 Multi-Instance (Phases 5-18) — SHIPPED 2026-03-16</summary>
+<summary>v0.2 Multi-Instance (Phases 5-18) - SHIPPED 2026-03-16</summary>
 
 多实例支持里程碑，支持同时管理多个 nanobot 实例的升级和启动。包含 5 个阶段，7 个计划，8 个任务，约 5000 行 Go 代码。
 
 </details>
 
 <details>
-<summary>✅ v0.4 Real-time Logs (Phases 19-23) — SHIPPED 2026-03-20</summary>
+<summary>v0.4 Real-time Logs (Phases 19-23) - SHIPPED 2026-03-20</summary>
 
 实时日志查看功能，通过 SSE 流式传输和 Web UI 访问。包含 5 个阶段，11 个计划，33 个需求，约 12,000 行代码增加。
 
@@ -47,7 +47,7 @@
 
 </details>
 
-### 🚧 v0.5 Core Monitoring and Automation (In Progress)
+### v0.5 Core Monitoring and Automation (In Progress)
 
 核心监控和自动化功能，补全服务基础设施。
 
@@ -73,7 +73,12 @@
 3. 某个实例启动失败时，其他实例仍然继续启动
 4. 所有实例启动完成后，用户可以在日志中看到汇总状态（成功/失败数量）
 
-**Plans:** TBD
+**Plans:** 3 plans
+
+Plans:
+- [ ] 24-01-PLAN.md - 配置扩展：添加 AutoStart 字段
+- [ ] 24-02-PLAN.md - InstanceManager 扩展：添加 StartAllInstances 方法
+- [ ] 24-03-PLAN.md - main.go 集成：异步启动实例
 
 ---
 
@@ -140,7 +145,7 @@
 **Success Criteria** (what must be TRUE):
 1. 用户发送 POST /api/v1/trigger-update 请求（带 Bearer Token）可以触发更新
 2. 认证失败的请求返回 401 错误，不触发更新
-3. 更新流程执行完整的停止→更新→启动过程
+3. 更新流程执行完整的停止-更新-启动过程
 4. 用户收到 JSON 格式的更新结果（成功/失败、详细信息）
 5. 更新过程中重复请求被拒绝，用户收到"更新进行中"的错误消息
 
@@ -163,7 +168,7 @@
 | 21. Instance Management Integration | v0.4 | 2/2 | Complete | 2026-03-17 |
 | 22. SSE Streaming API | v0.4 | 2/2 | Complete | 2026-03-18 |
 | 23. Web UI and Error Handling | v0.4 | 3/3 | Complete | 2026-03-19 |
-| 24. Auto-start | v0.5 | 0/0 | Not started | - |
+| 24. Auto-start | v0.5 | 0/3 | Not started | - |
 | 25. Instance Health Monitoring | v0.5 | 0/0 | Not started | - |
 | 26. Network Monitoring Core | v0.5 | 0/0 | Not started | - |
 | 27. Network Monitoring Notifications | v0.5 | 0/0 | Not started | - |
@@ -171,4 +176,4 @@
 
 ---
 
-*Last updated: 2026-03-20 after v0.5 roadmap creation*
+*Last updated: 2026-03-20 after Phase 24 planning*
