@@ -118,3 +118,42 @@ func containsHelper(s, substr string) bool {
 	}
 	return false
 }
+
+// TestInstanceConfigAutoStart tests AUTOSTART-01:
+// InstanceConfig.AutoStart field and ShouldAutoStart() method
+func TestInstanceConfigAutoStart(t *testing.T) {
+	tests := []struct {
+		name     string
+		instance InstanceConfig
+		want     bool
+	}{
+		{
+			name:     "nil AutoStart defaults to true",
+			instance: InstanceConfig{Name: "test", Port: 18790, StartCommand: "cmd", AutoStart: nil},
+			want:     true,
+		},
+		{
+			name:     "explicit false",
+			instance: InstanceConfig{Name: "test", Port: 18790, StartCommand: "cmd", AutoStart: ptrBool(false)},
+			want:     false,
+		},
+		{
+			name:     "explicit true",
+			instance: InstanceConfig{Name: "test", Port: 18790, StartCommand: "cmd", AutoStart: ptrBool(true)},
+			want:     true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tt.instance.ShouldAutoStart(); got != tt.want {
+				t.Errorf("ShouldAutoStart() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+// ptrBool is a helper function to create a bool pointer
+func ptrBool(v bool) *bool {
+	return &v
+}
