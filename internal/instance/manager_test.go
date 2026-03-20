@@ -347,12 +347,70 @@ func TestStartAllInstancesSummary(t *testing.T) {
 
 // TestInstanceLifecycleHelpers tests AUTOSTART-01 (indirect):
 // Name(), Port(), ShouldAutoStart() helper methods on InstanceLifecycle
-// Wave 0: Test stub - implementation in Plan 24-02
 func TestInstanceLifecycleHelpers(t *testing.T) {
-	t.Skip("MISSING - Implementation in Plan 24-02")
+	falseVal := false
+	trueVal := true
 
-	// Test cases (to be implemented in Plan 24-02):
-	// 1. Name() returns il.config.Name correctly
-	// 2. Port() returns il.config.Port correctly
-	// 3. ShouldAutoStart() delegates to il.config.ShouldAutoStart() correctly
+	tests := []struct {
+		name                string
+		config              config.InstanceConfig
+		wantName            string
+		wantPort            uint32
+		wantShouldAutoStart bool
+	}{
+		{
+			name: "basic config with nil AutoStart",
+			config: config.InstanceConfig{
+				Name:         "test-instance",
+				Port:         18790,
+				StartCommand: "echo test",
+			},
+			wantName:            "test-instance",
+			wantPort:            18790,
+			wantShouldAutoStart: true, // nil = default true
+		},
+		{
+			name: "config with AutoStart=false",
+			config: config.InstanceConfig{
+				Name:         "skip-instance",
+				Port:         18791,
+				StartCommand: "echo test",
+				AutoStart:    &falseVal,
+			},
+			wantName:            "skip-instance",
+			wantPort:            18791,
+			wantShouldAutoStart: false,
+		},
+		{
+			name: "config with AutoStart=true",
+			config: config.InstanceConfig{
+				Name:         "force-instance",
+				Port:         18792,
+				StartCommand: "echo test",
+				AutoStart:    &trueVal,
+			},
+			wantName:            "force-instance",
+			wantPort:            18792,
+			wantShouldAutoStart: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// 创建最小化的 InstanceLifecycle 用于测试
+			il := &InstanceLifecycle{
+				config: tt.config,
+			}
+
+			if got := il.Name(); got != tt.wantName {
+				t.Errorf("Name() = %v, want %v", got, tt.wantName)
+			}
+			if got := il.Port(); got != tt.wantPort {
+				t.Errorf("Port() = %v, want %v", got, tt.wantPort)
+			}
+			if got := il.ShouldAutoStart(); got != tt.wantShouldAutoStart {
+				t.Errorf("ShouldAutoStart() = %v, want %v", got, tt.wantShouldAutoStart)
+			}
+		})
+	}
 }
