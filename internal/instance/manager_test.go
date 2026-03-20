@@ -300,3 +300,59 @@ func TestGetInstanceNames(t *testing.T) {
 		})
 	}
 }
+
+// TestStartAllInstances tests AUTOSTART-02:
+// InstanceManager.StartAllInstances method behavior
+// Wave 0: Test stub - implementation in Plan 24-02
+func TestStartAllInstances(t *testing.T) {
+	t.Skip("MISSING - Implementation in Plan 24-02")
+
+	// Test cases (to be implemented in Plan 24-02):
+	// 1. StartAllInstances starts all auto_start=true instances
+	// 2. StartAllInstances skips auto_start=false instances
+	// 3. StartAllInstances returns AutoStartResult with correct counts
+}
+
+// TestStartAllInstancesOrder tests AUTOSTART-02:
+// Instances are started in configuration order (serial)
+// Wave 0: Test stub - implementation in Plan 24-02
+func TestStartAllInstancesOrder(t *testing.T) {
+	t.Skip("MISSING - Implementation in Plan 24-02")
+
+	// Test case (to be implemented in Plan 24-02):
+	// Verify instances are started in the order they appear in config
+}
+
+// TestStartAllInstancesGracefulDegradation tests AUTOSTART-03:
+// Failed instance does not prevent other instances from starting
+// Wave 0: Test stub - implementation in Plan 24-02
+func TestStartAllInstancesGracefulDegradation(t *testing.T) {
+	t.Skip("MISSING - Implementation in Plan 24-02")
+
+	// Test case (to be implemented in Plan 24-02):
+	// First instance fails, second instance still starts
+}
+
+// TestStartAllInstancesSummary tests AUTOSTART-04:
+// AutoStartResult contains summary with started/failed/skipped counts
+// Wave 0: Test stub - implementation in Plan 24-02
+func TestStartAllInstancesSummary(t *testing.T) {
+	t.Skip("MISSING - Implementation in Plan 24-02")
+
+	// Test cases (to be implemented in Plan 24-02):
+	// 1. Result.Started contains successfully started instance names
+	// 2. Result.Failed contains InstanceError for failed instances
+	// 3. Result.Skipped contains skipped instance names (auto_start=false)
+}
+
+// TestInstanceLifecycleHelpers tests AUTOSTART-01 (indirect):
+// Name(), Port(), ShouldAutoStart() helper methods on InstanceLifecycle
+// Wave 0: Test stub - implementation in Plan 24-02
+func TestInstanceLifecycleHelpers(t *testing.T) {
+	t.Skip("MISSING - Implementation in Plan 24-02")
+
+	// Test cases (to be implemented in Plan 24-02):
+	// 1. Name() returns il.config.Name correctly
+	// 2. Port() returns il.config.Port correctly
+	// 3. ShouldAutoStart() delegates to il.config.ShouldAutoStart() correctly
+}
