@@ -2,15 +2,16 @@
 gsd_state_version: 1.0
 milestone: v0.5
 milestone_name: Core Monitoring and Automation
+current_plan: 2
 status: unknown
-stopped_at: Completed 24-03-PLAN.md
-last_updated: "2026-03-20T10:16:18.583Z"
-last_activity: 2026-03-20 - Created v0.5 roadmap (Phases 24-28)
+stopped_at: Completed 25-01-PLAN.md
+last_updated: "2026-03-20T12:15:34.235Z"
+last_activity: 2026-03-20
 progress:
   total_phases: 5
   completed_phases: 1
-  total_plans: 4
-  completed_plans: 4
+  total_plans: 6
+  completed_plans: 5
 ---
 
 # Project State
@@ -20,12 +21,13 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-20)
 
 **Core value:** 自动保持 nanobot 处于最新版本，无需用户手动干预
-**Current focus:** Phase 24 — auto-start
+**Current focus:** Phase 25 — instance-health-monitoring
 
 ## Current Position
 
-Phase: 24 (auto-start) — EXECUTING
-Plan: 3 of 4
+Phase: 25 (instance-health-monitoring) — EXECUTING
+Current Plan: 2
+Total Plans in Phase: 2
 
 ## Performance Metrics
 
@@ -53,6 +55,7 @@ Plan: 3 of 4
 | Phase 24-auto-start P24-00 | 3.4 minutes | 2 tasks | 2 files |
 | Phase 24-auto-start P02 | 5m 50s | 2 tasks | 3 files |
 | Phase 24-auto-start P03 | 1.3min | 1 tasks | 1 files |
+| Phase 25 P01 | 8m 53s | 2 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -73,6 +76,9 @@ for v0.5.
 - [Phase 24-auto-start]: 5-minute timeout for entire auto-start process
 - [Phase 24-auto-start]: Panic recovery with stack trace logging to prevent app crash
 - [Phase 24-auto-start]: Chinese logs to match Phase 24-02 standards
+- [Phase 25]: 健康检查间隔范围设置为 10秒 到 10分钟,平衡监控及时性和系统负载
+- [Phase 25]: 使用中文日志以符合项目日志规范
+- [Phase 25]: 状态变化时仅在状态实际改变时记录日志,避免每次检查都记录重复日志
 
 ### Pending Todos
 
@@ -94,9 +100,9 @@ None yet.
 
 ## Session Continuity
 
-Last activity: 2026-03-20 - Created v0.5 roadmap (Phases 24-28)
-Last session: 2026-03-20T10:08:04.820Z
-Stopped at: Completed 24-03-PLAN.md
+Last activity: 2026-03-20
+Last session: 2026-03-20T12:15:34.231Z
+Stopped at: Completed 25-01-PLAN.md
 Resume file: None
 
 ## v0.5 Milestone Overview

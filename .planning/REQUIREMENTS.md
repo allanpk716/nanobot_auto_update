@@ -16,10 +16,10 @@
 
 ### 实例健康监控 (HEALTH)
 
-- [ ] **HEALTH-01**: 定期检查每个实例的运行状态（通过端口监听）
-- [ ] **HEALTH-02**: 实例从运行变为停止时记录 ERROR 日志
-- [ ] **HEALTH-03**: 实例从停止变为运行时记录 INFO 日志
-- [ ] **HEALTH-04**: 健康检查间隔可通过配置文件调整
+- [x] **HEALTH-01**: 定期检查每个实例的运行状态（通过端口监听）
+- [x] **HEALTH-02**: 实例从运行变为停止时记录 ERROR 日志
+- [x] **HEALTH-03**: 实例从停止变为运行时记录 INFO 日志
+- [x] **HEALTH-04**: 健康检查间隔可通过配置文件调整
 
 ### 网络监控 (MONITOR)
 
@@ -71,10 +71,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | AUTOSTART-02 | Phase 24 | Complete |
 | AUTOSTART-03 | Phase 24 | Complete |
 | AUTOSTART-04 | Phase 24 | Complete |
-| HEALTH-01 | Phase 25 | Pending |
-| HEALTH-02 | Phase 25 | Pending |
-| HEALTH-03 | Phase 25 | Pending |
-| HEALTH-04 | Phase 25 | Pending |
+| HEALTH-01 | Phase 25 | Complete |
+| HEALTH-02 | Phase 25 | Complete |
+| HEALTH-03 | Phase 25 | Complete |
+| HEALTH-04 | Phase 25 | Complete |
 | MONITOR-01 | Phase 26 | Pending |
 | MONITOR-02 | Phase 26 | Pending |
 | MONITOR-03 | Phase 26 | Pending |

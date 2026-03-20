@@ -96,7 +96,7 @@ Plans:
 3. 实例从停止恢复为运行时，用户可以在 INFO 日志中看到记录
 4. 用户可以通过配置文件调整健康检查的间隔时间
 
-**Plans:** 2 plans
+**Plans:** 1/2 plans executed
 
 Plans:
 - [ ] 25-01-PLAN.md - HealthMonitor core implementation with config extension
@@ -173,7 +173,7 @@ Plans:
 | 22. SSE Streaming API | v0.4 | 2/2 | Complete | 2026-03-18 |
 | 23. Web UI and Error Handling | v0.4 | 3/3 | Complete | 2026-03-19 |
 | 24. Auto-start | v0.5 | 4/4 | Complete | 2026-03-20 |
-| 25. Instance Health Monitoring | v0.5 | 0/2 | Planning | - |
+| 25. Instance Health Monitoring | 1/2 | In Progress|  | - |
 | 26. Network Monitoring Core | v0.5 | 0/0 | Not started | - |
 | 27. Network Monitoring Notifications | v0.5 | 0/0 | Not started | - |
 | 28. HTTP API Trigger | v0.5 | 0/0 | Not started | - |
