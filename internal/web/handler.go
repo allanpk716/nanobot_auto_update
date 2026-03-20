@@ -124,3 +124,28 @@ func NewInstanceStatusHandler(im *instance.InstanceManager, logger *slog.Logger)
 		}
 	}
 }
+
+// NewHomePageHandler creates handler for GET / and GET /logs
+// Returns the home page with instance list
+func NewHomePageHandler(im *instance.InstanceManager, logger *slog.Logger) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		// Serve home.html from embedded filesystem
+		subFS, err := fs.Sub(staticFiles, "static")
+		if err != nil {
+			logger.Error("Failed to create sub filesystem", "error", err)
+			http.Error(w, "Internal server error", http.StatusInternalServerError)
+			return
+		}
+
+		content, err := fs.ReadFile(subFS, "home.html")
+		if err != nil {
+			logger.Error("Failed to read home.html", "error", err)
+			http.Error(w, "Internal server error", http.StatusInternalServerError)
+			return
+		}
+
+		// Set content type and serve
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.Write(content)
+	}
+}

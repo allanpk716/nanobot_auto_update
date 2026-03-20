@@ -169,3 +169,67 @@ main {
 #logs::-webkit-scrollbar-thumb:hover {
     background: #999;
 }
+
+/* Home page styles */
+.instances-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: var(--spacing-md);
+    padding: var(--spacing-md);
+}
+
+.instance-card {
+    background-color: #ffffff;
+    border: 1px solid #ccc;
+    border-radius: 8px;
+    padding: var(--spacing-md);
+    transition: box-shadow 0.2s, border-color 0.2s;
+}
+
+.instance-card:hover {
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    border-color: #2563eb;
+}
+
+.instance-name {
+    font-size: 18px;
+    font-weight: 600;
+    color: #2563eb;
+    text-decoration: none;
+    display: block;
+    margin-bottom: var(--spacing-sm);
+}
+
+.instance-name:hover {
+    text-decoration: underline;
+}
+
+.instance-info {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-xs);
+}
+
+.info-row {
+    display: flex;
+    gap: var(--spacing-sm);
+}
+
+.info-row .label {
+    font-weight: 600;
+    color: #666;
+}
+
+.info-row .value {
+    color: #000;
+}
+
+.status-running {
+    color: #16a34a;
+    font-weight: 600;
+}
+
+.status-stopped {
+    color: #999;
+    font-weight: 600;
+}
