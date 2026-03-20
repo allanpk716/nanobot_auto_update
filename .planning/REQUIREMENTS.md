@@ -10,9 +10,9 @@
 ### 自动启动 (AUTOSTART)
 
 - [x] **AUTOSTART-01**: 应用启动时自动启动所有配置的实例
-- [ ] **AUTOSTART-02**: 每个实例按配置顺序依次启动
-- [ ] **AUTOSTART-03**: 实例启动失败时记录错误并继续启动其他实例
-- [ ] **AUTOSTART-04**: 所有实例启动完成后记录汇总状态
+- [x] **AUTOSTART-02**: 每个实例按配置顺序依次启动
+- [x] **AUTOSTART-03**: 实例启动失败时记录错误并继续启动其他实例
+- [x] **AUTOSTART-04**: 所有实例启动完成后记录汇总状态
 
 ### 实例健康监控 (HEALTH)
 
@@ -68,9 +68,9 @@ Which phases cover which requirements. Updated during roadmap creation.
 | Requirement | Phase | Status |
 |-------------|-------|--------|
 | AUTOSTART-01 | Phase 24 | Complete |
-| AUTOSTART-02 | Phase 24 | Pending |
-| AUTOSTART-03 | Phase 24 | Pending |
-| AUTOSTART-04 | Phase 24 | Pending |
+| AUTOSTART-02 | Phase 24 | Complete |
+| AUTOSTART-03 | Phase 24 | Complete |
+| AUTOSTART-04 | Phase 24 | Complete |
 | HEALTH-01 | Phase 25 | Pending |
 | HEALTH-02 | Phase 25 | Pending |
 | HEALTH-03 | Phase 25 | Pending |
