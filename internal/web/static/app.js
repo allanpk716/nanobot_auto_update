@@ -12,6 +12,12 @@ const logsContainer = document.getElementById('logs');
 const connectionStatus = document.getElementById('connection-status');
 const scrollToggle = document.getElementById('scroll-toggle');
 const instanceSelect = document.getElementById('instance-select');
+const backToHomeButton = document.getElementById('back-to-home');
+
+// Back to home button click handler
+backToHomeButton.addEventListener('click', function() {
+    window.location.href = '/';
+});
 
 // Load instance selector from API
 async function loadInstanceSelector() {
