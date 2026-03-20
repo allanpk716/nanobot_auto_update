@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/HQGroup/nanobot-auto-updater/internal/config"
 	"github.com/HQGroup/nanobot-auto-updater/internal/logbuffer"
@@ -174,4 +175,79 @@ func (m *InstanceManager) GetInstanceConfigs() []config.InstanceConfig {
 		configs = append(configs, inst.config)
 	}
 	return configs
+}
+
+// AutoStartResult 包含自动启动流程的结果
+// AUTOSTART-04: 汇总成功/失败/跳过的实例
+type AutoStartResult struct {
+	Started []string         `json:"started"` // 成功启动的实例名称
+	Failed  []*InstanceError `json:"failed"`  // 启动失败的实例错误
+	Skipped []string         `json:"skipped"` // 跳过自动启动的实例 (auto_start: false)
+}
+
+// StartAllInstances 启动所有配置为自动启动的实例(串行执行,优雅降级)
+// AUTOSTART-02: 启动所有 auto_start=true 的实例
+// AUTOSTART-03: 失败时继续启动其他实例
+// AUTOSTART-04: 返回包含汇总信息的 AutoStartResult
+func (m *InstanceManager) StartAllInstances(ctx context.Context) *AutoStartResult {
+	m.logger.Info("开始自动启动阶段", "instance_count", len(m.instances))
+
+	result := &AutoStartResult{}
+	startTime := time.Now()
+
+	for _, inst := range m.instances {
+		// 通过 InstanceLifecycle 访问 InstanceConfig.ShouldAutoStart()
+		if !inst.ShouldAutoStart() {
+			m.logger.Info("跳过实例(auto_start=false)",
+				"instance", inst.Name(),
+				"port", inst.Port())
+			result.Skipped = append(result.Skipped, inst.Name())
+			continue
+		}
+
+		// 记录单个实例启动时间
+		instStart := time.Now()
+		m.logger.Info("正在启动实例",
+			"instance", inst.Name(),
+			"port", inst.Port())
+
+		if err := inst.StartAfterUpdate(ctx); err != nil {
+			duration := time.Since(instStart)
+			m.logger.Error("启动实例失败",
+				"error", err,
+				"instance", inst.Name(),
+				"port", inst.Port(),
+				"duration", duration)
+			// 记录失败但继续启动其他实例(优雅降级)
+			result.Failed = append(result.Failed, err.(*InstanceError))
+		} else {
+			duration := time.Since(instStart)
+			m.logger.Info("实例启动成功",
+				"instance", inst.Name(),
+				"port", inst.Port(),
+				"duration", duration)
+			result.Started = append(result.Started, inst.Name())
+		}
+	}
+
+	// 记录汇总日志
+	totalDuration := time.Since(startTime)
+	failedNames := extractNames(result.Failed)
+
+	if len(result.Failed) > 0 {
+		m.logger.Warn("自动启动完成(部分失败)",
+			"started", len(result.Started),
+			"failed", len(result.Failed),
+			"skipped", len(result.Skipped),
+			"failed_instances", failedNames,
+			"total_duration", totalDuration)
+	} else {
+		m.logger.Info("自动启动完成",
+			"started", len(result.Started),
+			"failed", len(result.Failed),
+			"skipped", len(result.Skipped),
+			"total_duration", totalDuration)
+	}
+
+	return result
 }
