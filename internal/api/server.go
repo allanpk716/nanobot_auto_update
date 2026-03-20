@@ -42,6 +42,9 @@ func NewServer(cfg *config.APIConfig, im *instance.InstanceManager, logger *slog
 	// Instance list API (Phase 23: UI-07)
 	mux.HandleFunc("GET /api/v1/instances", web.NewInstanceListHandler(im, logger))
 
+	// Instance status API (Quick task 260320-k8z: Task 1)
+	mux.HandleFunc("GET /api/v1/instances/status", web.NewInstanceStatusHandler(im, logger))
+
 	// Create HTTP server
 	// SSE-07: WriteTimeout=0 to support SSE long connections
 	httpServer := &http.Server{

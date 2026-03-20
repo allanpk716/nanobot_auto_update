@@ -9,6 +9,7 @@ import (
 	"net/http"
 
 	"github.com/HQGroup/nanobot-auto-updater/internal/instance"
+	"github.com/HQGroup/nanobot-auto-updater/internal/lifecycle"
 )
 
 //go:embed static/*
@@ -77,6 +78,48 @@ func NewInstanceListHandler(im *instance.InstanceManager, logger *slog.Logger) h
 			"instances": names,
 		}); err != nil {
 			logger.Error("Failed to encode instance list", "error", err)
+			http.Error(w, "Internal server error", http.StatusInternalServerError)
+		}
+	}
+}
+
+// InstanceStatus represents the status of a single instance
+type InstanceStatus struct {
+	Name    string `json:"name"`
+	Port    uint32 `json:"port"`
+	Running bool   `json:"running"`
+}
+
+// NewInstanceStatusHandler creates handler for GET /api/v1/instances/status
+// Returns instance list with name, port, and running status
+func NewInstanceStatusHandler(im *instance.InstanceManager, logger *slog.Logger) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		configs := im.GetInstanceConfigs()
+		statuses := make([]InstanceStatus, 0, len(configs))
+
+		for _, cfg := range configs {
+			running, _, _, err := lifecycle.IsNanobotRunning(cfg.Port)
+			if err != nil {
+				logger.Warn("Failed to detect instance status",
+					"instance", cfg.Name,
+					"port", cfg.Port,
+					"error", err)
+				// On error, assume not running
+				running = false
+			}
+
+			statuses = append(statuses, InstanceStatus{
+				Name:    cfg.Name,
+				Port:    cfg.Port,
+				Running: running,
+			})
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(map[string]interface{}{
+			"instances": statuses,
+		}); err != nil {
+			logger.Error("Failed to encode instance status list", "error", err)
 			http.Error(w, "Internal server error", http.StatusInternalServerError)
 		}
 	}

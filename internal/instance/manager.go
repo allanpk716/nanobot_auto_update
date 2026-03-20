@@ -165,3 +165,13 @@ func (m *InstanceManager) GetInstanceNames() []string {
 	}
 	return names
 }
+
+// GetInstanceConfigs returns the configurations of all instances.
+// Used by status API to get instance name and port information.
+func (m *InstanceManager) GetInstanceConfigs() []config.InstanceConfig {
+	configs := make([]config.InstanceConfig, 0, len(m.instances))
+	for _, inst := range m.instances {
+		configs = append(configs, inst.config)
+	}
+	return configs
+}
