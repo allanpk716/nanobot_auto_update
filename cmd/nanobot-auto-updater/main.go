@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"runtime/debug"
 	"syscall"
 	"time"
 
@@ -103,12 +104,37 @@ func main() {
 
 		// Start API server in goroutine
 		go func() {
-			logger.Info("Starting API server", "port", cfg.API.Port)
+			logger.Info("启动 API 服务器", "port", cfg.API.Port)
 			if err := apiServer.Start(); err != nil {
-				logger.Error("API server error", "error", err)
+				logger.Error("API 服务器错误", "error", err)
 			}
 		}()
 	}
+
+	// Auto-start instances in goroutine (non-blocking)
+	// AUTOSTART-01: Application starts all configured instances at startup
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				logger.Error("自动启动 goroutine panic",
+					"panic", r,
+					"stack", string(debug.Stack()))
+			}
+		}()
+
+		// Create context with timeout for auto-start
+		// Total timeout: 5 minutes (adjust based on instance count)
+		autoStartTimeout := 5 * time.Minute
+		autoStartCtx, cancel := context.WithTimeout(context.Background(), autoStartTimeout)
+		defer cancel()
+
+		logger.Info("开始自动启动所有实例",
+			"instance_count", len(cfg.Instances),
+			"timeout", autoStartTimeout)
+
+		// Execute auto-start
+		instanceManager.StartAllInstances(autoStartCtx)
+	}()
 
 	// Setup graceful shutdown signal handling
 	sigChan := make(chan os.Signal, 1)
