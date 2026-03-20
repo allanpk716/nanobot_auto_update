@@ -9,7 +9,7 @@
 
 ### 自动启动 (AUTOSTART)
 
-- [ ] **AUTOSTART-01**: 应用启动时自动启动所有配置的实例
+- [x] **AUTOSTART-01**: 应用启动时自动启动所有配置的实例
 - [ ] **AUTOSTART-02**: 每个实例按配置顺序依次启动
 - [ ] **AUTOSTART-03**: 实例启动失败时记录错误并继续启动其他实例
 - [ ] **AUTOSTART-04**: 所有实例启动完成后记录汇总状态
@@ -67,7 +67,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| AUTOSTART-01 | Phase 24 | Pending |
+| AUTOSTART-01 | Phase 24 | Complete |
 | AUTOSTART-02 | Phase 24 | Pending |
 | AUTOSTART-03 | Phase 24 | Pending |
 | AUTOSTART-04 | Phase 24 | Pending |

@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v0.5
 milestone_name: Core Monitoring and Automation
-status: planning
-stopped_at: Phase 24 context gathered
-last_updated: "2026-03-20T08:23:23.592Z"
-last_activity: 2026-03-20 — Roadmap created (Phases 24-28)
+status: unknown
+stopped_at: Completed 24-auto-start-01-PLAN.md
+last_updated: "2026-03-20T09:50:55.293Z"
+last_activity: 2026-03-20 - Created v0.5 roadmap (Phases 24-28)
 progress:
   total_phases: 5
   completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
+  total_plans: 4
+  completed_plans: 1
 ---
 
 # Project State
@@ -20,20 +20,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-20)
 
 **Core value:** 自动保持 nanobot 处于最新版本，无需用户手动干预
-**Current focus:** v0.5 核心监控和自动化
+**Current focus:** Phase 24 — auto-start
 
 ## Current Position
 
-**Milestone:** v0.5 核心监控和自动化 — Started (2026-03-20)
-**Phase:** Not started (roadmap created)
-**Status:** Roadmap created, ready for planning
-**Last activity:** 2026-03-20 — Roadmap created (Phases 24-28)
-
-**Progress:**
-
-```
-[--------------------] 0% (0/5 phases, 0/0 plans)
-```
+Phase: 24 (auto-start) — EXECUTING
+Plan: 2 of 4
 
 ## Performance Metrics
 
@@ -57,6 +49,7 @@ See: .planning/PROJECT.md (updated 2026-03-20)
 - Trend: Stable, good velocity
 
 *Updated after each plan completion*
+| Phase 24-auto-start P01 | 1 | 1 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -65,7 +58,11 @@ See: .planning/PROJECT.md (updated 2026-03-20)
 Decisions are logged in PROJECT.md Key Decisions table.
 Recent decisions affecting current work:
 
-None yet for v0.5.
+for v0.5.
+
+- [Phase 24-auto-start]: Use *bool pointer type for AutoStart field to distinguish nil (default) from explicit false
+- [Phase 24-auto-start]: Default behavior: nil AutoStart defaults to true (auto-start enabled)
+- [Phase 24-auto-start]: Provide ShouldAutoStart() method for nil-safe access
 
 ### Pending Todos
 
@@ -88,9 +85,9 @@ None yet.
 ## Session Continuity
 
 Last activity: 2026-03-20 - Created v0.5 roadmap (Phases 24-28)
-Last session: 2026-03-20T08:23:23.588Z
-Stopped at: Phase 24 context gathered
-Resume file: .planning/phases/24-auto-start/24-CONTEXT.md
+Last session: 2026-03-20T09:50:55.290Z
+Stopped at: Completed 24-auto-start-01-PLAN.md
+Resume file: None
 
 ## v0.5 Milestone Overview
 
