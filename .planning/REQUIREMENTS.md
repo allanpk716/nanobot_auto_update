@@ -67,32 +67,32 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| AUTOSTART-01 | — | Pending |
-| AUTOSTART-02 | — | Pending |
-| AUTOSTART-03 | — | Pending |
-| AUTOSTART-04 | — | Pending |
-| HEALTH-01 | — | Pending |
-| HEALTH-02 | — | Pending |
-| HEALTH-03 | — | Pending |
-| HEALTH-04 | — | Pending |
-| MONITOR-01 | — | Pending |
-| MONITOR-02 | — | Pending |
-| MONITOR-03 | — | Pending |
-| MONITOR-04 | — | Pending |
-| MONITOR-05 | — | Pending |
-| MONITOR-06 | — | Pending |
-| API-01 | — | Pending |
-| API-02 | — | Pending |
-| API-03 | — | Pending |
-| API-04 | — | Pending |
-| API-05 | — | Pending |
-| API-06 | — | Pending |
+| AUTOSTART-01 | Phase 24 | Pending |
+| AUTOSTART-02 | Phase 24 | Pending |
+| AUTOSTART-03 | Phase 24 | Pending |
+| AUTOSTART-04 | Phase 24 | Pending |
+| HEALTH-01 | Phase 25 | Pending |
+| HEALTH-02 | Phase 25 | Pending |
+| HEALTH-03 | Phase 25 | Pending |
+| HEALTH-04 | Phase 25 | Pending |
+| MONITOR-01 | Phase 26 | Pending |
+| MONITOR-02 | Phase 26 | Pending |
+| MONITOR-03 | Phase 26 | Pending |
+| MONITOR-06 | Phase 26 | Pending |
+| MONITOR-04 | Phase 27 | Pending |
+| MONITOR-05 | Phase 27 | Pending |
+| API-01 | Phase 28 | Pending |
+| API-02 | Phase 28 | Pending |
+| API-03 | Phase 28 | Pending |
+| API-04 | Phase 28 | Pending |
+| API-05 | Phase 28 | Pending |
+| API-06 | Phase 28 | Pending |
 
 **Coverage:**
 - v0.5 requirements: 20 total
-- Mapped to phases: 0
-- Unmapped: 20 ⚠️
+- Mapped to phases: 20
+- Unmapped: 0 ✓
 
 ---
 *Requirements defined: 2026-03-20*
-*Last updated: 2026-03-20 after v0.5 requirements definition*
+*Last updated: 2026-03-20 after v0.5 roadmap creation*

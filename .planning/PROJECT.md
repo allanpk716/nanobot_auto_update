@@ -2,7 +2,7 @@
 
 ## What This Is
 
-一个 Windows 后台监控服务，使用 Golang 开发，用于监控网络连通性并通过 HTTP API 触发 nanobot 工具的更新。**v0.3 重大架构变更**：从定时更新工具转变为监控服务 + HTTP API 触发更新模式。支持 Google 连通性监控，失败/恢复时自动通知。**v0.4 实时日志查看**：通过 SSE 流式传输和嵌入式 Web UI 实时查看 nanobot 实例的 stdout/stderr 输出，保留最近 5000 行日志历史。多实例管理保持不变。通过配置文件和 HTTP API 控制行为。
+一个 Windows 后台监控服务，使用 Golang 开发，用于监控网络连通性并通过 HTTP API 触发 nanobot 工具的更新。**v0.3 重大架构变更**：从定时更新工具转变为监控服务 + HTTP API 触发更新模式。**v0.4 实时日志查看**：通过 SSE 流式传输和嵌入式 Web UI 实时查看 nanobot 实例的 stdout/stderr 输出。**v0.5 核心监控和自动化**：启动时自动启动实例、实例健康监控、Google 连通性监控、HTTP API 触发更新。多实例管理保持不变。通过配置文件和 HTTP API 控制行为。
 
 ## Core Value
 
@@ -42,11 +42,11 @@
 
 ### Active
 
-**v0.5 增强功能** — 待规划:
-- [ ] 日志文本搜索和正则表达式过滤
-- [ ] 日志导出功能
-- [ ] 暗色主题 UI
-- [ ] 可配置缓冲区大小
+**v0.5 核心监控和自动化** — 规划中:
+- [ ] 启动时自动启动所有配置的实例
+- [ ] 实例健康监控（检测实例是否正常运行）
+- [ ] Google 连通性监控服务（定时测试 google.com）
+- [ ] HTTP API 触发更新端点 (/api/v1/trigger-update)
 
 ### Out of Scope
 
@@ -54,6 +54,10 @@
 - 更新历史记录 — 保持简单，不存储历史
 - 开机自启动 — 用户手动启动
 - 跨平台支持 — 仅支持 Windows
+- 日志文本搜索和正则表达式过滤 — v2 功能
+- 日志导出功能 — v2 功能
+- 暗色主题 UI — v2 功能
+- 可配置缓冲区大小 — v2 功能
 
 ## Context
 
@@ -166,30 +170,18 @@ instances:
 
 ---
 
-## Current Milestone: v0.5 (待规划)
+## Current Milestone: v0.5 核心监控和自动化
 
 **Previous Milestone: v0.4 实时日志查看** — Completed 2026-03-20
 
-**Goal:** 为 nanobot 实例提供实时日志查看功能，通过 HTTP API 和 Web UI 访问
+**Goal:** 补全核心监控和自动化功能，实现启动时自动启动实例、实例健康监控、Google 连通性监控和 HTTP API 触发更新
 
-**Implemented features:**
-- ✓ LogBuffer (环形缓冲, 5000行容量, 并发安全)
-- ✓ Log capture (stdout/stderr 分离, 实时写入缓冲)
-- ✓ Instance manager integration (实例管理集成)
-- ✓ SSE streaming API (/api/logs/:instance/stream)
-- ✓ Embedded Web UI (/logs/:instance)
-- ✓ Instance selector with auto-reconnect
-- ✓ Pause/resume auto-scroll
-- ✓ Stdout/stderr color styling (blue/red)
-- ✓ Connection status indicator
-- ✓ Comprehensive error handling (pipe read, SSE send, buffer write)
-
-**Tech additions:**
-- Server-Sent Events (SSE) for real-time streaming
-- Go embed.FS for static file serving
-- Ring buffer with subscriber pattern
-- Non-blocking error handling with graceful degradation
+**Target features:**
+- 启动时自动启动所有配置的实例
+- 实例健康监控（检测实例是否正常运行）
+- Google 连通性监控服务（定时测试 google.com）
+- HTTP API 触发更新端点 (/api/v1/trigger-update)
 
 ---
 
-*Last updated: 2026-03-20 after v0.4 milestone completion*
+*Last updated: 2026-03-20 after v0.5 milestone started*
