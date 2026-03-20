@@ -1,15 +1,15 @@
 ---
 gsd_state_version: 1.0
-milestone: v0.5
-milestone_name: Future Release
-status: planning
-stopped_at: v0.4 milestone completed
-last_updated: "2026-03-20T00:52:20.456Z"
+milestone: v1.0
+milestone_name: milestone
+status: unknown
+stopped_at: Completed 260320-k8z-PLAN.md
+last_updated: "2026-03-20T06:46:08.836Z"
 progress:
-  total_phases: 10
-  completed_phases: 10
-  total_plans: 24
-  completed_plans: 24
+  total_phases: 18
+  completed_phases: 17
+  total_plans: 38
+  completed_plans: 36
 ---
 
 # Project State
@@ -62,6 +62,7 @@ See: .planning/PROJECT.md (updated 2026-03-20)
 | Phase 22 P02 | 13min | 2 tasks | 3 files |
 | Phase 23 P01 | 4min | 2 tasks | 7 files |
 | Phase 23-web-ui-and-error-handling P03 | 427s | 3 tasks | - files |
+| Phase 260320-k8z P01 | 5m | 3 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -101,6 +102,10 @@ Recent decisions affecting current work:
 - [Phase 23-web-ui-and-error-handling]: Pipe read errors logged at ERROR level, capture continues running
 - [Phase 23-web-ui-and-error-handling]: SSE connection errors logged at WARN level, server continues running
 - [Phase 23-web-ui-and-error-handling]: LogBuffer write errors logged at WARN level, Write returns without blocking
+- [Phase 260320-k8z]: 使用网格布局展示实例卡片，自动响应式排列
+- [Phase 260320-k8z]: 每 5 秒自动刷新实例状态
+- [Phase 260320-k8z]: 实例名称可点击，直接跳转到日志详情页
+- [Phase 260320-k8z]: 详情页返回按钮使用 JavaScript 跳转而非 <a> 标签
 
 ### Pending Todos
 
@@ -116,6 +121,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-19T02:05:38.649Z
-Stopped at: Completed 23-03-PLAN.md
+Last session: 2026-03-20T06:46:08.831Z
+Stopped at: Completed 260320-k8z-PLAN.md
 Resume file: None
