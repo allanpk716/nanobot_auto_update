@@ -119,8 +119,15 @@ None yet.
 
 None yet.
 
+### Quick Tasks Completed
+
+| # | Description | Date | Commit | Directory |
+|---|-------------|------|--------|-----------|
+| 260320-k8z | 添加实时日志统一入口页面 - 创建首页展示所有实例列表，支持点击进入实例日志详情页，并可返回统一入口 | 2026-03-20 | aa32179 | [260320-k8z-实时日志统一入口](./quick/260320-k8z-实时日志统一入口/) |
+
 ## Session Continuity
 
+Last activity: 2026-03-20 - Completed quick task 260320-k8z: 添加实时日志统一入口页面
 Last session: 2026-03-20T06:46:08.831Z
 Stopped at: Completed 260320-k8z-PLAN.md
 Resume file: None
