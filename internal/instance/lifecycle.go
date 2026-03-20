@@ -117,3 +117,21 @@ func (il *InstanceLifecycle) StartAfterUpdate(ctx context.Context) error {
 func (il *InstanceLifecycle) GetLogBuffer() *logbuffer.LogBuffer {
 	return il.logBuffer
 }
+
+// Name returns the instance name.
+// AUTOSTART-01: Helper method for accessing instance configuration
+func (il *InstanceLifecycle) Name() string {
+	return il.config.Name
+}
+
+// Port returns the instance port.
+// AUTOSTART-01: Helper method for accessing instance configuration
+func (il *InstanceLifecycle) Port() uint32 {
+	return il.config.Port
+}
+
+// ShouldAutoStart returns whether the instance should be automatically started.
+// AUTOSTART-01: Delegates to InstanceConfig.ShouldAutoStart()
+func (il *InstanceLifecycle) ShouldAutoStart() bool {
+	return il.config.ShouldAutoStart()
+}
