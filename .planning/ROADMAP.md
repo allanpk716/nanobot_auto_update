@@ -173,7 +173,7 @@ Plans:
 | 22. SSE Streaming API | v0.4 | 2/2 | Complete | 2026-03-18 |
 | 23. Web UI and Error Handling | v0.4 | 3/3 | Complete | 2026-03-19 |
 | 24. Auto-start | v0.5 | 4/4 | Complete | 2026-03-20 |
-| 25. Instance Health Monitoring | 2/2 | Complete   | 2026-03-20 | - |
+| 25. Instance Health Monitoring | 2/2 | Complete    | 2026-03-20 | - |
 | 26. Network Monitoring Core | v0.5 | 0/0 | Not started | - |
 | 27. Network Monitoring Notifications | v0.5 | 0/0 | Not started | - |
 | 28. HTTP API Trigger | v0.5 | 0/0 | Not started | - |
