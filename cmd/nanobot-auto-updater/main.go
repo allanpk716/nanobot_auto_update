@@ -14,6 +14,7 @@ import (
 
 	"github.com/HQGroup/nanobot-auto-updater/internal/api"
 	"github.com/HQGroup/nanobot-auto-updater/internal/config"
+	"github.com/HQGroup/nanobot-auto-updater/internal/health"
 	"github.com/HQGroup/nanobot-auto-updater/internal/instance"
 	"github.com/HQGroup/nanobot-auto-updater/internal/logging"
 )
@@ -111,6 +112,18 @@ func main() {
 		}()
 	}
 
+	// Start health monitor for all instances (HEALTH-01, HEALTH-04)
+	var healthMonitor *health.HealthMonitor
+	if len(cfg.Instances) > 0 {
+		healthMonitor = health.NewHealthMonitor(
+			cfg.Instances,
+			cfg.HealthCheck.Interval,
+			logger,
+		)
+		go healthMonitor.Start()
+		logger.Info("健康监控已启动", "interval", cfg.HealthCheck.Interval)
+	}
+
 	// Auto-start instances in goroutine (non-blocking)
 	// AUTOSTART-01: Application starts all configured instances at startup
 	go func() {
@@ -147,6 +160,11 @@ func main() {
 	// Graceful shutdown with timeout
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
+
+	// Stop health monitor first
+	if healthMonitor != nil {
+		healthMonitor.Stop()
+	}
 
 	// Shutdown API server
 	if apiServer != nil {
