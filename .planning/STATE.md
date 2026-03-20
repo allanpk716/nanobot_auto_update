@@ -1,10 +1,10 @@
 ---
 gsd_state_version: 1.0
-milestone: v0.4
-milestone_name: Real-time Logs
-status: unknown
-stopped_at: Completed 23-03-PLAN.md
-last_updated: "2026-03-19T05:54:55.918Z"
+milestone: v0.5
+milestone_name: Future Release
+status: planning
+stopped_at: v0.4 milestone completed
+last_updated: "2026-03-20T00:52:20.456Z"
 progress:
   total_phases: 10
   completed_phases: 10
@@ -16,15 +16,15 @@ progress:
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-03-16)
+See: .planning/PROJECT.md (updated 2026-03-20)
 
 **Core value:** 自动保持 nanobot 处于最新版本,无需用户手动干预
-**Current focus:** Phase 23 — web-ui-and-error-handling
+**Current focus:** Planning v0.5 milestone
 
 ## Current Position
 
-Phase: 23 (web-ui-and-error-handling) — EXECUTING
-Plan: 3 of 3
+**Milestone:** v0.4 实时日志查看 — COMPLETED (2026-03-20)
+**Next:** v0.5 (待规划)
 
 ## Performance Metrics
 

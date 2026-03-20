@@ -2,7 +2,7 @@
 
 ## What This Is
 
-一个 Windows 后台监控服务，使用 Golang 开发，用于监控网络连通性并通过 HTTP API 触发 nanobot 工具的更新。**v0.3 重大架构变更**：从定时更新工具转变为监控服务 + HTTP API 触发更新模式。支持 Google 连通性监控，失败/恢复时自动通知。多实例管理保持不变。通过配置文件和 HTTP API 控制行为。
+一个 Windows 后台监控服务，使用 Golang 开发，用于监控网络连通性并通过 HTTP API 触发 nanobot 工具的更新。**v0.3 重大架构变更**：从定时更新工具转变为监控服务 + HTTP API 触发更新模式。支持 Google 连通性监控，失败/恢复时自动通知。**v0.4 实时日志查看**：通过 SSE 流式传输和嵌入式 Web UI 实时查看 nanobot 实例的 stdout/stderr 输出，保留最近 5000 行日志历史。多实例管理保持不变。通过配置文件和 HTTP API 控制行为。
 
 ## Core Value
 
@@ -11,6 +11,14 @@
 ## Requirements
 
 ### Validated
+
+**v0.4 实时日志查看** — 2026-03-20:
+- ✓ 环形缓冲区（5000行容量）和并发读写 — v0.4
+- ✓ Stdout/stderr 捕获和并发管道读取 — v0.4
+- ✓ 实例生命周期集成（独立缓冲） — v0.4
+- ✓ SSE 流式传输 API 和历史日志 — v0.4
+- ✓ 嵌入式 Web UI 和实例选择器 — v0.4
+- ✓ 优雅降级错误处理 — v0.4
 
 **v0.2 多实例支持** — 2026-03-16:
 - ✓ 多实例配置 (YAML) — v0.2
@@ -34,12 +42,11 @@
 
 ### Active
 
-**v0.3 监控服务和 HTTP API** — 正在构建:
-- [ ] Pushover 配置从环境变量迁移到配置文件
-- [ ] Google 连通性监控服务 (HTTP GET)
-- [ ] HTTP API 触发 nanobot 更新
-- [ ] 移除 cron 定时更新，改为仅 HTTP API 触发
-- [ ] 监控失败/恢复通知机制
+**v0.5 增强功能** — 待规划:
+- [ ] 日志文本搜索和正则表达式过滤
+- [ ] 日志导出功能
+- [ ] 暗色主题 UI
+- [ ] 可配置缓冲区大小
 
 ### Out of Scope
 
@@ -56,9 +63,11 @@
 
 **Pushover**: 推送通知服务，用于在更新失败时通知用户。
 
+**v0.4 Shipped:** 2026-03-20 — 实时日志查看里程碑完成，5 个阶段，11 个计划，33 个需求，~12,000 行代码增加。测试覆盖: 单元测试 + 集成测试 + E2E 测试。审计结果: 33/33 需求满足，5/5 阶段通过，17/17 集成点连接，4/4 E2E 流程完整，0 缺口，0 技术债。
+
 **v0.2 Shipped:** 2026-03-16 — 多实例支持里程碑完成，5 个阶段，7 个计划，8 个任务，~5000 LOC Go 代码。测试覆盖: 单元测试 + 集成测试 + E2E 测试。
 
-**Tech Stack:** Golang, viper (YAML 配置), logrus (日志), cron (调度), Pushover API (通知)
+**Tech Stack:** Golang, viper (YAML 配置), logrus (日志), cron (调度), Pushover API (通知), SSE (Server-Sent Events), embed.FS (静态资源嵌入)
 
 **Key Patterns:**
 - 上下文感知日志 (logger.With 预注入)
@@ -66,6 +75,8 @@
 - 优雅降级 (失败不中断整体流程)
 - TDD 开发模式 (RED-GREEN-REFACTOR)
 - 配置向后兼容 (legacy 模式自动检测)
+- 环形缓冲区 (固定容量 5000 行)
+- 非阻塞订阅者模式 (慢订阅者丢弃日志)
 
 ## Constraints
 
@@ -98,6 +109,25 @@
 | Double error checking (UV + Instance) | 分类错误并路由到正确通知 | ✓ Good — Phase 10 |
 | Context timeout (--update-now only) | 定时模式无超时,立即更新可配置超时 | ✓ Good — Phase 10 |
 | 1-based 实例序号 | 符合用户直觉,避免 0-based 困惑 | ✓ Good — Phase 10-02 |
+| 自实现环形缓冲区 ([5000]LogEntry) | 避免外部依赖和序列化开销 | ✓ Good — Phase 19 |
+| sync.RWMutex 线程安全 | 读多写少场景,允许并发读取 | ✓ Good — Phase 19 |
+| Channel 订阅模式 (容量 100) | 匹配 Go 并发习惯,集成 Phase 22 SSE | ✓ Good — Phase 19 |
+| 非阻塞订阅者发送 (select+default) | 防止 Write 阻塞,确保系统稳定性 | ✓ Good — Phase 19 |
+| bufio.Scanner 行读取 | 自动处理行边界,API 更简洁 | ✓ Good — Phase 20 |
+| os.Pipe() 替代 cmd.StdoutPipe() | 避免 race condition | ✓ Good — Phase 20 |
+| Context 取消 + select 非阻塞扫描 | 及时退出 goroutine | ✓ Good — Phase 20 |
+| Clear() 清空数组 + 重置指针 | 线程安全状态重置 | ✓ Good — Phase 21 |
+| 启动前 Clear, 停止后保留 | 调试友好,重启清空历史 | ✓ Good — Phase 21 |
+| WriteTimeout=0 支持 SSE 长连接 | SSE 协议要求 | ✓ Good — Phase 22 |
+| Graceful shutdown (10秒超时) | 优雅关闭服务器 | ✓ Good — Phase 22 |
+| embed.FS 嵌入静态文件 | 单文件部署 | ✓ Good — Phase 23 |
+| 原生 HTML/CSS/JS (无框架) | 简单日志查看器约 300 行 | ✓ Good — Phase 23 |
+| 智能自动滚动 (50px 容差) | 检测手动滚动 | ✓ Good — Phase 23 |
+| 高对比度 stderr 颜色 (#dc2626) | 确保可见性 | ✓ Good — Phase 23 |
+| 实例名称按配置顺序返回 | 可预测的选择器顺序 | ✓ Good — Phase 23-02 |
+| ERROR 级别记录管道读取错误 | 意外错误,服务继续 | ✓ Good — Phase 23-03 |
+| WARN 级别记录 SSE 连接错误 | 预期错误,服务继续 | ✓ Good — Phase 23-03 |
+| WARN 级别丢弃慢订阅者日志 | 非阻塞,不卡主流程 | ✓ Good — Phase 23-03 |
 
 ## Configuration
 
@@ -138,7 +168,7 @@ instances:
 
 ## Current Milestone: v0.5 (待规划)
 
-**Previous Milestone: v0.4 实时日志查看** — Completed 2026-03-19
+**Previous Milestone: v0.4 实时日志查看** — Completed 2026-03-20
 
 **Goal:** 为 nanobot 实例提供实时日志查看功能，通过 HTTP API 和 Web UI 访问
 
@@ -162,4 +192,4 @@ instances:
 
 ---
 
-*Last updated: 2026-03-19 after v0.4 milestone completion*
+*Last updated: 2026-03-20 after v0.4 milestone completion*
