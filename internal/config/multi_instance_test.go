@@ -158,6 +158,9 @@ func TestConfigValidateWithInstances(t *testing.T) {
 					Interval: 15 * time.Minute,
 					Timeout:  10 * time.Second,
 				},
+				HealthCheck: HealthCheckConfig{
+					Interval: 1 * time.Minute,
+				},
 			},
 			expectError: false,
 		},
