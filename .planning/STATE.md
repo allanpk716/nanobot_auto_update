@@ -4,14 +4,14 @@ milestone: v0.5
 milestone_name: Core Monitoring and Automation
 current_plan: 2
 status: unknown
-stopped_at: Completed 25-01-PLAN.md
-last_updated: "2026-03-20T12:15:34.235Z"
+stopped_at: Completed 25-02-PLAN.md
+last_updated: "2026-03-20T12:20:32.948Z"
 last_activity: 2026-03-20
 progress:
   total_phases: 5
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 6
-  completed_plans: 5
+  completed_plans: 6
 ---
 
 # Project State
@@ -56,6 +56,7 @@ Total Plans in Phase: 2
 | Phase 24-auto-start P02 | 5m 50s | 2 tasks | 3 files |
 | Phase 24-auto-start P03 | 1.3min | 1 tasks | 1 files |
 | Phase 25 P01 | 8m 53s | 2 tasks | 6 files |
+| Phase 25 P02 | 1m | 1 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -79,6 +80,8 @@ for v0.5.
 - [Phase 25]: 健康检查间隔范围设置为 10秒 到 10分钟,平衡监控及时性和系统负载
 - [Phase 25]: 使用中文日志以符合项目日志规范
 - [Phase 25]: 状态变化时仅在状态实际改变时记录日志,避免每次检查都记录重复日志
+- [Phase 25]: 健康监控器在 API 服务器启动后启动，在 API 服务器关闭前停止（生命周期反向顺序）
+- [Phase 25]: 健康监控器在单独的 goroutine 中运行（非阻塞启动）
 
 ### Pending Todos
 
@@ -101,8 +104,8 @@ None yet.
 ## Session Continuity
 
 Last activity: 2026-03-20
-Last session: 2026-03-20T12:15:34.231Z
-Stopped at: Completed 25-01-PLAN.md
+Last session: 2026-03-20T12:20:32.943Z
+Stopped at: Completed 25-02-PLAN.md
 Resume file: None
 
 ## v0.5 Milestone Overview

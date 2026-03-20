@@ -52,7 +52,7 @@
 核心监控和自动化功能，补全服务基础设施。
 
 - [x] **Phase 24: Auto-start** - 应用启动时自动启动所有配置的实例 (completed 2026-03-20)
-- [ ] **Phase 25: Instance Health Monitoring** - 定期检查实例运行状态
+- [x] **Phase 25: Instance Health Monitoring** - 定期检查实例运行状态 (completed 2026-03-20)
 - [ ] **Phase 26: Network Monitoring Core** - 定期测试 Google 连通性
 - [ ] **Phase 27: Network Monitoring Notifications** - 连通性变化时发送通知
 - [ ] **Phase 28: HTTP API Trigger** - 通过 HTTP API 触发更新流程
@@ -96,7 +96,7 @@ Plans:
 3. 实例从停止恢复为运行时，用户可以在 INFO 日志中看到记录
 4. 用户可以通过配置文件调整健康检查的间隔时间
 
-**Plans:** 1/2 plans executed
+**Plans:** 2/2 plans complete
 
 Plans:
 - [ ] 25-01-PLAN.md - HealthMonitor core implementation with config extension
@@ -173,7 +173,7 @@ Plans:
 | 22. SSE Streaming API | v0.4 | 2/2 | Complete | 2026-03-18 |
 | 23. Web UI and Error Handling | v0.4 | 3/3 | Complete | 2026-03-19 |
 | 24. Auto-start | v0.5 | 4/4 | Complete | 2026-03-20 |
-| 25. Instance Health Monitoring | 1/2 | In Progress|  | - |
+| 25. Instance Health Monitoring | 2/2 | Complete   | 2026-03-20 | - |
 | 26. Network Monitoring Core | v0.5 | 0/0 | Not started | - |
 | 27. Network Monitoring Notifications | v0.5 | 0/0 | Not started | - |
 | 28. HTTP API Trigger | v0.5 | 0/0 | Not started | - |
