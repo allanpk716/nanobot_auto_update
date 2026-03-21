@@ -118,10 +118,10 @@ Plans:
 3. 请求成功时，用户可以在 INFO 日志中看到成功的记录
 4. 用户可以通过配置文件调整监控间隔和请求超时时间
 
-**Plans:** 2 plans
+**Plans:** 1/2 plans executed
 
 Plans:
-- [ ] 26-01-PLAN.md - NetworkMonitor 核心实现 (TDD: HTTP HEAD 请求、错误分类、状态追踪)
+- [x] 26-01-PLAN.md - NetworkMonitor 核心实现 (TDD: HTTP HEAD 请求、错误分类、状态追踪)
 - [ ] 26-02-PLAN.md - main.go 集成 (启动和优雅关闭)
 
 ---
@@ -178,7 +178,7 @@ Plans:
 | 23. Web UI and Error Handling | v0.4 | 3/3 | Complete | 2026-03-19 |
 | 24. Auto-start | v0.5 | 4/4 | Complete | 2026-03-20 |
 | 25. Instance Health Monitoring | v0.5 | 2/2 | Complete | 2026-03-20 |
-| 26. Network Monitoring Core | v0.5 | 0/2 | Planning | - |
+| 26. Network Monitoring Core | v0.5 | 1/2 | In Progress|  |
 | 27. Network Monitoring Notifications | v0.5 | 0/0 | Not started | - |
 | 28. HTTP API Trigger | v0.5 | 0/0 | Not started | - |
 

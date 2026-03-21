@@ -2,16 +2,15 @@
 gsd_state_version: 1.0
 milestone: v0.5
 milestone_name: Core Monitoring and Automation
-current_plan: 2
 status: unknown
-stopped_at: Phase 26 context gathered
-last_updated: "2026-03-20T16:26:45.396Z"
-last_activity: 2026-03-20
+stopped_at: Completed 26-01-PLAN.md
+last_updated: "2026-03-21T00:39:37.066Z"
+last_activity: 2026-03-21
 progress:
   total_phases: 5
   completed_phases: 2
-  total_plans: 6
-  completed_plans: 6
+  total_plans: 8
+  completed_plans: 7
 ---
 
 # Project State
@@ -21,13 +20,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-20)
 
 **Core value:** 自动保持 nanobot 处于最新版本，无需用户手动干预
-**Current focus:** Phase 25 — instance-health-monitoring
+**Current focus:** Phase 26 — network-monitoring-core
 
 ## Current Position
 
-Phase: 25 (instance-health-monitoring) — EXECUTING
-Current Plan: 2
-Total Plans in Phase: 2
+Phase: 26 (network-monitoring-core) — EXECUTING
+Plan: 2 of 2
 
 ## Performance Metrics
 
@@ -57,6 +55,7 @@ Total Plans in Phase: 2
 | Phase 24-auto-start P03 | 1.3min | 1 tasks | 1 files |
 | Phase 25 P01 | 8m 53s | 2 tasks | 6 files |
 | Phase 25 P02 | 1m | 1 tasks | 1 files |
+| Phase 26 P01 | 3m | 1 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -82,6 +81,12 @@ for v0.5.
 - [Phase 25]: 状态变化时仅在状态实际改变时记录日志,避免每次检查都记录重复日志
 - [Phase 25]: 健康监控器在 API 服务器启动后启动，在 API 服务器关闭前停止（生命周期反向顺序）
 - [Phase 25]: 健康监控器在单独的 goroutine 中运行（非阻塞启动）
+- [Phase 26]: Use HEAD method instead of GET for network monitoring to reduce bandwidth and response time
+- [Phase 26]: Strict HTTP 200 OK only for success criteria, all other status codes treated as failure
+- [Phase 26]: Disable redirect following with CheckRedirect to strictly test google.com direct response
+- [Phase 26]: Immediate first check on Start() then periodic with Ticker to avoid waiting for first interval
+- [Phase 26]: Classify errors by type assertion (DNS, timeout, TLS, connection refused) instead of string matching for reliability
+- [Phase 26]: Track state changes (ConnectivityState) for Phase 27 notification support and connectivity recovery detection
 
 ### Pending Todos
 
@@ -103,10 +108,10 @@ None yet.
 
 ## Session Continuity
 
-Last activity: 2026-03-20
-Last session: 2026-03-20T16:26:45.393Z
-Stopped at: Phase 26 context gathered
-Resume file: .planning/phases/26-network-monitoring-core/26-CONTEXT.md
+Last activity: 2026-03-21
+Last session: 2026-03-21T00:39:37.063Z
+Stopped at: Completed 26-01-PLAN.md
+Resume file: None
 
 ## v0.5 Milestone Overview
 
