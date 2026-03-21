@@ -28,7 +28,7 @@
 - [x] **MONITOR-03**: HTTP 请求成功时记录 INFO 日志
 - [ ] **MONITOR-04**: 连通性从失败变为成功时发送 Pushover 恢复通知
 - [ ] **MONITOR-05**: 连通性从成功变为失败时发送 Pushover 失败通知
-- [ ] **MONITOR-06**: 监控间隔和超时可通过配置文件调整
+- [x] **MONITOR-06**: 监控间隔和超时可通过配置文件调整
 
 ### HTTP API 触发更新 (API)
 
@@ -78,7 +78,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | MONITOR-01 | Phase 26 | Complete |
 | MONITOR-02 | Phase 26 | Complete |
 | MONITOR-03 | Phase 26 | Complete |
-| MONITOR-06 | Phase 26 | Pending |
+| MONITOR-06 | Phase 26 | Complete |
 | MONITOR-04 | Phase 27 | Pending |
 | MONITOR-05 | Phase 27 | Pending |
 | API-01 | Phase 28 | Pending |
