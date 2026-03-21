@@ -140,10 +140,10 @@ Plans:
 3. 状态变化后有 1 分钟冷却时间确认，避免频繁通知
 4. Pushover 未配置时，记录 WARN 日志提醒用户配置通知
 
-**Plans:** 2 plans
+**Plans:** 1/2 plans executed
 
 Plans:
-- [ ] 27-01-PLAN.md - NotificationManager 核心实现 (TDD: 状态变化检测、冷却时间、异步通知)
+- [x] 27-01-PLAN.md - NotificationManager 核心实现 (TDD: 状态变化检测、冷却时间、异步通知)
 - [ ] 27-02-PLAN.md - main.go 生命周期集成 (启动和优雅关闭)
 
 ---
@@ -185,7 +185,7 @@ Plans:
 | 24. Auto-start | v0.5 | 4/4 | Complete | 2026-03-20 |
 | 25. Instance Health Monitoring | v0.5 | 2/2 | Complete | 2026-03-20 |
 | 26. Network Monitoring Core | v0.5 | 2/2 | Complete | 2026-03-21 |
-| 27. Network Monitoring Notifications | v0.5 | 0/2 | Not started | - |
+| 27. Network Monitoring Notifications | v0.5 | 1/2 | In Progress|  |
 | 28. HTTP API Trigger | v0.5 | 0/0 | Not started | - |
 
 ---

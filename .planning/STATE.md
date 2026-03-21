@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v0.5
 milestone_name: Core Monitoring and Automation
 status: unknown
-stopped_at: Phase 27 context gathered
-last_updated: "2026-03-21T03:40:00.623Z"
+stopped_at: Completed 27-01-PLAN.md
+last_updated: "2026-03-21T15:49:40.915Z"
 last_activity: 2026-03-21
 progress:
   total_phases: 5
   completed_phases: 3
-  total_plans: 8
-  completed_plans: 8
+  total_plans: 10
+  completed_plans: 9
 ---
 
 # Project State
@@ -20,12 +20,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-20)
 
 **Core value:** 自动保持 nanobot 处于最新版本，无需用户手动干预
-**Current focus:** Phase 26 — network-monitoring-core
+**Current focus:** Phase 27 — network-monitoring-notifications
 
 ## Current Position
 
-Phase: 27
-Plan: Not started
+Phase: 27 (network-monitoring-notifications) — EXECUTING
+Plan: 2 of 2
 
 ## Performance Metrics
 
@@ -57,6 +57,7 @@ Plan: Not started
 | Phase 25 P02 | 1m | 1 tasks | 1 files |
 | Phase 26 P01 | 3m | 1 tasks | 2 files |
 | Phase 26 P02 | 84s | 1 tasks | 1 files |
+| Phase 27 P01 | 12min | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -91,6 +92,10 @@ for v0.5.
 - [Phase 26]: 网络监控始终启动（不检查实例数量，因为监控 Google 不依赖实例）
 - [Phase 26]: 启动顺序：健康监控启动 → 网络监控启动
 - [Phase 26]: 关闭顺序：网络监控停止 → 健康监控停止 → API 服务器停止
+- [Phase 27]: Use轮询模式 (polling) to detect state changes instead of channel subscription for simpler architecture
+- [Phase 27]: Use time.AfterFunc for 1-minute cooldown timer to filter network jitter and avoid blocking
+- [Phase 27]: Send notifications asynchronously in goroutines with panic recovery to avoid blocking
+- [Phase 27]: Add ErrorMessage field to ConnectivityState for detailed failure notifications
 
 ### Pending Todos
 
@@ -113,9 +118,9 @@ None yet.
 ## Session Continuity
 
 Last activity: 2026-03-21
-Last session: 2026-03-21T03:40:00.619Z
-Stopped at: Phase 27 context gathered
-Resume file: .planning/phases/27-network-monitoring-notifications/27-CONTEXT.md
+Last session: 2026-03-21T15:49:40.910Z
+Stopped at: Completed 27-01-PLAN.md
+Resume file: None
 
 ## v0.5 Milestone Overview
 
