@@ -110,6 +110,16 @@ func TestCheckConnectivity_Failure_Non200(t *testing.T) {
 	if errMsg == "" {
 		t.Error("expected non-empty error message")
 	}
+
+	// Task 1: 验证 ErrorMessage 包含错误类型
+	nm.checkConnectivity()
+	state := nm.GetState()
+	if state == nil {
+		t.Fatal("state should not be nil after check")
+	}
+	if state.ErrorMessage == "" {
+		t.Error("expected non-empty ErrorMessage for failed check")
+	}
 }
 
 // TestCheckConnectivity_Failure_Timeout 请求超时返回 false, 错误类型为"连接超时"
@@ -351,6 +361,11 @@ func TestGetState(t *testing.T) {
 	if state.LastCheck.IsZero() {
 		t.Error("LastCheck should not be zero")
 	}
+
+	// Task 1: 验证 ErrorMessage 字段存在
+	if state.ErrorMessage != "" {
+		t.Errorf("expected empty ErrorMessage for successful check, got %s", state.ErrorMessage)
+	}
 }
 
 // TestStartImmediateCheck 验证 Start 立即执行首次检查
@@ -380,4 +395,42 @@ func TestStartImmediateCheck(t *testing.T) {
 	}
 
 	nm.Stop()
+}
+
+// TestConcurrentGetState 验证并发调用 GetState 和 checkConnectivity 无 race condition
+func TestConcurrentGetState(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	logger := slog.Default()
+	nm := NewNetworkMonitor(server.URL, 100*time.Millisecond, 1*time.Second, logger)
+
+	var wg sync.WaitGroup
+
+	// 启动多个 goroutine 并发读取状态
+	for i := 0; i < 10; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for j := 0; j < 20; j++ {
+				state := nm.GetState()
+				_ = state // 读取状态
+				time.Sleep(10 * time.Millisecond)
+			}
+		}()
+	}
+
+	// 启动一个 goroutine 定期写入状态
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for i := 0; i < 20; i++ {
+			nm.checkConnectivity()
+			time.Sleep(20 * time.Millisecond)
+		}
+	}()
+
+	wg.Wait()
 }

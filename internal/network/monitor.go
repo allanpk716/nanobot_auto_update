@@ -10,14 +10,16 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"sync"
 	"syscall"
 	"time"
 )
 
 // ConnectivityState 连通性状态
 type ConnectivityState struct {
-	IsConnected bool
-	LastCheck   time.Time
+	IsConnected  bool
+	LastCheck    time.Time
+	ErrorMessage string // 最后一次错误消息（连通时为空）
 }
 
 // NetworkMonitor 网络连通性监控器
@@ -28,6 +30,7 @@ type NetworkMonitor struct {
 	logger     *slog.Logger
 	httpClient *http.Client
 	state      *ConnectivityState
+	mu         sync.RWMutex // 保护 state 的读写锁
 	ctx        context.Context
 	cancel     context.CancelFunc
 }
@@ -91,13 +94,16 @@ func (nm *NetworkMonitor) checkConnectivity() {
 	isConnected, statusCode, errMsg := nm.performCheck()
 	duration := time.Since(start)
 
-	// 更新状态
+	// 更新状态（加锁保护）
 	now := time.Now()
+	nm.mu.Lock()
 	previousState := nm.state
 	nm.state = &ConnectivityState{
-		IsConnected: isConnected,
-		LastCheck:   now,
+		IsConnected:  isConnected,
+		LastCheck:    now,
+		ErrorMessage: errMsg, // 记录错误消息（成功时为空字符串）
 	}
+	nm.mu.Unlock()
 
 	// 记录日志
 	if isConnected {
@@ -196,5 +202,7 @@ func (nm *NetworkMonitor) Stop() {
 
 // GetState 获取当前连通性状态（供 Phase 27 使用）
 func (nm *NetworkMonitor) GetState() *ConnectivityState {
+	nm.mu.RLock()
+	defer nm.mu.RUnlock()
 	return nm.state
 }
