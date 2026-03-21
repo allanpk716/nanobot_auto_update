@@ -18,6 +18,8 @@ import (
 	"github.com/HQGroup/nanobot-auto-updater/internal/instance"
 	"github.com/HQGroup/nanobot-auto-updater/internal/logging"
 	"github.com/HQGroup/nanobot-auto-updater/internal/network"
+	"github.com/HQGroup/nanobot-auto-updater/internal/notification"
+	"github.com/HQGroup/nanobot-auto-updater/internal/notifier"
 )
 
 // Version is set via ldflags at build time.
@@ -135,6 +137,24 @@ func main() {
 	go networkMonitor.Start()
 	logger.Info("网络监控已启动", "interval", cfg.Monitor.Interval)
 
+	// Create Notifier (MONITOR-04, MONITOR-05)
+	notif := notifier.NewWithConfig(
+		notifier.Config{
+			ApiToken: cfg.Pushover.ApiToken,
+			UserKey:  cfg.Pushover.UserKey,
+		},
+		logger,
+	)
+
+	// Start notification manager (MONITOR-04, MONITOR-05)
+	notificationManager := notification.NewNotificationManager(
+		networkMonitor,
+		notif,
+		logger,
+	)
+	go notificationManager.Start(cfg.Monitor.Interval)
+	logger.Info("通知管理器已启动", "check_interval", cfg.Monitor.Interval)
+
 	// Auto-start instances in goroutine (non-blocking)
 	// AUTOSTART-01: Application starts all configured instances at startup
 	go func() {
@@ -172,7 +192,12 @@ func main() {
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	// Stop network monitor first
+	// Stop notification manager first (before network monitor)
+	if notificationManager != nil {
+		notificationManager.Stop()
+	}
+
+	// Stop network monitor
 	if networkMonitor != nil {
 		networkMonitor.Stop()
 	}
