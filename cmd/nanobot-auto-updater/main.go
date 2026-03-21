@@ -17,6 +17,7 @@ import (
 	"github.com/HQGroup/nanobot-auto-updater/internal/health"
 	"github.com/HQGroup/nanobot-auto-updater/internal/instance"
 	"github.com/HQGroup/nanobot-auto-updater/internal/logging"
+	"github.com/HQGroup/nanobot-auto-updater/internal/network"
 )
 
 // Version is set via ldflags at build time.
@@ -124,6 +125,16 @@ func main() {
 		logger.Info("健康监控已启动", "interval", cfg.HealthCheck.Interval)
 	}
 
+	// Start network monitor (MONITOR-01, MONITOR-06)
+	networkMonitor := network.NewNetworkMonitor(
+		"https://www.google.com",
+		cfg.Monitor.Interval,
+		cfg.Monitor.Timeout,
+		logger,
+	)
+	go networkMonitor.Start()
+	logger.Info("网络监控已启动", "interval", cfg.Monitor.Interval)
+
 	// Auto-start instances in goroutine (non-blocking)
 	// AUTOSTART-01: Application starts all configured instances at startup
 	go func() {
@@ -161,7 +172,12 @@ func main() {
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	// Stop health monitor first
+	// Stop network monitor first
+	if networkMonitor != nil {
+		networkMonitor.Stop()
+	}
+
+	// Stop health monitor
 	if healthMonitor != nil {
 		healthMonitor.Stop()
 	}
