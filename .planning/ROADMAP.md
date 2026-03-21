@@ -53,7 +53,7 @@
 
 - [x] **Phase 24: Auto-start** - 应用启动时自动启动所有配置的实例 (completed 2026-03-20)
 - [x] **Phase 25: Instance Health Monitoring** - 定期检查实例运行状态 (completed 2026-03-20)
-- [x] **Phase 26: Network Monitoring Core** - 定期测试 Google 连通性 (completed 2026-03-21)
+- [x] **Phase 26: Network Monitoring Core** - 定期测试 Google 连通性 (completed 2026-03-21)
 - [ ] **Phase 27: Network Monitoring Notifications** - 连通性变化时发送通知
 - [ ] **Phase 28: HTTP API Trigger** - 通过 HTTP API 触发更新流程
 
@@ -137,8 +137,14 @@ Plans:
 **Success Criteria** (what must be TRUE):
 1. 连通性从失败恢复为成功时，用户收到 Pushover 恢复通知
 2. 连通性从成功变为失败时，用户收到 Pushover 失败通知
+3. 状态变化后有 1 分钟冷却时间确认，避免频繁通知
+4. Pushover 未配置时，记录 WARN 日志提醒用户配置通知
 
-**Plans:** TBD
+**Plans:** 2 plans
+
+Plans:
+- [ ] 27-01-PLAN.md - NotificationManager 核心实现 (TDD: 状态变化检测、冷却时间、异步通知)
+- [ ] 27-02-PLAN.md - main.go 生命周期集成 (启动和优雅关闭)
 
 ---
 
@@ -178,10 +184,10 @@ Plans:
 | 23. Web UI and Error Handling | v0.4 | 3/3 | Complete | 2026-03-19 |
 | 24. Auto-start | v0.5 | 4/4 | Complete | 2026-03-20 |
 | 25. Instance Health Monitoring | v0.5 | 2/2 | Complete | 2026-03-20 |
-| 26. Network Monitoring Core | v0.5 | 2/2 | Complete   | 2026-03-21 |
-| 27. Network Monitoring Notifications | v0.5 | 0/0 | Not started | - |
+| 26. Network Monitoring Core | v0.5 | 2/2 | Complete | 2026-03-21 |
+| 27. Network Monitoring Notifications | v0.5 | 0/2 | Not started | - |
 | 28. HTTP API Trigger | v0.5 | 0/0 | Not started | - |
 
 ---
 
-*Last updated: 2026-03-21 after Phase 26 planning*
+*Last updated: 2026-03-21 after Phase 27 planning*
