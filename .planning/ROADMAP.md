@@ -54,7 +54,7 @@
 - [x] **Phase 24: Auto-start** - 应用启动时自动启动所有配置的实例 (completed 2026-03-20)
 - [x] **Phase 25: Instance Health Monitoring** - 定期检查实例运行状态 (completed 2026-03-20)
 - [x] **Phase 26: Network Monitoring Core** - 定期测试 Google 连通性 (completed 2026-03-21)
-- [ ] **Phase 27: Network Monitoring Notifications** - 连通性变化时发送通知
+- [x] **Phase 27: Network Monitoring Notifications** - 连通性变化时发送通知 (completed 2026-03-22)
 - [ ] **Phase 28: HTTP API Trigger** - 通过 HTTP API 触发更新流程
 
 ## Phase Details
@@ -140,11 +140,11 @@ Plans:
 3. 状态变化后有 1 分钟冷却时间确认，避免频繁通知
 4. Pushover 未配置时，记录 WARN 日志提醒用户配置通知
 
-**Plans:** 1/2 plans executed
+**Plans:** 2/2 plans complete
 
 Plans:
 - [x] 27-01-PLAN.md - NotificationManager 核心实现 (TDD: 状态变化检测、冷却时间、异步通知)
-- [ ] 27-02-PLAN.md - main.go 生命周期集成 (启动和优雅关闭)
+- [x] 27-02-PLAN.md - main.go 生命周期集成 (启动和优雅关闭)
 
 ---
 
@@ -185,7 +185,7 @@ Plans:
 | 24. Auto-start | v0.5 | 4/4 | Complete | 2026-03-20 |
 | 25. Instance Health Monitoring | v0.5 | 2/2 | Complete | 2026-03-20 |
 | 26. Network Monitoring Core | v0.5 | 2/2 | Complete | 2026-03-21 |
-| 27. Network Monitoring Notifications | v0.5 | 1/2 | In Progress|  |
+| 27. Network Monitoring Notifications | v0.5 | 2/2 | Complete   | 2026-03-22 |
 | 28. HTTP API Trigger | v0.5 | 0/0 | Not started | - |
 
 ---

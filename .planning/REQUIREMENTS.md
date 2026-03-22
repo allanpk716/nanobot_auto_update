@@ -26,8 +26,8 @@
 - [x] **MONITOR-01**: 定期测试 google.com 的连通性
 - [x] **MONITOR-02**: HTTP 请求失败时记录 ERROR 日志
 - [x] **MONITOR-03**: HTTP 请求成功时记录 INFO 日志
-- [ ] **MONITOR-04**: 连通性从失败变为成功时发送 Pushover 恢复通知
-- [ ] **MONITOR-05**: 连通性从成功变为失败时发送 Pushover 失败通知
+- [x] **MONITOR-04**: 连通性从失败变为成功时发送 Pushover 恢复通知
+- [x] **MONITOR-05**: 连通性从成功变为失败时发送 Pushover 失败通知
 - [x] **MONITOR-06**: 监控间隔和超时可通过配置文件调整
 
 ### HTTP API 触发更新 (API)
@@ -79,8 +79,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | MONITOR-02 | Phase 26 | Complete |
 | MONITOR-03 | Phase 26 | Complete |
 | MONITOR-06 | Phase 26 | Complete |
-| MONITOR-04 | Phase 27 | Pending |
-| MONITOR-05 | Phase 27 | Pending |
+| MONITOR-04 | Phase 27 | Complete |
+| MONITOR-05 | Phase 27 | Complete |
 | API-01 | Phase 28 | Pending |
 | API-02 | Phase 28 | Pending |
 | API-03 | Phase 28 | Pending |

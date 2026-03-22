@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v0.5
 milestone_name: Core Monitoring and Automation
 status: unknown
-stopped_at: Completed 27-01-PLAN.md
-last_updated: "2026-03-21T15:49:40.915Z"
-last_activity: 2026-03-21
+stopped_at: Completed 27-02-PLAN.md
+last_updated: "2026-03-22T09:05:26.627Z"
+last_activity: 2026-03-22
 progress:
   total_phases: 5
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 10
-  completed_plans: 9
+  completed_plans: 10
 ---
 
 # Project State
@@ -58,6 +58,7 @@ Plan: 2 of 2
 | Phase 26 P01 | 3m | 1 tasks | 2 files |
 | Phase 26 P02 | 84s | 1 tasks | 1 files |
 | Phase 27 P01 | 12min | 2 tasks | 4 files |
+| Phase 27 P02 | 8min | 2 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -96,6 +97,9 @@ for v0.5.
 - [Phase 27]: Use time.AfterFunc for 1-minute cooldown timer to filter network jitter and avoid blocking
 - [Phase 27]: Send notifications asynchronously in goroutines with panic recovery to avoid blocking
 - [Phase 27]: Add ErrorMessage field to ConnectivityState for detailed failure notifications
+- [Phase 27]: NotificationManager 在网络监控启动后启动，在网络监控停止前停止
+- [Phase 27]: 使用相同的检查间隔 cfg.Monitor.Interval 作为网络监控
+- [Phase 27]: Notifier 实例在 NotificationManager 之前创建，使用 config.yaml 中的 Pushover 配置
 
 ### Pending Todos
 
@@ -117,9 +121,9 @@ None yet.
 
 ## Session Continuity
 
-Last activity: 2026-03-21
-Last session: 2026-03-21T15:49:40.910Z
-Stopped at: Completed 27-01-PLAN.md
+Last activity: 2026-03-22
+Last session: 2026-03-22T09:05:26.623Z
+Stopped at: Completed 27-02-PLAN.md
 Resume file: None
 
 ## v0.5 Milestone Overview
