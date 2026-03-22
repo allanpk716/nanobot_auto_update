@@ -185,7 +185,7 @@ Plans:
 | 24. Auto-start | v0.5 | 4/4 | Complete | 2026-03-20 |
 | 25. Instance Health Monitoring | v0.5 | 2/2 | Complete | 2026-03-20 |
 | 26. Network Monitoring Core | v0.5 | 2/2 | Complete | 2026-03-21 |
-| 27. Network Monitoring Notifications | v0.5 | 2/2 | Complete   | 2026-03-22 |
+| 27. Network Monitoring Notifications | v0.5 | 2/2 | Complete    | 2026-03-22 |
 | 28. HTTP API Trigger | v0.5 | 0/0 | Not started | - |
 
 ---
