@@ -2,8 +2,10 @@ package instance
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
+	"sync/atomic"
 	"time"
 
 	"github.com/HQGroup/nanobot-auto-updater/internal/config"
@@ -11,10 +13,15 @@ import (
 	"github.com/HQGroup/nanobot-auto-updater/internal/updater"
 )
 
+// ErrUpdateInProgress is returned when TriggerUpdate is called during an ongoing update
+// API-06: 并发控制错误
+var ErrUpdateInProgress = errors.New("update already in progress")
+
 // InstanceManager 协调所有实例的停止→更新→启动流程
 type InstanceManager struct {
-	instances []*InstanceLifecycle
-	logger    *slog.Logger
+	instances  []*InstanceLifecycle
+	logger     *slog.Logger
+	isUpdating atomic.Bool // API-06: 并发控制标志
 }
 
 // NewInstanceManager 创建实例管理器
@@ -250,4 +257,37 @@ func (m *InstanceManager) StartAllInstances(ctx context.Context) *AutoStartResul
 	}
 
 	return result
+}
+
+// TriggerUpdate 触发 API 更新，返回是否被拒绝
+// API-06: 使用 atomic.Bool 实现并发控制
+// API-03: 调用 UpdateAll 执行完整的停止→更新→启动流程
+func (m *InstanceManager) TriggerUpdate(ctx context.Context) (*UpdateResult, error) {
+	// 尝试设置更新标志 (原子操作)
+	if !m.isUpdating.CompareAndSwap(false, true) {
+		// 已经在更新中
+		m.logger.Warn("更新请求被拒绝: 更新正在进行中")
+		return nil, ErrUpdateInProgress
+	}
+	// 确保更新完成后重置标志 (无论成功或失败)
+	defer m.isUpdating.Store(false)
+
+	m.logger.Info("开始 API 触发的更新")
+	result, err := m.UpdateAll(ctx)
+	if err != nil {
+		m.logger.Error("API 触发的更新失败", "error", err)
+		return result, err
+	}
+
+	m.logger.Info("API 触发的更新完成",
+		"stopped", len(result.Stopped),
+		"started", len(result.Started),
+		"stop_failed", len(result.StopFailed),
+		"start_failed", len(result.StartFailed))
+	return result, nil
+}
+
+// IsUpdating 返回当前是否有更新正在进行
+func (m *InstanceManager) IsUpdating() bool {
+	return m.isUpdating.Load()
 }
