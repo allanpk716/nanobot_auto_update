@@ -34,10 +34,10 @@
 
 - [ ] **API-01**: 提供 POST /api/v1/trigger-update 端点
 - [x] **API-02**: 请求需要 Bearer Token 认证
-- [ ] **API-03**: 触发完整的停止→更新→启动流程
+- [x] **API-03**: 触发完整的停止→更新→启动流程
 - [ ] **API-04**: 返回 JSON 格式的更新结果
 - [x] **API-05**: 认证失败时返回 401 错误
-- [ ] **API-06**: 更新过程中拒绝重复请求
+- [x] **API-06**: 更新过程中拒绝重复请求
 
 ## v2 Requirements
 
@@ -83,10 +83,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | MONITOR-05 | Phase 27 | Complete |
 | API-01 | Phase 28 | Pending |
 | API-02 | Phase 28 | Complete |
-| API-03 | Phase 28 | Pending |
+| API-03 | Phase 28 | Complete |
 | API-04 | Phase 28 | Pending |
 | API-05 | Phase 28 | Complete |
-| API-06 | Phase 28 | Pending |
+| API-06 | Phase 28 | Complete |
 
 **Coverage:**
 - v0.5 requirements: 20 total
