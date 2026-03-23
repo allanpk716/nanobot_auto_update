@@ -11,6 +11,220 @@ import (
 	"github.com/HQGroup/nanobot-auto-updater/internal/config"
 )
 
+// TestTriggerUpdate_Concurrent tests API-06:
+// TriggerUpdate returns ErrUpdateInProgress when called during ongoing update
+func TestTriggerUpdate_Concurrent(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+
+	cfg := &config.Config{
+		Instances: []config.InstanceConfig{
+			{Name: "inst1", Port: 8090, StartCommand: "nonexistent"},
+		},
+	}
+
+	manager := NewInstanceManager(cfg, logger)
+
+	// Channel to control the first update duration
+	firstUpdateStarted := make(chan struct{})
+	firstUpdateCanFinish := make(chan struct{})
+
+	// Start first update in goroutine
+	go func() {
+		ctx := context.Background()
+
+		// Signal that we're about to start the update
+		close(firstUpdateStarted)
+
+		// Wait for signal to finish
+		<-firstUpdateCanFinish
+
+		// The update will complete when context allows it
+		_, _ = manager.TriggerUpdate(ctx)
+	}()
+
+	// Wait for first update to start
+	<-firstUpdateStarted
+
+	// Small delay to ensure first update has set isUpdating flag
+	time.Sleep(100 * time.Millisecond)
+
+	// Try to start second update - should get ErrUpdateInProgress
+	ctx2 := context.Background()
+	_, err := manager.TriggerUpdate(ctx2)
+
+	if !errors.Is(err, ErrUpdateInProgress) {
+		t.Errorf("Expected ErrUpdateInProgress, got %v", err)
+	}
+
+	// Allow first update to finish
+	close(firstUpdateCanFinish)
+
+	// Wait for first update to complete
+	time.Sleep(100 * time.Millisecond)
+
+	// Now verify IsUpdating is false
+	if manager.IsUpdating() {
+		t.Error("IsUpdating should be false after update completes")
+	}
+}
+
+// TestTriggerUpdate_ResetsFlag tests API-06:
+// TriggerUpdate resets isUpdating flag after completion
+func TestTriggerUpdate_ResetsFlag(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+
+	cfg := &config.Config{
+		Instances: []config.InstanceConfig{
+			{Name: "inst1", Port: 8090, StartCommand: "nonexistent"},
+		},
+	}
+
+	manager := NewInstanceManager(cfg, logger)
+
+	ctx := context.Background()
+
+	// First call (will fail because no real instances, but flag should reset)
+	_, _ = manager.TriggerUpdate(ctx)
+
+	// Verify flag is reset
+	if manager.IsUpdating() {
+		t.Error("IsUpdating should be false after TriggerUpdate returns")
+	}
+
+	// Second call should not return ErrUpdateInProgress
+	_, err := manager.TriggerUpdate(ctx)
+	if errors.Is(err, ErrUpdateInProgress) {
+		t.Error("Second TriggerUpdate should not return ErrUpdateInProgress")
+	}
+}
+
+// TestTriggerUpdate_ResetsFlagOnError tests API-06:
+// TriggerUpdate resets isUpdating flag even on error
+func TestTriggerUpdate_ResetsFlagOnError(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+
+	cfg := &config.Config{
+		Instances: []config.InstanceConfig{
+			{Name: "inst1", Port: 8090, StartCommand: "nonexistent"},
+		},
+	}
+
+	manager := NewInstanceManager(cfg, logger)
+
+	ctx := context.Background()
+
+	// TriggerUpdate will error (nonexistent command), but flag should reset
+	_, err := manager.TriggerUpdate(ctx)
+
+	// Should have an error (but not ErrUpdateInProgress)
+	if err == nil {
+		t.Error("Expected error from TriggerUpdate with invalid config")
+	}
+	if errors.Is(err, ErrUpdateInProgress) {
+		t.Error("Error should not be ErrUpdateInProgress")
+	}
+
+	// Verify flag is reset even after error
+	if manager.IsUpdating() {
+		t.Error("IsUpdating should be false after TriggerUpdate error")
+	}
+}
+
+// TestTriggerUpdate_ContextCancellation tests API-06:
+// TriggerUpdate resets isUpdating flag after context cancellation
+func TestTriggerUpdate_ContextCancellation(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+
+	cfg := &config.Config{
+		Instances: []config.InstanceConfig{
+			{Name: "inst1", Port: 8090, StartCommand: "sleep 10"},
+		},
+	}
+
+	manager := NewInstanceManager(cfg, logger)
+
+	// Create cancelled context
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // Cancel immediately
+
+	// Call TriggerUpdate with cancelled context
+	_, err := manager.TriggerUpdate(ctx)
+
+	// Should have an error (context cancelled)
+	if err == nil {
+		t.Error("Expected error from TriggerUpdate with cancelled context")
+	}
+
+	// Verify flag is reset even after cancellation
+	if manager.IsUpdating() {
+		t.Error("IsUpdating should be false after context cancellation")
+	}
+}
+
+// TestIsUpdating tests API-06:
+// IsUpdating returns current update state
+func TestIsUpdating(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+
+	cfg := &config.Config{
+		Instances: []config.InstanceConfig{
+			{Name: "inst1", Port: 8090, StartCommand: "nonexistent"},
+		},
+	}
+
+	manager := NewInstanceManager(cfg, logger)
+
+	// Initially not updating
+	if manager.IsUpdating() {
+		t.Error("IsUpdating should be false initially")
+	}
+
+	// Set updating flag manually (simulating update in progress)
+	manager.isUpdating.Store(true)
+
+	// Now should return true
+	if !manager.IsUpdating() {
+		t.Error("IsUpdating should be true after setting flag")
+	}
+
+	// Reset flag
+	manager.isUpdating.Store(false)
+
+	// Now should return false again
+	if manager.IsUpdating() {
+		t.Error("IsUpdating should be false after resetting flag")
+	}
+}
+
+// TestTriggerUpdate_CallsUpdateAll tests API-03:
+// TriggerUpdate calls UpdateAll internally
+func TestTriggerUpdate_CallsUpdateAll(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+
+	cfg := &config.Config{
+		Instances: []config.InstanceConfig{
+			{Name: "inst1", Port: 8090, StartCommand: "nonexistent"},
+		},
+	}
+
+	manager := NewInstanceManager(cfg, logger)
+
+	ctx := context.Background()
+
+	// TriggerUpdate should call UpdateAll and return UpdateResult
+	result, err := manager.TriggerUpdate(ctx)
+
+	// Even with errors, result should not be nil if UpdateAll was called
+	if result == nil {
+		t.Error("TriggerUpdate should return non-nil UpdateResult (UpdateAll was called)")
+	}
+
+	// There may be errors from nonexistent command, but that's expected
+	// The key is that UpdateResult exists, proving UpdateAll was called
+	t.Logf("TriggerUpdate returned result (UpdateAll called): stopped=%d, started=%d, errors=%v",
+		len(result.Stopped), len(result.Started), err)
+}
+
 // TestNewInstanceManager tests InstanceManager initialization
 func TestNewInstanceManager(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
