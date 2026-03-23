@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v0.5
 milestone_name: Core Monitoring and Automation
 status: unknown
-stopped_at: Phase 28 context gathered
-last_updated: "2026-03-23T06:28:40.383Z"
+stopped_at: Completed 28-02-PLAN.md
+last_updated: "2026-03-23T07:33:56.621Z"
 last_activity: 2026-03-22
 progress:
   total_phases: 5
   completed_phases: 4
-  total_plans: 10
-  completed_plans: 10
+  total_plans: 13
+  completed_plans: 12
 ---
 
 # Project State
@@ -25,7 +25,7 @@ See: .planning/PROJECT.md (updated 2026-03-20)
 ## Current Position
 
 Phase: 28
-Plan: Not started
+Plan: 01 (completed)
 
 ## Performance Metrics
 
@@ -59,6 +59,8 @@ Plan: Not started
 | Phase 26 P02 | 84s | 1 tasks | 1 files |
 | Phase 27 P01 | 12min | 2 tasks | 4 files |
 | Phase 27 P02 | 8min | 2 tasks | 1 files |
+| Phase 28 P01 | 3m | 2 tasks | 2 files |
+| Phase 28 P02 | 8m | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -100,6 +102,11 @@ for v0.5.
 - [Phase 27]: NotificationManager 在网络监控启动后启动，在网络监控停止前停止
 - [Phase 27]: 使用相同的检查间隔 cfg.Monitor.Interval 作为网络监控
 - [Phase 27]: Notifier 实例在 NotificationManager 之前创建，使用 config.yaml 中的 Pushover 配置
+- [Phase 28]: Use Bearer token in Authorization header per RFC 6750 standard for API authentication
+- [Phase 28]: Use subtle.ConstantTimeCompare for token comparison to prevent timing attacks
+- [Phase 28]: Return RFC 7807 JSON error format for authentication failures
+- [Phase 28]: Use atomic.Bool instead of mutex for simple true/false concurrent state
+- [Phase 28]: Use defer pattern to guarantee isUpdating flag reset on all code paths
 
 ### Pending Todos
 
@@ -122,9 +129,9 @@ None yet.
 ## Session Continuity
 
 Last activity: 2026-03-22
-Last session: 2026-03-23T06:28:40.379Z
-Stopped at: Phase 28 context gathered
-Resume file: .planning/phases/28-http-api-trigger/28-CONTEXT.md
+Last session: 2026-03-23T07:33:56.616Z
+Stopped at: Completed 28-02-PLAN.md
+Resume file: None
 
 ## v0.5 Milestone Overview
 

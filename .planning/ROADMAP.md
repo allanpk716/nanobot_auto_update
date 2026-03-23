@@ -163,7 +163,7 @@ Plans:
 4. 用户收到 JSON 格式的更新结果（成功/失败、详细信息）
 5. 更新过程中重复请求被拒绝，用户收到"更新进行中"的错误消息
 
-**Plans:** TBD
+**Plans:** 2/3 plans executed
 
 ---
 
@@ -186,7 +186,7 @@ Plans:
 | 25. Instance Health Monitoring | v0.5 | 2/2 | Complete | 2026-03-20 |
 | 26. Network Monitoring Core | v0.5 | 2/2 | Complete | 2026-03-21 |
 | 27. Network Monitoring Notifications | v0.5 | 2/2 | Complete    | 2026-03-22 |
-| 28. HTTP API Trigger | v0.5 | 0/0 | Not started | - |
+| 28. HTTP API Trigger | v0.5 | 2/3 | In Progress|  |
 
 ---
 
