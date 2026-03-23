@@ -112,3 +112,9 @@ None - no external service configuration required.
 ---
 *Phase: 29-http-help-endpoint*
 *Completed: 2026-03-23*
+
+## Self-Check: PASSED
+
+- ✅ SUMMARY.md created at .planning/phases/29-http-help-endpoint/29-02-SUMMARY.md
+- ✅ Task commit found: 3f54c3a (feat: register help endpoint in server without auth)
+- ✅ Final commit found: 978cd54 (docs: complete help endpoint registration plan)
