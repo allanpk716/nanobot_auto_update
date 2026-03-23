@@ -193,10 +193,11 @@ Plans:
 2. help 接口不需要认证（公开访问）
 3. 第三方程序可以根据程序是否启动智能选择查询方式（未启动用 CLI help，已启动用 HTTP help）
 
-**Plans:** 2 plans
+**Plans:** 3 plans (Wave 0 + 2 implementation waves)
 
 Plans:
-- [ ] 29-01-PLAN.md - HelpHandler 实现和单元测试
+- [ ] 29-00-PLAN.md - Wave 0: Test scaffold and interface definitions (TDD RED phase)
+- [ ] 29-01-PLAN.md - HelpHandler 实现和单元测试 (TDD GREEN phase)
 - [ ] 29-02-PLAN.md - 路由注册和版本注入
 
 ---
@@ -221,8 +222,8 @@ Plans:
 | 26. Network Monitoring Core | v0.5 | 2/2 | Complete | 2026-03-21 |
 | 27. Network Monitoring Notifications | v0.5 | 2/2 | Complete | 2026-03-22 |
 | 28. HTTP API Trigger | v0.5 | 3/3 | Complete | 2026-03-23 |
-| 29. HTTP Help Endpoint | v0.5 | 0/2 | Not started | - |
+| 29. HTTP Help Endpoint | v0.5 | 0/3 | Not started | - |
 
 ---
 
-*Last updated: 2026-03-23 after Phase 29 planning*
+*Last updated: 2026-03-23 after Phase 29 plan revision (added Wave 0)*
