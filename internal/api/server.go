@@ -49,6 +49,17 @@ func NewServer(cfg *config.APIConfig, im *instance.InstanceManager, logger *slog
 	mux.HandleFunc("GET /", web.NewHomePageHandler(im, logger))
 	mux.HandleFunc("GET /logs", web.NewHomePageHandler(im, logger))
 
+	// Trigger update endpoint with auth (Phase 28: API-01, API-02)
+	triggerHandler := NewTriggerHandler(im, cfg, logger)
+	authMiddleware := AuthMiddleware(cfg.BearerToken, logger)
+
+	// Wrap handler with auth middleware
+	// API-01: POST /api/v1/trigger-update endpoint exists
+	// API-02: Bearer token authentication required
+	// API-05: Auth failure returns 401 Unauthorized
+	mux.Handle("POST /api/v1/trigger-update",
+		authMiddleware(http.HandlerFunc(triggerHandler.Handle)))
+
 	// Create HTTP server
 	// SSE-07: WriteTimeout=0 to support SSE long connections
 	httpServer := &http.Server{
