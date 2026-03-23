@@ -5,7 +5,7 @@
 - **v1.0 MVP** - Phases 1-4 (shipped 2026-02-18)
 - **v0.2 Multi-Instance** - Phases 5-18 (shipped 2026-03-16)
 - **v0.4 Real-time Logs** - Phases 19-23 (shipped 2026-03-20)
-- **v0.5 Core Monitoring and Automation** - Phases 24-28 (in progress)
+- **v0.5 Core Monitoring and Automation** - Phases 24-28 (shipped 2026-03-23)
 
 ## Phases
 
@@ -165,6 +165,18 @@ Plans:
 
 **Plans:** 3/3 plans complete
 
+Plans:
+- [x] 28-01-PLAN.md - Bearer Token 认证中间件 (TDD)
+- [x] 28-02-PLAN.md - 并发更新控制 (atomic.Bool)
+- [x] 28-03-PLAN.md - HTTP API 触发端点集成
+
+**Key features:**
+- Bearer Token authentication (RFC 6750, constant time comparison)
+- Concurrent update control with atomic.Bool
+- POST /api/v1/trigger-update endpoint with JSON response
+- Timeout control via context
+- 401/409/504 HTTP status codes
+
 ---
 
 ## Progress
@@ -190,4 +202,4 @@ Plans:
 
 ---
 
-*Last updated: 2026-03-21 after Phase 27 planning*
+*Last updated: 2026-03-23 after Phase 28 completion*
