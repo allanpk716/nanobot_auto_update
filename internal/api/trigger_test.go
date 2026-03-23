@@ -157,10 +157,9 @@ func TestTriggerHandler_Conflict(t *testing.T) {
 
 	// Manually set updating flag to simulate concurrent update
 	// This is a workaround since we can't easily simulate long-running update in tests
-	imCtx := context.Background()
 	go func() {
 		// This will set the isUpdating flag
-		_ = im.TriggerUpdate(imCtx)
+		_, _ = im.TriggerUpdate(context.Background())
 	}()
 
 	// Wait a tiny bit for the goroutine to start
@@ -334,43 +333,15 @@ func TestTriggerHandler_WithAuth(t *testing.T) {
 	}
 }
 
-// mockInstanceManager is a mock for testing timeout scenarios
-type mockInstanceManager struct {
-	updateDelay time.Duration
-	updateError error
-}
-
-func (m *mockInstanceManager) TriggerUpdate(ctx context.Context) (*instance.UpdateResult, error) {
-	if m.updateDelay > 0 {
-		select {
-		case <-time.After(m.updateDelay):
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		}
-	}
-	return &instance.UpdateResult{}, m.updateError
-}
-
 // TestTriggerHandler_TimeoutScenario tests API-01:
 // Handle returns 504 when context deadline is exceeded
 func TestTriggerHandler_TimeoutScenario(t *testing.T) {
-	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+	_ = slog.New(slog.NewTextHandler(os.Stdout, nil))
 
 	cfg := &config.APIConfig{
 		Port:        8080,
 		BearerToken: "test-token-12345678901234567890",
 		Timeout:     100 * time.Millisecond, // Short timeout
-	}
-
-	// Create a mock manager that will timeout
-	mockMgr := &mockInstanceManager{
-		updateDelay: 200 * time.Millisecond, // Longer than timeout
-	}
-
-	handler := &TriggerHandler{
-		instanceManager: nil, // Will use mock directly in this test
-		config:          cfg,
-		logger:          logger,
 	}
 
 	// For this test, we'll test the timeout handling directly
