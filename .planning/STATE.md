@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v0.5
 milestone_name: Core Monitoring and Automation
-status: in_progress
-stopped_at: "Phase 29 added - HTTP Help Endpoint"
-last_updated: "2026-03-23T08:10:00.000Z"
+status: Ready to execute
+stopped_at: Completed 29-01-PLAN.md
+last_updated: "2026-03-23T14:06:25.168Z"
 last_activity: 2026-03-23
 progress:
   total_phases: 6
   completed_phases: 5
-  total_plans: 13
-  completed_plans: 13
+  total_plans: 16
+  completed_plans: 14
 ---
 
 # Project State
@@ -24,9 +24,8 @@ See: .planning/PROJECT.md (updated 2026-03-20)
 
 ## Current Position
 
-Milestone: v0.5 (extended)
-Phase: 29 (not started)
-Plan: None
+Phase: 29 (HTTP Help Endpoint) — EXECUTING
+Plan: 2 of 3
 
 ## Performance Metrics
 
@@ -63,6 +62,7 @@ Plan: None
 | Phase 28 P01 | 3m | 2 tasks | 2 files |
 | Phase 28 P02 | 8m | 2 tasks | 2 files |
 | Phase 28 P28-03 | 15m | 3 tasks | 3 files |
+| Phase 29 P01 | 3m 14s | 1 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -109,6 +109,8 @@ for v0.5.
 - [Phase 28]: Return RFC 7807 JSON error format for authentication failures
 - [Phase 28]: Use atomic.Bool instead of mutex for simple true/false concurrent state
 - [Phase 28]: Use defer pattern to guarantee isUpdating flag reset on all code paths
+- [Phase 29]: Use writeJSONError helper from auth.go for consistent RFC 7807 JSON error format in HelpHandler
+- [Phase 29]: Helper methods pattern (getEndpoints, getConfigReference, getCLIFlags) for clean code organization in HelpHandler
 
 ### Pending Todos
 
@@ -131,8 +133,8 @@ None yet.
 ## Session Continuity
 
 Last activity: 2026-03-23
-Last session: 2026-03-23T07:52:00.000Z
-Stopped at: Milestone v0.5 complete - All phases finished
+Last session: 2026-03-23T14:06:25.164Z
+Stopped at: Completed 29-01-PLAN.md
 Resume file: None
 
 ## v0.5 Milestone Overview
