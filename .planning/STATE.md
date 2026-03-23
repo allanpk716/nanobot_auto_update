@@ -2,12 +2,12 @@
 gsd_state_version: 1.0
 milestone: v0.5
 milestone_name: Core Monitoring and Automation
-status: complete
-stopped_at: "Milestone v0.5 complete - Phase 28 finished"
-last_updated: "2026-03-23T07:52:00.000Z"
+status: in_progress
+stopped_at: "Phase 29 added - HTTP Help Endpoint"
+last_updated: "2026-03-23T08:10:00.000Z"
 last_activity: 2026-03-23
 progress:
-  total_phases: 5
+  total_phases: 6
   completed_phases: 5
   total_plans: 13
   completed_plans: 13
@@ -20,13 +20,13 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-20)
 
 **Core value:** 自动保持 nanobot 处于最新版本，无需用户手动干预
-**Current focus:** Milestone v0.5 完成 — 所有阶段已完成
+**Current focus:** Phase 29 — HTTP Help Endpoint
 
 ## Current Position
 
-Milestone: v0.5 COMPLETE
-Phase: 28 (completed)
-Plan: All 3 plans completed
+Milestone: v0.5 (extended)
+Phase: 29 (not started)
+Plan: None
 
 ## Performance Metrics
 
@@ -137,9 +137,9 @@ Resume file: None
 
 ## v0.5 Milestone Overview
 
-**Goal:** 补全核心监控和自动化功能，实现启动时自动启动实例、实例健康监控、Google 连通性监控和 HTTP API 触发更新
+**Goal:** 补全核心监控和自动化功能，实现启动时自动启动实例、实例健康监控、Google 连通性监控、HTTP API 触发更新和 HTTP help 接口
 
-**Total requirements:** 20 (4 AUTOSTART + 4 HEALTH + 6 MONITOR + 6 API)
+**Total requirements:** 22+ (4 AUTOSTART + 4 HEALTH + 6 MONITOR + 6 API + 2+ HELP)
 
 **Phase breakdown:**
 
@@ -148,9 +148,11 @@ Resume file: None
 - Phase 26: Network Monitoring Core (4 requirements) — 监控 Google 连通性
 - Phase 27: Network Monitoring Notifications (2 requirements) — 连通性变化通知
 - Phase 28: HTTP API Trigger (6 requirements) — HTTP API 触发更新
+- Phase 29: HTTP Help Endpoint (2+ requirements) — HTTP help 接口避免 CLI 冲突
 
 **Dependencies:**
 
 - Phase 25 depends on Phase 24 (需要实例已启动)
 - Phase 27 depends on Phase 26 (需要连通性监控基础设施)
 - Phase 28 depends on Phase 24 (需要实例自动启动能力)
+- Phase 29 depends on Phase 28 (需要 HTTP API 基础设施)
