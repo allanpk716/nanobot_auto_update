@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v0.5
 milestone_name: Core Monitoring and Automation
-status: Ready to execute
-stopped_at: Completed 29-01-PLAN.md
-last_updated: "2026-03-23T14:06:25.168Z"
+status: Phase complete — ready for verification
+stopped_at: Completed 29-02-PLAN.md
+last_updated: "2026-03-23T14:17:56.728Z"
 last_activity: 2026-03-23
 progress:
   total_phases: 6
   completed_phases: 5
   total_plans: 16
-  completed_plans: 14
+  completed_plans: 15
 ---
 
 # Project State
@@ -25,7 +25,7 @@ See: .planning/PROJECT.md (updated 2026-03-20)
 ## Current Position
 
 Phase: 29 (HTTP Help Endpoint) — EXECUTING
-Plan: 2 of 3
+Plan: 3 of 3
 
 ## Performance Metrics
 
@@ -63,6 +63,7 @@ Plan: 2 of 3
 | Phase 28 P02 | 8m | 2 tasks | 2 files |
 | Phase 28 P28-03 | 15m | 3 tasks | 3 files |
 | Phase 29 P01 | 3m 14s | 1 tasks | 1 files |
+| Phase 29 P02 | 4m 54s | 1 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -111,6 +112,8 @@ for v0.5.
 - [Phase 28]: Use defer pattern to guarantee isUpdating flag reset on all code paths
 - [Phase 29]: Use writeJSONError helper from auth.go for consistent RFC 7807 JSON error format in HelpHandler
 - [Phase 29]: Helper methods pattern (getEndpoints, getConfigReference, getCLIFlags) for clean code organization in HelpHandler
+- [Phase 29-http-help-endpoint]: Register help endpoint without authMiddleware to satisfy HELP-02
+- [Phase 29-http-help-endpoint]: Update NewServer signature to accept full config and version for better extensibility
 
 ### Pending Todos
 
@@ -133,8 +136,8 @@ None yet.
 ## Session Continuity
 
 Last activity: 2026-03-23
-Last session: 2026-03-23T14:06:25.164Z
-Stopped at: Completed 29-01-PLAN.md
+Last session: 2026-03-23T14:17:56.723Z
+Stopped at: Completed 29-02-PLAN.md
 Resume file: None
 
 ## v0.5 Milestone Overview
