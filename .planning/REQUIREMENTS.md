@@ -32,10 +32,10 @@
 
 ### HTTP API 触发更新 (API)
 
-- [ ] **API-01**: 提供 POST /api/v1/trigger-update 端点
+- [x] **API-01**: 提供 POST /api/v1/trigger-update 端点
 - [x] **API-02**: 请求需要 Bearer Token 认证
 - [x] **API-03**: 触发完整的停止→更新→启动流程
-- [ ] **API-04**: 返回 JSON 格式的更新结果
+- [x] **API-04**: 返回 JSON 格式的更新结果
 - [x] **API-05**: 认证失败时返回 401 错误
 - [x] **API-06**: 更新过程中拒绝重复请求
 
@@ -81,10 +81,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | MONITOR-06 | Phase 26 | Complete |
 | MONITOR-04 | Phase 27 | Complete |
 | MONITOR-05 | Phase 27 | Complete |
-| API-01 | Phase 28 | Pending |
+| API-01 | Phase 28 | Complete |
 | API-02 | Phase 28 | Complete |
 | API-03 | Phase 28 | Complete |
-| API-04 | Phase 28 | Pending |
+| API-04 | Phase 28 | Complete |
 | API-05 | Phase 28 | Complete |
 | API-06 | Phase 28 | Complete |
 

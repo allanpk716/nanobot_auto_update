@@ -55,7 +55,7 @@
 - [x] **Phase 25: Instance Health Monitoring** - 定期检查实例运行状态 (completed 2026-03-20)
 - [x] **Phase 26: Network Monitoring Core** - 定期测试 Google 连通性 (completed 2026-03-21)
 - [x] **Phase 27: Network Monitoring Notifications** - 连通性变化时发送通知 (completed 2026-03-22)
-- [ ] **Phase 28: HTTP API Trigger** - 通过 HTTP API 触发更新流程
+- [x] **Phase 28: HTTP API Trigger** - 通过 HTTP API 触发更新流程 (completed 2026-03-23)
 
 ## Phase Details
 
@@ -163,7 +163,7 @@ Plans:
 4. 用户收到 JSON 格式的更新结果（成功/失败、详细信息）
 5. 更新过程中重复请求被拒绝，用户收到"更新进行中"的错误消息
 
-**Plans:** 2/3 plans executed
+**Plans:** 3/3 plans complete
 
 ---
 
@@ -186,7 +186,7 @@ Plans:
 | 25. Instance Health Monitoring | v0.5 | 2/2 | Complete | 2026-03-20 |
 | 26. Network Monitoring Core | v0.5 | 2/2 | Complete | 2026-03-21 |
 | 27. Network Monitoring Notifications | v0.5 | 2/2 | Complete    | 2026-03-22 |
-| 28. HTTP API Trigger | v0.5 | 2/3 | In Progress|  |
+| 28. HTTP API Trigger | v0.5 | 3/3 | Complete   | 2026-03-23 |
 
 ---
 
