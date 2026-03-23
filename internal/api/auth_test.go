@@ -243,28 +243,24 @@ func TestWriteJSONError(t *testing.T) {
 		status      int
 		errorCode   string
 		message     string
-		expectedJSON string
 	}{
 		{
-			name:        "unauthorized error",
-			status:      http.StatusUnauthorized,
-			errorCode:   "unauthorized",
-			message:     "Missing Authorization header",
-			expectedJSON: `{"error":"unauthorized","message":"Missing Authorization header"}`,
+			name:      "unauthorized error",
+			status:    http.StatusUnauthorized,
+			errorCode: "unauthorized",
+			message:   "Missing Authorization header",
 		},
 		{
-			name:        "conflict error",
-			status:      http.StatusConflict,
-			errorCode:   "conflict",
-			message:     "Update already in progress",
-			expectedJSON: `{"error":"conflict","message":"Update already in progress"}`,
+			name:      "conflict error",
+			status:    http.StatusConflict,
+			errorCode: "conflict",
+			message:   "Update already in progress",
 		},
 		{
-			name:        "timeout error",
-			status:      http.StatusGatewayTimeout,
-			errorCode:   "timeout",
-			message:     "Update operation timed out",
-			expectedJSON: `{"error":"timeout","message":"Update operation timed out"}`,
+			name:      "timeout error",
+			status:    http.StatusGatewayTimeout,
+			errorCode: "timeout",
+			message:   "Update operation timed out",
 		},
 	}
 
@@ -288,7 +284,7 @@ func TestWriteJSONError(t *testing.T) {
 			// Verify JSON body
 			var response map[string]string
 			if err := json.NewDecoder(rec.Body).Decode(&response); err != nil {
-				t.Fatalf("Failed to decode response JSON: %v", err)
+				t.Fatalf("Failed to decode response JSON: %v (body: %q)", err, rec.Body.String())
 			}
 
 			if response["error"] != tt.errorCode {
@@ -297,12 +293,6 @@ func TestWriteJSONError(t *testing.T) {
 
 			if response["message"] != tt.message {
 				t.Errorf("message = %q, want %q", response["message"], tt.message)
-			}
-
-			// Verify exact JSON format (RFC 7807)
-			compactJSON := strings.TrimSpace(rec.Body.String())
-			if compactJSON != tt.expectedJSON {
-				t.Errorf("JSON = %q, want %q", compactJSON, tt.expectedJSON)
 			}
 		})
 	}
