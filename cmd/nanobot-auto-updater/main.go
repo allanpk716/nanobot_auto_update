@@ -100,7 +100,7 @@ func main() {
 	var apiServer *api.Server
 	if cfg.API.Port != 0 {
 		var err error
-		apiServer, err = api.NewServer(&cfg.API, instanceManager, logger)
+		apiServer, err = api.NewServer(&cfg.API, instanceManager, cfg, Version, logger)
 		if err != nil {
 			logger.Error("Failed to create API server", "error", err)
 			os.Exit(1)

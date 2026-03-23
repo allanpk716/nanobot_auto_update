@@ -24,13 +24,16 @@ func TestNewServer(t *testing.T) {
 		Timeout:     5 * time.Second,
 	}
 
-	im := instance.NewInstanceManager(&config.Config{
+	fullCfg := &config.Config{
+		API:        *cfg,
 		Instances: []config.InstanceConfig{
 			{Name: "test", Port: 8080, StartCommand: "test"},
 		},
-	}, logger)
+	}
 
-	server, err := NewServer(cfg, im, logger)
+	im := instance.NewInstanceManager(fullCfg, logger)
+
+	server, err := NewServer(cfg, im, fullCfg, "test-version", logger)
 	if err != nil {
 		t.Fatalf("NewServer failed: %v", err)
 	}
@@ -56,13 +59,16 @@ func TestServerLifecycle(t *testing.T) {
 		Timeout:     5 * time.Second,
 	}
 
-	im := instance.NewInstanceManager(&config.Config{
+	fullCfg := &config.Config{
+		API:        *cfg,
 		Instances: []config.InstanceConfig{
 			{Name: "test", Port: 8080, StartCommand: "test"},
 		},
-	}, logger)
+	}
 
-	server, err := NewServer(cfg, im, logger)
+	im := instance.NewInstanceManager(fullCfg, logger)
+
+	server, err := NewServer(cfg, im, fullCfg, "test-version", logger)
 	if err != nil {
 		t.Fatalf("NewServer failed: %v", err)
 	}
@@ -90,14 +96,16 @@ func TestServerLifecycle(t *testing.T) {
 func TestNewServerValidation(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 
-	im := instance.NewInstanceManager(&config.Config{
+	fullCfg := &config.Config{
 		Instances: []config.InstanceConfig{
 			{Name: "test", Port: 8080, StartCommand: "test"},
 		},
-	}, logger)
+	}
+
+	im := instance.NewInstanceManager(fullCfg, logger)
 
 	// Test with nil config
-	_, err := NewServer(nil, im, logger)
+	_, err := NewServer(nil, im, fullCfg, "test-version", logger)
 	if err == nil {
 		t.Error("Expected error for nil config")
 	}
@@ -107,7 +115,7 @@ func TestNewServerValidation(t *testing.T) {
 		Port:        0,
 		BearerToken: "test-token-32-characters-long-enough",
 	}
-	_, err = NewServer(cfg, im, logger)
+	_, err = NewServer(cfg, im, fullCfg, "test-version", logger)
 	if err == nil {
 		t.Error("Expected error for zero port")
 	}
@@ -123,13 +131,16 @@ func TestWebUIRoutes(t *testing.T) {
 		Timeout:     5 * time.Second,
 	}
 
-	im := instance.NewInstanceManager(&config.Config{
+	fullCfg := &config.Config{
+		API:        *cfg,
 		Instances: []config.InstanceConfig{
 			{Name: "test", Port: 8080, StartCommand: "test"},
 		},
-	}, logger)
+	}
 
-	server, err := NewServer(cfg, im, logger)
+	im := instance.NewInstanceManager(fullCfg, logger)
+
+	server, err := NewServer(cfg, im, fullCfg, "test-version", logger)
 	if err != nil {
 		t.Fatalf("NewServer failed: %v", err)
 	}
@@ -168,13 +179,16 @@ func TestWebUIInstanceNotFound(t *testing.T) {
 		Timeout:     5 * time.Second,
 	}
 
-	im := instance.NewInstanceManager(&config.Config{
+	fullCfg := &config.Config{
+		API:        *cfg,
 		Instances: []config.InstanceConfig{
 			{Name: "test", Port: 8080, StartCommand: "test"},
 		},
-	}, logger)
+	}
 
-	server, err := NewServer(cfg, im, logger)
+	im := instance.NewInstanceManager(fullCfg, logger)
+
+	server, err := NewServer(cfg, im, fullCfg, "test-version", logger)
 	if err != nil {
 		t.Fatalf("NewServer failed: %v", err)
 	}

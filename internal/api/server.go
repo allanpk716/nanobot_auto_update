@@ -21,7 +21,8 @@ type Server struct {
 
 // NewServer creates a new HTTP API server
 // SSE-07: Sets WriteTimeout=0 to support SSE long connections
-func NewServer(cfg *config.APIConfig, im *instance.InstanceManager, logger *slog.Logger) (*Server, error) {
+// HELP-01, HELP-02: Added fullCfg and version parameters for help endpoint
+func NewServer(cfg *config.APIConfig, im *instance.InstanceManager, fullCfg *config.Config, version string, logger *slog.Logger) (*Server, error) {
 	if cfg == nil {
 		return nil, fmt.Errorf("API config is nil")
 	}
@@ -32,9 +33,16 @@ func NewServer(cfg *config.APIConfig, im *instance.InstanceManager, logger *slog
 	// Create SSE handler
 	sseHandler := NewSSEHandler(im, logger)
 
+	// Create help handler (HELP-01, HELP-02)
+	// Note: Uses full config.Config, not just APIConfig
+	helpHandler := NewHelpHandler(version, fullCfg, logger)
+
 	// Create router
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/v1/logs/{instance}/stream", sseHandler.Handle)
+
+	// HELP-01, HELP-02: Help endpoint (no auth required)
+	mux.Handle("GET /api/v1/help", helpHandler)
 
 	// Web UI endpoint (Phase 23: UI-01)
 	mux.HandleFunc("GET /logs/{instance}", web.NewWebPageHandler(im, logger))
