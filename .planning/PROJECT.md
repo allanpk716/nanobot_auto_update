@@ -71,7 +71,7 @@ No active requirements — v0.5 milestone complete.
 
 **Pushover**: 推送通知服务，用于在更新失败时通知用户。
 
-**v0.5 Shipped:** 2026-03-24 — 核心监控和自动化里程碑完成，6 个阶段，16 个计划，所有核心功能就绪。Phase 29 HTTP Help Endpoint 完成，提供智能程序使用说明查询，避免 CLI 冲突。
+**v0.5 Shipped:** 2026-03-24 — 核心监控和自动化里程碑完成，6 个阶段 (24-29)，16 个计划，22 个任务，~2,400 行新增代码。Phase 24: 启动时自动启动实例。Phase 25: 实例健康监控。Phase 26: Google 连通性监控。Phase 27: Pushover 通知（1 分钟冷却）。Phase 28: HTTP API 触发更新 (Bearer Token + 并发控制)。Phase 29: HTTP help 接口。审计结果: 20/20 需求满足，6/6 阶段通过，15/15 集成点连接，5/5 E2E 流程完整，2 技术债（非阻塞文档缺口）。
 
 **v0.4 Shipped:** 2026-03-20 — 实时日志查看里程碑完成，5 个阶段，11 个计划，33 个需求，~12,000 行代码增加。测试覆盖: 单元测试 + 集成测试 + E2E 测试。审计结果: 33/33 需求满足，5/5 阶段通过，17/17 集成点连接，4/4 E2E 流程完整，0 缺口，0 技术债。
 
@@ -138,6 +138,21 @@ No active requirements — v0.5 milestone complete.
 | ERROR 级别记录管道读取错误 | 意外错误,服务继续 | ✓ Good — Phase 23-03 |
 | WARN 级别记录 SSE 连接错误 | 预期错误,服务继续 | ✓ Good — Phase 23-03 |
 | WARN 级别丢弃慢订阅者日志 | 非阻塞,不卡主流程 | ✓ Good — Phase 23-03 |
+| 异步启动实例 (goroutine + panic recovery) | 非阻塞启动,应用稳定 | ✓ Good — Phase 24-03 |
+| Context 5分钟超时控制 (auto-start) | 防止无限等待 | ✓ Good — Phase 24-03 |
+| Nil-safe 组件管理 (healthMonitor 检查) | 零实例配置兼容 | ✓ Good — Phase 25-02 |
+| 反向关闭顺序 (后启动先停止) | 确保依赖关系正确 | ✓ Good — Phase 25-02 |
+| 网络监控独立启动 (不依赖实例数) | 监控 Google 无需实例 | ✓ Good — Phase 26-02 |
+| 状态变化冷却确认 (1分钟 timer) | 避免频繁通知 | ✓ Good — Phase 27-01 |
+| Pushover 异步发送 (goroutine) | 不阻塞监控主循环 | ✓ Good — Phase 27-01 |
+| Bearer Token 认证 (RFC 6750) | 标准化认证机制 | ✓ Good — Phase 28-01 |
+| Constant time string comparison | 防止时序攻击 | ✓ Good — Phase 28-01 |
+| Atomic.Bool 并发更新控制 | 防止重复更新 | ✓ Good — Phase 28-02 |
+| JSON 错误响应 (RFC 7807) | 标准化错误格式 | ✓ Good — Phase 28-03 |
+| APIInstanceError 序列化适配 | JSON 兼容错误结构 | ✓ Good — Phase 28-03 |
+| HTTP 状态码策略 (200/401/409/504) | 清晰的错误分类 | ✓ Good — Phase 28-03 |
+| Help 接口无认证 (公开访问) | 第三方程序智能查询 | ✓ Good — Phase 29-02 |
+| Version 注入 (main → server → handler) | 未来扩展性 | ✓ Good — Phase 29-02 |
 
 ## Configuration
 
@@ -176,18 +191,12 @@ instances:
 
 ---
 
-## Current Milestone: v0.5 核心监控和自动化
+## Current Milestone: Planning Next Milestone
 
-**Previous Milestone: v0.4 实时日志查看** — Completed 2026-03-20
+**Last Shipped: v0.5 Core Monitoring and Automation** — Completed 2026-03-24
 
-**Goal:** 补全核心监控和自动化功能，实现启动时自动启动实例、实例健康监控、Google 连通性监控和 HTTP API 触发更新
-
-**Target features:**
-- 启动时自动启动所有配置的实例
-- 实例健康监控（检测实例是否正常运行）
-- Google 连通性监控服务（定时测试 google.com）
-- HTTP API 触发更新端点 (/api/v1/trigger-update)
+**Next Milestone:** TBD — Start with `/gsd:new-milestone` to define next milestone goals and requirements
 
 ---
 
-*Last updated: 2026-03-21 after Phase 26 completion*
+*Last updated: 2026-03-24 after v0.5 milestone completion*

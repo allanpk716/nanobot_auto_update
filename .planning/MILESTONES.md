@@ -1,5 +1,27 @@
 # Milestones
 
+## v0.5 Core Monitoring and Automation (Shipped: 2026-03-24)
+
+**Phases completed:** 6 phases (24-29), 16 plans, 22 tasks
+
+**Key accomplishments:**
+
+- ✅ Auto-Start: 应用启动时异步启动所有实例，带 panic 恢复和 5 分钟超时控制
+- ✅ Health Monitoring: 定期检查实例运行状态，记录状态变化（运行→停止 ERROR 日志，停止→运行 INFO 日志）
+- ✅ Network Monitoring: 定期测试 Google 连通性，记录请求成功/失败状态，可配置监控间隔和超时
+- ✅ Pushover Notifications: 网络连通性状态变化时发送通知，带 1 分钟冷却确认机制避免频繁通知
+- ✅ HTTP API Trigger: 通过 Bearer Token 认证的 POST /api/v1/trigger-update 端点触发更新，带并发控制和超时处理
+- ✅ HTTP Help Endpoint: 提供 GET /api/v1/help 接口供第三方程序智能查询程序使用说明，避免 CLI 命令冲突
+
+**Tech additions:**
+- Context-based timeout control
+- Atomic.Bool for concurrent update control
+- Bearer Token authentication (RFC 6750)
+- Server-Sent Events (SSE) for health state monitoring
+- 1-minute cooldown timer for notification deduplication
+
+---
+
 ## v0.4 实时日志查看 (Shipped: 2026-03-20)
 
 **Phases completed:** 10 phases, 24 plans, 5 tasks
