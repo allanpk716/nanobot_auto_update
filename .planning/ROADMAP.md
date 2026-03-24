@@ -56,7 +56,7 @@
 - [x] **Phase 26: Network Monitoring Core** - 定期测试 Google 连通性 (completed 2026-03-21)
 - [x] **Phase 27: Network Monitoring Notifications** - 连通性变化时发送通知 (completed 2026-03-22)
 - [x] **Phase 28: HTTP API Trigger** - 通过 HTTP API 触发更新流程 (completed 2026-03-23)
-- [ ] **Phase 29: HTTP Help Endpoint** - 提供 HTTP help 接口避免程序运行时 CLI 命令冲突
+- [x] **Phase 29: HTTP Help Endpoint** - 提供 HTTP help 接口避免程序运行时 CLI 命令冲突 (completed 2026-03-24)
 
 ## Phase Details
 
@@ -193,10 +193,10 @@ Plans:
 2. help 接口不需要认证（公开访问）
 3. 第三方程序可以根据程序是否启动智能选择查询方式（未启动用 CLI help，已启动用 HTTP help）
 
-**Plans:** 2/3 plans executed
+**Plans:** 3/3 plans complete
 
 Plans:
-- [ ] 29-00-PLAN.md - Wave 0: Test scaffold and interface definitions (TDD RED phase)
+- [x] 29-00-PLAN.md - Wave 0: Test scaffold and interface definitions (TDD RED phase)
 - [x] 29-01-PLAN.md - HelpHandler 实现和单元测试 (TDD GREEN phase)
 - [x] 29-02-PLAN.md - 路由注册和版本注入
 
@@ -222,7 +222,7 @@ Plans:
 | 26. Network Monitoring Core | v0.5 | 2/2 | Complete | 2026-03-21 |
 | 27. Network Monitoring Notifications | v0.5 | 2/2 | Complete | 2026-03-22 |
 | 28. HTTP API Trigger | v0.5 | 3/3 | Complete | 2026-03-23 |
-| 29. HTTP Help Endpoint | v0.5 | 2/3 | In Progress|  |
+| 29. HTTP Help Endpoint | v0.5 | 3/3 | Complete    | 2026-03-24 |
 
 ---
 
