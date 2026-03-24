@@ -138,14 +138,22 @@ func StartNanobotWithCapture(
 	logger *slog.Logger,
 	logBuffer *logbuffer.LogBuffer,
 ) error {
-	logger.Info("Starting nanobot with log capture", "command", command, "port", port)
+	// Auto-append --port parameter if not already present in command
+	// This ensures nanobot uses the configured port without requiring manual configuration
+	finalCommand := command
+	if !containsPortFlag(command) {
+		finalCommand = fmt.Sprintf("%s --port %d", command, port)
+		logger.Debug("Auto-appending port parameter to command", "original", command, "final", finalCommand)
+	}
+
+	logger.Info("Starting nanobot with log capture", "command", finalCommand, "port", port)
 
 	// Create cancelable context for log capture goroutines (CAPT-05)
 	captureCtx, cancelCapture := context.WithCancel(context.Background())
 	var wg sync.WaitGroup
 
 	// Prepare command
-	cmd := exec.CommandContext(ctx, "cmd", "/c", command)
+	cmd := exec.CommandContext(ctx, "cmd", "/c", finalCommand)
 	cmd.Env = append(os.Environ(), "PYTHONIOENCODING=utf-8")
 	cmd.SysProcAttr = &windows.SysProcAttr{
 		HideWindow:    true,
@@ -230,4 +238,33 @@ func StartNanobotWithCapture(
 
 	logger.Info("Nanobot startup verified, port is listening", "port", port)
 	return nil
+}
+
+// containsPortFlag checks if the command already contains a --port flag.
+// This prevents duplicate port parameters when the command already includes one.
+func containsPortFlag(command string) bool {
+	// Simple check for --port flag presence
+	// Handles both "--port 12345" and "--port=12345" formats
+	return len(command) >= 6 &&
+		(containsSubstring(command, " --port ") ||
+			containsSubstring(command, " --port=") ||
+			hasSuffix(command, " --port"))
+}
+
+// containsSubstring performs case-sensitive substring search
+func containsSubstring(s, substr string) bool {
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if s[i:i+len(substr)] == substr {
+			return true
+		}
+	}
+	return false
+}
+
+// hasSuffix checks if string ends with suffix
+func hasSuffix(s, suffix string) bool {
+	if len(suffix) > len(s) {
+		return false
+	}
+	return s[len(s)-len(suffix):] == suffix
 }

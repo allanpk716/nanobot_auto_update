@@ -218,6 +218,16 @@ func (m *InstanceManager) StartAllInstances(ctx context.Context) *AutoStartResul
 			"instance", inst.Name(),
 			"port", inst.Port())
 
+		// 先停止该端口的残留进程 (防止端口冲突)
+		// AUTOSTART-05: 清理崩溃后的残留进程
+		if err := inst.StopForUpdate(ctx); err != nil {
+			m.logger.Warn("停止残留进程失败，继续尝试启动",
+				"error", err,
+				"instance", inst.Name(),
+				"port", inst.Port())
+			// 不返回错误，继续尝试启动 (可能没有残留进程)
+		}
+
 		if err := inst.StartAfterUpdate(ctx); err != nil {
 			duration := time.Since(instStart)
 			m.logger.Error("启动实例失败",
