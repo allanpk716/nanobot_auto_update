@@ -12,11 +12,13 @@
 
 ### Validated
 
-**v0.5 核心监控和自动化** — 2026-03-21:
-- ✓ Google 连通性监控服务（定时测试 google.com） — Phase 26
-- ✓ 网络连通性变化通知（Pushover + 1分钟冷却） — Phase 27
+**v0.5 核心监控和自动化** — 2026-03-24:
 - ✓ 启动时自动启动所有配置的实例 — Phase 24
 - ✓ 实例健康监控（检测实例是否正常运行） — Phase 25
+- ✓ Google 连通性监控服务（定时测试 google.com） — Phase 26
+- ✓ 网络连通性变化通知（Pushover + 1分钟冷却） — Phase 27
+- ✓ HTTP API 触发更新端点 (/api/v1/trigger-update) — Phase 28
+- ✓ HTTP help 接口 (/api/v1/help) — Phase 29
 
 **v0.4 实时日志查看** — 2026-03-20:
 - ✓ 环形缓冲区（5000行容量）和并发读写 — v0.4
@@ -48,12 +50,7 @@
 
 ### Active
 
-**v0.5 核心监控和自动化** — 进行中:
-- [x] 启动时自动启动所有配置的实例 — Phase 24 (已完成)
-- [x] 实例健康监控（检测实例是否正常运行） — Phase 25 (已完成)
-- [x] Google 连通性监控服务（定时测试 google.com） — Phase 26 (已完成)
-- [x] 网络连通性变化通知（Pushover + 1分钟冷却） — Phase 27 (已完成)
-- [ ] HTTP API 触发更新端点 (/api/v1/trigger-update) — Phase 28 (待开发)
+No active requirements — v0.5 milestone complete.
 
 ### Out of Scope
 
@@ -74,7 +71,7 @@
 
 **Pushover**: 推送通知服务，用于在更新失败时通知用户。
 
-**v0.5 In Progress:** Phase 27 Network Monitoring Notifications complete — 2026-03-22. Next: Phase 28 HTTP API Trigger.
+**v0.5 Shipped:** 2026-03-24 — 核心监控和自动化里程碑完成，6 个阶段，16 个计划，所有核心功能就绪。Phase 29 HTTP Help Endpoint 完成，提供智能程序使用说明查询，避免 CLI 冲突。
 
 **v0.4 Shipped:** 2026-03-20 — 实时日志查看里程碑完成，5 个阶段，11 个计划，33 个需求，~12,000 行代码增加。测试覆盖: 单元测试 + 集成测试 + E2E 测试。审计结果: 33/33 需求满足，5/5 阶段通过，17/17 集成点连接，4/4 E2E 流程完整，0 缺口，0 技术债。
 
