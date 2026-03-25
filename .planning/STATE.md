@@ -131,11 +131,12 @@ None yet.
 
 | # | Description | Date | Commit | Directory |
 |---|-------------|------|--------|-----------|
+| 260325-ovr | 添加实例重启按钮和处理日志 ANSI 颜色转义码 - 在 Web 界面每个实例日志页面添加重启按钮，并修复日志中的 ANSI 转义码显示问题 | 2026-03-25 | 0cab1fc | [260325-ovr-web](./quick/260325-ovr-web/) |
 | 260320-k8z | 添加实时日志统一入口页面 - 创建首页展示所有实例列表，支持点击进入实例日志详情页，并可返回统一入口 | 2026-03-20 | aa32179 | [260320-k8z-实时日志统一入口](./quick/260320-k8z-实时日志统一入口/) |
 
 ## Session Continuity
 
-Last activity: 2026-03-24
+Last activity: 2026-03-25 - Completed quick task 260325-ovr: Web界面添加实例重启按钮和修复ANSI转义码
 Last session: 2026-03-23T14:17:56.723Z
 Stopped at: Completed 29-02-PLAN.md
 Resume file: None
