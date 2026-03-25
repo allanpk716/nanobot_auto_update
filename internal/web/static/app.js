@@ -150,10 +150,13 @@ function appendLog(message, source) {
         emptyState.remove();
     }
 
+    // Strip ANSI escape codes from message
+    const cleanMessage = stripAnsiCodes(message);
+
     // Create log line element
     const logLine = document.createElement('div');
     logLine.className = 'log-' + source;
-    logLine.textContent = message;
+    logLine.textContent = cleanMessage;
 
     // Append to container
     logsContainer.appendChild(logLine);
@@ -162,6 +165,17 @@ function appendLog(message, source) {
     if (autoScroll) {
         logsContainer.scrollTop = logsContainer.scrollHeight;
     }
+}
+
+// Strip ANSI escape codes from text
+function stripAnsiCodes(text) {
+    // Match ANSI escape sequences: ESC[...m format
+    // \x1b = ESC character
+    // \[ = literal opening bracket
+    // [0-9;]* = any digits or semicolons (color codes)
+    // m = terminating character
+    const ansiRegex = /\x1b\[[0-9;]*m/g;
+    return text.replace(ansiRegex, '');
 }
 
 // Update connection status indicator
