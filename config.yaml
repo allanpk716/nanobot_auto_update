@@ -18,13 +18,9 @@ instances:
     port: 18790
     start_command: "nanobot gateway"
     startup_timeout: 30s
-  - name: "nanobot-wangyan"
-    port: 18791
-    start_command: "nanobot gateway --config C:\Users\allan716\.nanobot-wangyan\config.json --port 18791"
-    startup_timeout: 30s
   - name: "nanobot-work-helper"
     port: 18792
-    start_command: "nanobot gateway --config C:\Users\allan716\.nanobot-work-helper\config.json --port 18792"
+    start_command: "nanobot gateway --config C:/Users/allan716/.nanobot-work-helper/config.json --port 18792"
     startup_timeout: 30s
 
 # Pushover 通知设置（可选）
