@@ -39,6 +39,11 @@ func NewServer(cfg *config.APIConfig, im *instance.InstanceManager, fullCfg *con
 
 	// Create router
 	mux := http.NewServeMux()
+
+	// Static files handler (must be registered before catch-all routes)
+	// This handles /static/* requests for CSS, JS, and other static assets
+	mux.Handle("GET /static/", http.StripPrefix("/static/", web.Handler()))
+
 	mux.HandleFunc("GET /api/v1/logs/{instance}/stream", sseHandler.Handle)
 
 	// HELP-01, HELP-02: Help endpoint (no auth required)
@@ -52,6 +57,9 @@ func NewServer(cfg *config.APIConfig, im *instance.InstanceManager, fullCfg *con
 
 	// Instance status API (Quick task 260320-k8z: Task 1)
 	mux.HandleFunc("GET /api/v1/instances/status", web.NewInstanceStatusHandler(im, logger))
+
+	// Instance restart API (Quick task 260325-ovr: Task 1)
+	mux.HandleFunc("POST /api/v1/instances/{name}/restart", web.NewInstanceRestartHandler(im, logger))
 
 	// Home page endpoints (Quick task 260320-k8z: Task 2)
 	mux.HandleFunc("GET /", web.NewHomePageHandler(im, logger))

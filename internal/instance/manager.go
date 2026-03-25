@@ -301,3 +301,18 @@ func (m *InstanceManager) TriggerUpdate(ctx context.Context) (*UpdateResult, err
 func (m *InstanceManager) IsUpdating() bool {
 	return m.isUpdating.Load()
 }
+
+// GetLifecycle returns the InstanceLifecycle for a specific instance by name.
+// Returns error if instance not found.
+func (m *InstanceManager) GetLifecycle(name string) (*InstanceLifecycle, error) {
+	for _, inst := range m.instances {
+		if inst.config.Name == name {
+			return inst, nil
+		}
+	}
+	return nil, &InstanceError{
+		InstanceName: name,
+		Operation:    "get_lifecycle",
+		Err:          fmt.Errorf("instance not found"),
+	}
+}

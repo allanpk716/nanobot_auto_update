@@ -149,3 +149,60 @@ func NewHomePageHandler(im *instance.InstanceManager, logger *slog.Logger) http.
 		w.Write(content)
 	}
 }
+
+// NewInstanceRestartHandler creates handler for POST /api/v1/instances/{name}/restart
+// Restarts a specific instance by calling StopForUpdate then StartAfterUpdate
+func NewInstanceRestartHandler(im *instance.InstanceManager, logger *slog.Logger) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		// Extract instance name from URL path
+		instanceName := r.PathValue("name")
+		if instanceName == "" {
+			http.Error(w, "Instance name required", http.StatusBadRequest)
+			return
+		}
+
+		// Get the instance lifecycle
+		inst, err := im.GetLifecycle(instanceName)
+		if err != nil {
+			logger.Warn("Instance not found", "instance", instanceName, "error", err)
+			http.Error(w, fmt.Sprintf("Instance %s not found", instanceName), http.StatusNotFound)
+			return
+		}
+
+		logger.Info("Restarting instance", "instance", instanceName)
+
+		// Stop the instance
+		if err := inst.StopForUpdate(r.Context()); err != nil {
+			logger.Error("Failed to stop instance", "instance", instanceName, "error", err)
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusInternalServerError)
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"success": false,
+				"error":   fmt.Sprintf("Failed to stop instance: %v", err),
+			})
+			return
+		}
+
+		// Start the instance
+		if err := inst.StartAfterUpdate(r.Context()); err != nil {
+			logger.Error("Failed to start instance", "instance", instanceName, "error", err)
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusInternalServerError)
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"success": false,
+				"error":   fmt.Sprintf("Failed to start instance: %v", err),
+			})
+			return
+		}
+
+		logger.Info("Instance restarted successfully", "instance", instanceName)
+
+		// Return success response
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(map[string]interface{}{
+			"success": true,
+		}); err != nil {
+			logger.Error("Failed to encode restart response", "error", err)
+		}
+	}
+}
