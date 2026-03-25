@@ -48,9 +48,55 @@ function createInstanceCard(instance) {
                 <span class="value ${statusClass}">${statusText}</span>
             </div>
         </div>
+        <button class="btn-restart" data-instance="${instance.name}">重启实例</button>
     `;
 
+    // Add restart button click handler
+    const restartBtn = card.querySelector('.btn-restart');
+    restartBtn.addEventListener('click', function() {
+        restartInstance(instance.name, restartBtn);
+    });
+
     return card;
+}
+
+// Restart instance function
+async function restartInstance(instanceName, button) {
+    const originalText = button.textContent;
+
+    try {
+        // Disable button and show loading state
+        button.disabled = true;
+        button.classList.add('loading');
+        button.textContent = '重启中...';
+
+        // Call restart API
+        const response = await fetch(`/api/v1/instances/${instanceName}/restart`, {
+            method: 'POST'
+        });
+
+        const data = await response.json();
+
+        if (response.ok && data.success) {
+            button.textContent = '重启成功';
+            // Refresh instance status after 2 seconds
+            setTimeout(() => {
+                loadInstances();
+            }, 2000);
+        } else {
+            throw new Error(data.error || '重启失败');
+        }
+    } catch (error) {
+        console.error('Failed to restart instance:', error);
+        button.textContent = '重启失败';
+        alert(`重启实例 ${instanceName} 失败: ${error.message}`);
+        // Restore button after 2 seconds
+        setTimeout(() => {
+            button.textContent = originalText;
+            button.disabled = false;
+            button.classList.remove('loading');
+        }, 2000);
+    }
 }
 
 // Initialize on DOMContentLoaded

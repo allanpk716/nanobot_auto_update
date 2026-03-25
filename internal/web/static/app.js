@@ -13,10 +13,16 @@ const connectionStatus = document.getElementById('connection-status');
 const scrollToggle = document.getElementById('scroll-toggle');
 const instanceSelect = document.getElementById('instance-select');
 const backToHomeButton = document.getElementById('back-to-home');
+const restartButton = document.getElementById('restart-button');
 
 // Back to home button click handler
 backToHomeButton.addEventListener('click', function() {
     window.location.href = '/';
+});
+
+// Restart button click handler
+restartButton.addEventListener('click', function() {
+    restartInstance(currentInstance, restartButton);
 });
 
 // Load instance selector from API
@@ -216,6 +222,59 @@ function updateScrollButtonText() {
         scrollToggle.textContent = '暂停滚动';
     } else {
         scrollToggle.textContent = '恢复滚动';
+    }
+}
+
+// Restart instance function
+async function restartInstance(instanceName, button) {
+    const originalText = button.textContent;
+
+    try {
+        // Disable button and show loading state
+        button.disabled = true;
+        button.classList.add('loading');
+        button.textContent = '重启中...';
+
+        // Call restart API
+        const response = await fetch(`/api/v1/instances/${instanceName}/restart`, {
+            method: 'POST'
+        });
+
+        const data = await response.json();
+
+        if (response.ok && data.success) {
+            button.textContent = '重启成功';
+
+            // Reconnect SSE stream after restart
+            if (eventSource) {
+                eventSource.close();
+                eventSource = null;
+            }
+
+            // Clear logs and reconnect
+            logsContainer.innerHTML = '';
+            showEmptyState();
+            connectSSE(instanceName);
+
+            // Restore button after 2 seconds
+            setTimeout(() => {
+                button.textContent = originalText;
+                button.disabled = false;
+                button.classList.remove('loading');
+            }, 2000);
+        } else {
+            throw new Error(data.error || '重启失败');
+        }
+    } catch (error) {
+        console.error('Failed to restart instance:', error);
+        button.textContent = '重启失败';
+        alert(`重启实例 ${instanceName} 失败: ${error.message}`);
+        // Restore button after 2 seconds
+        setTimeout(() => {
+            button.textContent = originalText;
+            button.disabled = false;
+            button.classList.remove('loading');
+        }, 2000);
     }
 }
 

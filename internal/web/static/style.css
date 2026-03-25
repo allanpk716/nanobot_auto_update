@@ -233,3 +233,33 @@ main {
     color: #999;
     font-weight: 600;
 }
+
+/* Restart button styles */
+.btn-restart {
+    padding: var(--spacing-xs) var(--spacing-sm);
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    background-color: #ffffff;
+    font-size: 13px;
+    cursor: pointer;
+    transition: background-color 0.2s, opacity 0.2s;
+}
+
+.btn-restart:hover {
+    background-color: #f5f5f5;
+    border-color: #2563eb;
+}
+
+.btn-restart:active {
+    background-color: #e5e7eb;
+}
+
+.btn-restart:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.btn-restart.loading {
+    opacity: 0.6;
+    cursor: wait;
+}
