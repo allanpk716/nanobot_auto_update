@@ -1,16 +1,16 @@
 ---
 gsd_state_version: 1.0
-milestone: v0.5
-milestone_name: Core Monitoring and Automation
-status: v0.5 milestone complete
-stopped_at: Completed 29-02-PLAN.md
-last_updated: "2026-03-24T02:46:10.344Z"
-last_activity: 2026-03-24
+milestone: v0.6
+milestone_name: Update Log Recording and Query System
+status: Defining requirements
+stopped_at: —
+last_updated: "2026-03-26T00:00:00.000Z"
+last_activity: 2026-03-26
 progress:
-  total_phases: 6
-  completed_phases: 6
-  total_plans: 16
-  completed_plans: 16
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
 ---
 
 # Project State
@@ -24,8 +24,10 @@ See: .planning/PROJECT.md (updated 2026-03-20)
 
 ## Current Position
 
-Phase: 29
-Plan: Not started
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-03-26 — Milestone v0.6 started
 
 ## Performance Metrics
 
@@ -49,21 +51,20 @@ Plan: Not started
 - Trend: Stable, good velocity
 
 *Updated after each plan completion*
-| Phase 24-auto-start P01 | 1 | 1 tasks | 2 files |
-| Phase 24-auto-start P24-00 | 3.4 minutes | 2 tasks | 2 files |
-| Phase 24-auto-start P02 | 5m 50s | 2 tasks | 3 files |
-| Phase 24-auto-start P03 | 1.3min | 1 tasks | 1 files |
-| Phase 25 P01 | 8m 53s | 2 tasks | 6 files |
-| Phase 25 P02 | 1m | 1 tasks | 1 files |
-| Phase 26 P01 | 3m | 1 tasks | 2 files |
-| Phase 26 P02 | 84s | 1 tasks | 1 files |
-| Phase 27 P01 | 12min | 2 tasks | 4 files |
-| Phase 27 P02 | 8min | 2 tasks | 1 files |
-| Phase 28 P01 | 3m | 2 tasks | 2 files |
-| Phase 28 P02 | 8m | 2 tasks | 2 files |
-| Phase 28 P28-03 | 15m | 3 tasks | 3 files |
-| Phase 29 P01 | 3m 14s | 1 tasks | 1 files |
-| Phase 29 P02 | 4m 54s | 1 tasks | 3 files |
+
+## v0.6 Milestone Overview
+
+**Goal:** 记录每次 HTTP API 触发的更新操作,并提供查询接口获取更新历史日志
+
+**Total requirements:** TBD (defining now)
+
+**Phase breakdown:**
+
+TBD — Roadmap creation pending
+
+**Dependencies:**
+
+TBD — Roadmap creation pending
 
 ## Accumulated Context
 
@@ -72,7 +73,7 @@ Plan: Not started
 Decisions are logged in PROJECT.md Key Decisions table.
 Recent decisions affecting current work:
 
-for v0.5.
+TBD — v0.6 milestone just started
 
 - [Phase 24-auto-start]: Use *bool pointer type for AutoStart field to distinguish nil (default) from explicit false
 - [Phase 24-auto-start]: Default behavior: nil AutoStart defaults to true (auto-start enabled)
@@ -136,9 +137,9 @@ None yet.
 
 ## Session Continuity
 
-Last activity: 2026-03-25 - Completed quick task 260325-ovr: Web界面添加实例重启按钮和修复ANSI转义码
-Last session: 2026-03-23T14:17:56.723Z
-Stopped at: Completed 29-02-PLAN.md
+Last activity: 2026-03-26 — Milestone v0.6 started
+Last session: —
+Stopped at: —
 Resume file: None
 
 ## v0.5 Milestone Overview

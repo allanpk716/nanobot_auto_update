@@ -191,12 +191,32 @@ instances:
 
 ---
 
-## Current Milestone: Planning Next Milestone
+## Current Milestone: v0.6 Update Log Recording and Query System
+
+**Goal:** 记录每次 HTTP API 触发的更新操作,并提供查询接口获取更新历史日志
+
+**Target features:**
+- 更新日志记录:每次 trigger-update 调用时自动记录详细日志
+- 日志持久化:使用 JSON Lines 格式保存到文件(保留7天)
+- 日志查询 API:通过 /api/v1/update-logs 查询最近N次更新
+- 分页支持:支持 limit/offset 参数
+- 认证保护:与 trigger-update 使用相同的 Bearer Token 认证
+
+**Log content:**
+- 更新ID(唯一标识符)
+- 时间戳(开始/结束时间)
+- 触发来源
+- 实例更新结果(每个实例的成功/失败状态和详细消息)
+- 完整输出日志(每个实例的 stdout/stderr)
+
+**Key context:**
+- 文件格式: JSON Lines (每行一个JSON对象,便于追加)
+- 存储位置: 文件持久化
+- 清理策略: 保留最近7天,自动删除旧日志
+- 认证方式: Bearer Token (与现有 API 一致)
 
 **Last Shipped: v0.5 Core Monitoring and Automation** — Completed 2026-03-24
 
-**Next Milestone:** TBD — Start with `/gsd:new-milestone` to define next milestone goals and requirements
-
 ---
 
-*Last updated: 2026-03-24 after v0.5 milestone completion*
+*Last updated: 2026-03-26 starting v0.6 milestone*
