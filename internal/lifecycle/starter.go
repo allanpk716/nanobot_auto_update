@@ -5,131 +5,21 @@ package lifecycle
 import (
 	"context"
 	"fmt"
+	"io"
 	"log/slog"
-	"net"
 	"os"
 	"os/exec"
-	"sync"
+	"strings"
 	"time"
 
+	"github.com/shirou/gopsutil/v3/process"
 	"golang.org/x/sys/windows"
 
 	"github.com/HQGroup/nanobot-auto-updater/internal/logbuffer"
 )
 
-// StartNanobot starts nanobot with the specified command in the background with hidden window.
-// Returns error if startup fails or port not listening within timeout.
-func StartNanobot(ctx context.Context, command string, port uint32, startupTimeout time.Duration, logger *slog.Logger) error {
-	logger.Info("Starting nanobot", "command", command, "port", port, "startup_timeout", startupTimeout)
-
-	// Start nanobot as background process using Windows shell
-	// cmd /c supports pipes, redirections, and complex commands
-	cmd := exec.CommandContext(ctx, "cmd", "/c", command)
-	// Set PYTHONIOENCODING=utf-8 to fix Unicode encoding issues on Windows
-	// (nanobot uses emoji in output which fails with GBK encoding)
-	cmd.Env = append(os.Environ(), "PYTHONIOENCODING=utf-8")
-	cmd.SysProcAttr = &windows.SysProcAttr{
-		HideWindow:    true,
-		CreationFlags: windows.CREATE_NO_WINDOW | windows.CREATE_NEW_PROCESS_GROUP,
-	}
-
-	logger.Debug("Executing command via Windows shell")
-	// Detach from parent - don't wait for completion
-	if err := cmd.Start(); err != nil {
-		logger.Error("Failed to start nanobot process", "command", command, "error", err)
-		return fmt.Errorf("failed to start nanobot: %w", err)
-	}
-
-	logger.Info("Nanobot process started", "pid", cmd.Process.Pid)
-
-	// Release the process so it continues independently
-	if err := cmd.Process.Release(); err != nil {
-		logger.Warn("Failed to detach nanobot process (non-fatal)", "error", err)
-		return fmt.Errorf("failed to detach nanobot process: %w", err)
-	}
-
-	logger.Debug("Process detached, waiting for port to become available")
-
-	// Verify startup by checking port is listening
-	if err := waitForPortListening(ctx, port, startupTimeout, logger); err != nil {
-		logger.Error("Nanobot startup verification failed", "port", port, "error", err)
-		return fmt.Errorf("nanobot startup verification failed: %w", err)
-	}
-
-	logger.Info("Nanobot startup verified, port is listening", "port", port)
-	return nil
-}
-
-// waitForProcessRunning polls until the process is running or timeout
-func waitForProcessRunning(ctx context.Context, processName string, timeout time.Duration, logger *slog.Logger) error {
-	deadline := time.Now().Add(timeout)
-	attempts := 0
-
-	logger.Debug("Waiting for process to start running", "process", processName, "timeout", timeout)
-
-	for time.Now().Before(deadline) {
-		select {
-		case <-ctx.Done():
-			logger.Warn("Context cancelled while waiting for process", "process", processName)
-			return ctx.Err()
-		default:
-			attempts++
-			pid, err := FindPIDByProcessName(processName, logger)
-			if err == nil && pid > 0 {
-				logger.Info("Process started successfully", "process", processName, "pid", pid, "attempts", attempts)
-				return nil
-			}
-			if attempts%4 == 0 {
-				// Log every 2 seconds (4 attempts * 500ms)
-				logger.Debug("Process not yet running, retrying", "process", processName, "attempt", attempts)
-			}
-			time.Sleep(500 * time.Millisecond)
-		}
-	}
-
-	logger.Error("Process not running after timeout", "process", processName, "attempts", attempts)
-	return fmt.Errorf("process %s not running after %v", processName, timeout)
-}
-
-// waitForPortListening polls until the port is listening or timeout
-func waitForPortListening(ctx context.Context, port uint32, timeout time.Duration, logger *slog.Logger) error {
-	deadline := time.Now().Add(timeout)
-	address := fmt.Sprintf("127.0.0.1:%d", port)
-
-	logger.Debug("Waiting for port to become available", "address", address, "timeout", timeout)
-
-	attempts := 0
-	for time.Now().Before(deadline) {
-		select {
-		case <-ctx.Done():
-			logger.Warn("Context cancelled while waiting for port", "port", port)
-			return ctx.Err()
-		default:
-			attempts++
-			// Try to connect to verify port is listening
-			conn, err := net.DialTimeout("tcp", address, 1*time.Second)
-			if err == nil {
-				conn.Close()
-				logger.Debug("Port is now listening", "port", port, "attempts", attempts)
-				return nil // Port is listening
-			}
-			if attempts%4 == 0 {
-				// Log every 2 seconds (4 attempts * 500ms)
-				logger.Debug("Port not yet available, retrying", "port", port, "attempt", attempts)
-			}
-			time.Sleep(500 * time.Millisecond)
-		}
-	}
-
-	logger.Error("Port not listening after timeout", "port", port, "attempts", attempts)
-	return fmt.Errorf("port %d not listening after %v", port, timeout)
-}
-
-// StartNanobotWithCapture starts nanobot with stdout/stderr capture to LogBuffer.
-// CAPT-01, CAPT-02: Captures stdout and stderr output streams
-// CAPT-03: Concurrent pipe reading using separate goroutines
-// CAPT-04: Auto-starts capture on process start
-// CAPT-05: Auto-stops capture on process exit via context cancellation
+// StartNanobotWithCapture starts nanobot with log capture.
+// Returns the process ID on success.
 func StartNanobotWithCapture(
 	ctx context.Context,
 	command string,
@@ -137,7 +27,7 @@ func StartNanobotWithCapture(
 	startupTimeout time.Duration,
 	logger *slog.Logger,
 	logBuffer *logbuffer.LogBuffer,
-) error {
+) (int, error) {
 	// Auto-append --port parameter if not already present in command
 	// This ensures nanobot uses the configured port without requiring manual configuration
 	finalCommand := command
@@ -146,98 +36,172 @@ func StartNanobotWithCapture(
 		logger.Debug("Auto-appending port parameter to command", "original", command, "final", finalCommand)
 	}
 
-	logger.Info("Starting nanobot with log capture", "command", finalCommand, "port", port)
+	// Parse command into executable and arguments
+	parts := splitCommand(finalCommand)
+	if len(parts) == 0 {
+		return 0, fmt.Errorf("empty command")
+	}
 
-	// Create cancelable context for log capture goroutines (CAPT-05)
-	captureCtx, cancelCapture := context.WithCancel(context.Background())
-	var wg sync.WaitGroup
+	executable := parts[0]
+	args := parts[1:]
 
-	// Prepare command
-	cmd := exec.CommandContext(ctx, "cmd", "/c", finalCommand)
+	logger.Info("Starting nanobot", "command", finalCommand, "executable", executable, "args", strings.Join(args, " "), "port", port)
+
+	// Create a detached context for the process
+	// CRITICAL: We use context.Background() instead of the passed context to avoid
+	// killing the process when the parent context is cancelled. The process lifetime
+	// should be independent of the startup context.
+	// The passed ctx is only used for startup timeout control in the caller.
+	detachedCtx := context.Background()
+
+	// Create pipes for stdout and stderr
+	stdoutReader, stdoutWriter, err := os.Pipe()
+	if err != nil {
+		return 0, fmt.Errorf("failed to create stdout pipe: %w", err)
+	}
+
+	stderrReader, stderrWriter, err := os.Pipe()
+	if err != nil {
+		stdoutReader.Close()
+		stdoutWriter.Close()
+		return 0, fmt.Errorf("failed to create stderr pipe: %w", err)
+	}
+
+	// Prepare command with detached context
+	cmd := exec.CommandContext(detachedCtx, executable, args...)
 	cmd.Env = append(os.Environ(), "PYTHONIOENCODING=utf-8")
 	cmd.SysProcAttr = &windows.SysProcAttr{
 		HideWindow:    true,
 		CreationFlags: windows.CREATE_NO_WINDOW | windows.CREATE_NEW_PROCESS_GROUP,
 	}
 
-	// Create stdout pipe (avoid StdoutPipe() race condition - RESEARCH.md)
-	stdoutReader, stdoutWriter, err := os.Pipe()
-	if err != nil {
-		cancelCapture()
-		return fmt.Errorf("failed to create stdout pipe: %w", err)
-	}
-
-	// Create stderr pipe
-	stderrReader, stderrWriter, err := os.Pipe()
-	if err != nil {
-		cancelCapture()
-		stdoutReader.Close()
-		stdoutWriter.Close()
-		return fmt.Errorf("failed to create stderr pipe: %w", err)
-	}
-
-	// Set cmd.Stdout and cmd.Stderr (CAPT-01, CAPT-02)
+	// Set stdout and stderr
 	cmd.Stdout = stdoutWriter
 	cmd.Stderr = stderrWriter
 
-	// Start stdout capture goroutine (CAPT-03)
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		captureLogs(captureCtx, stdoutReader, "stdout", logBuffer, logger)
-		stdoutReader.Close()
-	}()
-
-	// Start stderr capture goroutine (CAPT-03)
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		captureLogs(captureCtx, stderrReader, "stderr", logBuffer, logger)
-		stderrReader.Close()
-	}()
-
-	// Start process (CAPT-04)
+	// Start process
 	if err := cmd.Start(); err != nil {
-		cancelCapture() // Cancel capture goroutines
-		wg.Wait()       // Wait for goroutines to exit
 		stdoutReader.Close()
 		stdoutWriter.Close()
 		stderrReader.Close()
 		stderrWriter.Close()
-		logger.Error("Failed to start nanobot process", "error", err)
-		return fmt.Errorf("failed to start nanobot: %w", err)
+		logger.Error("Failed to start nanobot", "error", err)
+		return 0, fmt.Errorf("failed to start nanobot: %w", err)
 	}
 
-	logger.Info("Nanobot process started", "pid", cmd.Process.Pid)
+	pid := cmd.Process.Pid
+	logger.Info("Nanobot process started", "pid", pid)
 
-	// Start monitor goroutine: stop capture on process exit (CAPT-05)
+	// Close writer ends immediately - the subprocess has already inherited them
+	// This is critical to prevent pipe deadlock when buffer fills up
+	stdoutWriter.Close()
+	stderrWriter.Close()
+
+	// Wait 2 seconds for process stabilization
+	time.Sleep(2 * time.Second)
+
+	// Verify process is still running
+	proc, err := process.NewProcess(int32(pid))
+	if err != nil {
+		_ = cmd.Wait()
+		stdoutReader.Close()
+		stderrReader.Close()
+		logger.Error("Process exited immediately after start", "pid", pid)
+		return 0, fmt.Errorf("process exited immediately after start (PID %d)", pid)
+	}
+
+	name, err := proc.Name()
+	if err != nil {
+		_ = cmd.Wait()
+		stdoutReader.Close()
+		stderrReader.Close()
+		logger.Error("Failed to verify process name", "pid", pid, "error", err)
+		return 0, fmt.Errorf("failed to verify process name (PID %d): %w", pid, err)
+	}
+
+	logger.Info("Nanobot process verified", "pid", pid, "process_name", name)
+
+	// Start log capture goroutines
+	// Use detachedCtx to ensure log capture continues even if parent context is cancelled
+	go captureLogs(detachedCtx, stdoutReader, "stdout", logBuffer, logger)
+	go captureLogs(detachedCtx, stderrReader, "stderr", logBuffer, logger)
+
+	// Start monitor goroutine to handle process exit
 	go func() {
-		err := cmd.Wait() // Wait for process exit
+		err := cmd.Wait()
 		if err != nil {
-			logger.Warn("Nanobot process exited with error", "pid", cmd.Process.Pid, "error", err)
+			logger.Warn("Process exited with error", "pid", pid, "error", err)
 		} else {
-			logger.Info("Nanobot process exited", "pid", cmd.Process.Pid)
+			logger.Info("Process exited normally", "pid", pid)
 		}
-
-		// Close writer ends to trigger EOF in readers
-		stdoutWriter.Close()
-		stderrWriter.Close()
-
-		// Cancel context to stop capture goroutines
-		cancelCapture()
-		wg.Wait() // Wait for capture goroutines to exit
-
-		logger.Debug("Log capture goroutines stopped")
 	}()
 
-	// Verify startup by checking port is listening
-	if err := waitForPortListening(ctx, port, startupTimeout, logger); err != nil {
-		logger.Error("Nanobot startup verification failed", "port", port, "error", err)
-		return fmt.Errorf("nanobot startup verification failed: %w", err)
+	return pid, nil
+}
+
+// captureLogs reads from a reader and writes to LogBuffer
+func captureLogs(ctx context.Context, reader *os.File, source string,	logBuffer *logbuffer.LogBuffer,
+	logger *slog.Logger,
+) {
+	defer reader.Close()
+	buf := make([]byte, 4096)
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+			n, err := reader.Read(buf)
+			if err != nil {
+				if err != io.EOF {
+					logger.Debug("Log capture stopped", "source", source, "error", err)
+				}
+				return
+			}
+			if n > 0 {
+				logBuffer.Write(logbuffer.LogEntry{
+					Timestamp: time.Now(),
+					Source:    source,
+					Content:   string(buf[:n]),
+				})
+			}
+		}
+	}
+}
+
+// splitCommand splits a command string into parts, handling quoted arguments
+func splitCommand(cmd string) []string {
+	var parts []string
+	var current strings.Builder
+	inQuotes := false
+
+	for i := 0; i < len(cmd); i++ {
+		char := cmd[i]
+
+		if char == '"' {
+			inQuotes = !inQuotes
+			current.WriteByte(char)
+		} else if char == ' ' && !inQuotes {
+			if current.Len() > 0 {
+				parts = append(parts, current.String())
+				current.Reset()
+			}
+		} else {
+			current.WriteByte(char)
+		}
 	}
 
-	logger.Info("Nanobot startup verified, port is listening", "port", port)
-	return nil
+	if current.Len() > 0 {
+		parts = append(parts, current.String())
+	}
+
+	// Remove quotes from each part
+	for i, part := range parts {
+		if len(part) >= 2 && part[0] == '"' && part[len(part)-1] == '"' {
+			parts[i] = part[1 : len(part)-1]
+		}
+	}
+
+	return parts
 }
 
 // containsPortFlag checks if the command already contains a --port flag.
@@ -245,26 +209,7 @@ func StartNanobotWithCapture(
 func containsPortFlag(command string) bool {
 	// Simple check for --port flag presence
 	// Handles both "--port 12345" and "--port=12345" formats
-	return len(command) >= 6 &&
-		(containsSubstring(command, " --port ") ||
-			containsSubstring(command, " --port=") ||
-			hasSuffix(command, " --port"))
-}
-
-// containsSubstring performs case-sensitive substring search
-func containsSubstring(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
-}
-
-// hasSuffix checks if string ends with suffix
-func hasSuffix(s, suffix string) bool {
-	if len(suffix) > len(s) {
-		return false
-	}
-	return s[len(s)-len(suffix):] == suffix
+	return strings.Contains(command, " --port ") ||
+		strings.Contains(command, " --port=") ||
+		strings.HasSuffix(command, " --port")
 }
