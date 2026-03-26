@@ -110,7 +110,7 @@ func TestStartNanobotWithCapture_CapturesOutput(t *testing.T) {
 	testLogger := createTestLogger()
 
 	// Execute: Start process with capture (will fail port verification but capture should work)
-	err := StartNanobotWithCapture(ctx, command, port, startupTimeout, testLogger, logBuf)
+	_, err := StartNanobotWithCapture(ctx, command, port, startupTimeout, testLogger, logBuf)
 
 	// Verify: Port verification fails (expected), but logs should be captured
 	if err == nil {
@@ -162,7 +162,7 @@ func TestStartNanobotWithCapture_ProcessExit(t *testing.T) {
 	testLogger := createTestLogger()
 
 	// Execute
-	_ = StartNanobotWithCapture(ctx, command, port, startupTimeout, testLogger, logBuf)
+	_, _ = StartNanobotWithCapture(ctx, command, port, startupTimeout, testLogger, logBuf)
 
 	// Wait for process to exit and goroutines to cleanup
 	time.Sleep(1 * time.Second)
@@ -305,7 +305,7 @@ func TestStartNanobotWithCapture_InvalidCommand(t *testing.T) {
 	testLogger := createTestLogger()
 
 	// Execute
-	err := StartNanobotWithCapture(ctx, command, port, startupTimeout, testLogger, logBuf)
+	_, err := StartNanobotWithCapture(ctx, command, port, startupTimeout, testLogger, logBuf)
 
 	// Verify: Should return error (port verification fails)
 	if err == nil {

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/HQGroup/nanobot-auto-updater/internal/config"
+	"github.com/HQGroup/nanobot-auto-updater/internal/lifecycle"
 	"github.com/HQGroup/nanobot-auto-updater/internal/logbuffer"
 	"github.com/HQGroup/nanobot-auto-updater/internal/updater"
 )
@@ -196,12 +197,24 @@ type AutoStartResult struct {
 // AUTOSTART-02: 启动所有 auto_start=true 的实例
 // AUTOSTART-03: 失败时继续启动其他实例
 // AUTOSTART-04: 返回包含汇总信息的 AutoStartResult
+// AUTOSTART-05: 先停止所有 nanobot.exe 进程，确保干净的启动环境
 func (m *InstanceManager) StartAllInstances(ctx context.Context) *AutoStartResult {
 	m.logger.Info("开始自动启动阶段", "instance_count", len(m.instances))
 
 	result := &AutoStartResult{}
 	startTime := time.Now()
 
+	// Step 1: 停止所有 nanobot.exe 进程，确保干净的启动环境
+	// 这样可以避免多实例场景下的进程混淆问题
+	m.logger.Info("正在清理所有 nanobot.exe 进程")
+	killedCount, err := lifecycle.StopAllNanobots(ctx, 5*time.Second, m.logger)
+	if err != nil {
+		m.logger.Warn("清理进程时出现错误（将继续启动）", "error", err)
+	} else if killedCount > 0 {
+		m.logger.Info("已清理所有 nanobot 进程", "killed_count", killedCount)
+	}
+
+	// Step 2: 依次启动所有配置为自动启动的实例
 	for _, inst := range m.instances {
 		// 通过 InstanceLifecycle 访问 InstanceConfig.ShouldAutoStart()
 		if !inst.ShouldAutoStart() {
@@ -218,16 +231,7 @@ func (m *InstanceManager) StartAllInstances(ctx context.Context) *AutoStartResul
 			"instance", inst.Name(),
 			"port", inst.Port())
 
-		// 先停止该端口的残留进程 (防止端口冲突)
-		// AUTOSTART-05: 清理崩溃后的残留进程
-		if err := inst.StopForUpdate(ctx); err != nil {
-			m.logger.Warn("停止残留进程失败，继续尝试启动",
-				"error", err,
-				"instance", inst.Name(),
-				"port", inst.Port())
-			// 不返回错误，继续尝试启动 (可能没有残留进程)
-		}
-
+		// 直接启动实例，不再需要单独停止（已在 Step 1 统一清理）
 		if err := inst.StartAfterUpdate(ctx); err != nil {
 			duration := time.Since(instStart)
 			m.logger.Error("启动实例失败",

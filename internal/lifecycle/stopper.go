@@ -74,6 +74,143 @@ func StopNanobot(ctx context.Context, pid int32, timeout time.Duration, logger *
 	return nil
 }
 
+// StopAllNanobots kills all nanobot.exe processes on the system.
+// This is used during auto-start to ensure a clean slate before starting instances.
+// Returns the number of processes killed and any error that occurred.
+func StopAllNanobots(ctx context.Context, timeout time.Duration, logger *slog.Logger) (int, error) {
+	logger.Info("正在停止所有 nanobot.exe 进程")
+
+	// Find all nanobot.exe processes
+	processes, err := findNanobotProcesses(logger)
+	if err != nil {
+		logger.Error("查找 nanobot 进程失败", "error", err)
+		return 0, fmt.Errorf("failed to find nanobot processes: %w", err)
+	}
+
+	if len(processes) == 0 {
+		logger.Info("没有找到运行中的 nanobot 进程")
+		return 0, nil
+	}
+
+	logger.Info("找到 nanobot 进程", "count", len(processes), "pids", processes)
+
+	// Kill all processes
+	killedCount := 0
+	for _, pid := range processes {
+		if err := StopNanobot(ctx, pid, timeout, logger); err != nil {
+			logger.Warn("停止进程失败，继续尝试其他进程", "pid", pid, "error", err)
+			// Continue killing other processes even if one fails
+		} else {
+			killedCount++
+		}
+	}
+
+	logger.Info("停止进程完成", "killed", killedCount, "total", len(processes))
+	return killedCount, nil
+}
+
+// findNanobotProcesses finds all nanobot.exe processes using tasklist
+func findNanobotProcesses(logger *slog.Logger) ([]int32, error) {
+	// Use tasklist to find all nanobot.exe processes
+	cmd := exec.Command("tasklist", "/FI", "IMAGENAME eq nanobot.exe", "/FO", "CSV", "/NH")
+	cmd.SysProcAttr = &windows.SysProcAttr{
+		HideWindow:    true,
+		CreationFlags: windows.CREATE_NO_WINDOW,
+	}
+
+	output, err := cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("tasklist command failed: %w", err)
+	}
+
+	// Parse CSV output
+	// Format: "nanobot.exe","1234","Console","1","4,752 K"
+	var pids []int32
+	lines := splitLines(string(output))
+	for _, line := range lines {
+		if line == "" {
+			continue
+		}
+
+		// Parse CSV line
+		fields := parseCSVLine(line)
+		if len(fields) < 2 {
+			continue
+		}
+
+		// Check if it's actually nanobot.exe
+		if fields[0] != "nanobot.exe" {
+			continue
+		}
+
+		// Parse PID
+		var pid int32
+		if _, err := fmt.Sscanf(fields[1], "%d", &pid); err != nil {
+			logger.Debug("解析 PID 失败", "line", line, "error", err)
+			continue
+		}
+
+		if pid > 0 {
+			pids = append(pids, pid)
+		}
+	}
+
+	return pids, nil
+}
+
+// splitLines splits a string into lines
+func splitLines(s string) []string {
+	var lines []string
+	start := 0
+	for i := 0; i < len(s); i++ {
+		if s[i] == '\n' {
+			line := s[start:i]
+			if len(line) > 0 && line[len(line)-1] == '\r' {
+				line = line[:len(line)-1]
+			}
+			lines = append(lines, line)
+			start = i + 1
+		}
+	}
+	if start < len(s) {
+		lines = append(lines, s[start:])
+	}
+	return lines
+}
+
+// parseCSVLine parses a CSV line with quoted fields
+func parseCSVLine(line string) []string {
+	var fields []string
+	inQuote := false
+	start := 0
+
+	for i := 0; i < len(line); i++ {
+		ch := line[i]
+		if ch == '"' {
+			inQuote = !inQuote
+		} else if ch == ',' && !inQuote {
+			field := line[start:i]
+			// Remove surrounding quotes
+			if len(field) >= 2 && field[0] == '"' && field[len(field)-1] == '"' {
+				field = field[1 : len(field)-1]
+			}
+			fields = append(fields, field)
+			start = i + 1
+		}
+	}
+
+	// Add last field
+	if start < len(line) {
+		field := line[start:]
+		if len(field) >= 2 && field[0] == '"' && field[len(field)-1] == '"' {
+			field = field[1 : len(field)-1]
+		}
+		fields = append(fields, field)
+	}
+
+	return fields
+}
+
 // waitForProcessExit polls until the process exits or context is done
 func waitForProcessExit(ctx context.Context, pid int32, pollInterval time.Duration, logger *slog.Logger) bool {
 	ticker := time.NewTicker(pollInterval)

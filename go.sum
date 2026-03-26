@@ -1,3 +1,5 @@
+github.com/allanpk716/go-protocol-detector v0.15.0 h1:A8IMlkeA4T+S32lyr7EvtvV3lVRhTYWX+i+K/ZOXCT0=
+github.com/allanpk716/go-protocol-detector v0.15.0/go.mod h1:meGoS41pdAfi4I3TGiJXZg0aT5jTBBRkd+ffw1n1s5Y=
 github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/frankban/quicktest v1.14.6 h1:7Xjx+VpznH+oBnejlPUj8oUpdxnVs4f8XU8WnHkI4W8=

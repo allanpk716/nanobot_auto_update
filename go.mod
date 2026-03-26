@@ -13,6 +13,7 @@ require (
 )
 
 require (
+	github.com/allanpk716/go-protocol-detector v0.15.0 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/fsnotify/fsnotify v1.9.0 // indirect
 	github.com/go-ole/go-ole v1.2.6 // indirect

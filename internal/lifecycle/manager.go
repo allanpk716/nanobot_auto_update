@@ -61,15 +61,11 @@ func (m *Manager) StopForUpdate(ctx context.Context) error {
 // StartAfterUpdate starts nanobot after update.
 // Returns error if start fails, but update is still considered successful.
 // Caller should log the error but not fail the update.
+// DEPRECATED: Use InstanceLifecycle.StartAfterUpdate instead.
 func (m *Manager) StartAfterUpdate(ctx context.Context) error {
-	m.logger.Info("Starting nanobot after update")
+	m.logger.Warn("Manager.StartAfterUpdate is deprecated, use InstanceLifecycle.StartAfterUpdate instead")
+	m.logger.Info("Starting nanobot after update (deprecated method)")
 
-	// Always start regardless of previous state (locked decision)
-	if err := StartNanobot(ctx, "nanobot gateway", m.port, m.startupTimeout, m.logger); err != nil {
-		m.logger.Error("Failed to start nanobot", "error", err)
-		return fmt.Errorf("failed to start nanobot (user can start manually): %w", err)
-	}
-
-	m.logger.Info("Nanobot started successfully")
-	return nil
+	// This method is deprecated and should not be used
+	return fmt.Errorf("Manager.StartAfterUpdate is deprecated - use InstanceLifecycle.StartAfterUpdate with log capture")
 }

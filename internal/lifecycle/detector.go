@@ -65,23 +65,14 @@ func FindPIDByProcessName(processName string, logger *slog.Logger) (int32, error
 // IsNanobotRunning checks if nanobot is running on the specified port.
 // Falls back to process name detection if port check finds nothing.
 // Returns (isRunning, pid, detectionMethod, error).
-// detectionMethod is "process_name" or "port" or "" if not running.
+// detectionMethod is "port" or "process_name" or "" if not running.
 func IsNanobotRunning(port uint32) (bool, int32, string, error) {
 	logger := slog.Default() // Use default logger for detector
 
 	logger.Info("Detecting nanobot process", "port", port)
 
-	// Primary: Check by process name (more reliable)
-	pid, err := FindPIDByProcessName("nanobot.exe", logger)
-	if err != nil {
-		return false, 0, "", err
-	}
-	if pid > 0 {
-		return true, pid, "process_name", nil
-	}
-
-	// Fallback: Check by port (handles case where process name differs)
-	pid, err = FindPIDByPort(port, logger)
+	// Primary: Check by port (more precise - identifies specific instance)
+	pid, err := FindPIDByPort(port, logger)
 	if err != nil {
 		return false, 0, "", err
 	}
@@ -89,6 +80,49 @@ func IsNanobotRunning(port uint32) (bool, int32, string, error) {
 		return true, pid, "port", nil
 	}
 
+	// Fallback: Check by process name (handles case where port is not listening yet)
+	// Note: This is less precise in multi-instance scenarios
+	pid, err = FindPIDByProcessName("nanobot.exe", logger)
+	if err != nil {
+		return false, 0, "", err
+	}
+	if pid > 0 {
+		return true, pid, "process_name", nil
+	}
+
 	logger.Info("Nanobot not running")
 	return false, 0, "", nil
+}
+
+// FindProcessByPID checks if a process with the given PID exists and is running.
+// Returns the process object if found, nil otherwise.
+func FindProcessByPID(pid int32, logger *slog.Logger) (*process.Process, error) {
+	logger.Debug("Checking if process exists", "pid", pid)
+
+	proc, err := process.NewProcess(pid)
+	if err != nil {
+		logger.Debug("Process not found", "pid", pid, "error", err)
+		return nil, err
+	}
+
+	// Verify the process is still running
+	status, err := proc.Status()
+	if err != nil {
+		logger.Debug("Failed to get process status", "pid", pid, "error", err)
+		return nil, err
+	}
+
+	logger.Debug("Process status", "pid", pid, "status", status)
+
+	// Check if process is in a running state
+	// Common statuses: R (running), S (sleeping), D (disk sleep), Z (zombie), T (stopped)
+	// status is a slice of strings
+	for _, s := range status {
+		if s == "Z" || s == "T" {
+			logger.Debug("Process is not running", "pid", pid, "status", s)
+			return nil, fmt.Errorf("process is not running (status: %s)", s)
+		}
+	}
+
+	return proc, nil
 }
