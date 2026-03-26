@@ -1,566 +1,162 @@
-# Stack Research: v0.4 实时日志查看
+# Stack Research
 
-**Domain:** 进程输出捕获 + 内存缓冲 + Server-Sent Events 实时流
-**Researched:** 2026-03-16
-**Confidence:** HIGH
-
-## Executive Summary
-
-v0.4 里程碑为 nanobot 实例添加实时日志查看功能。研究表明：
-
-1. **进程输出捕获** - 使用 Go 标准库 `os/exec.Cmd` 的 `StdoutPipe()` + `StderrPipe()`，结合 goroutine 并发读取
-2. **内存环形缓冲** - 使用 `github.com/smallnest/ringbuffer` (线程安全、实现 `io.ReadWriter` 接口)
-3. **Server-Sent Events** - 使用 `github.com/r3labs/sse/v2` (成熟稳定、与现有 `net/http` 服务器无缝集成)
-
-**关键架构决策：**
-- 不使用现有 `lifecycle/starter.go` 中的进程分离模式 (`cmd.Process.Release()`)
-- 需要保持进程附着以持续读取 stdout/stderr
-- 必须处理 `StdoutPipe()` 与 `cmd.Wait()` 的竞态条件 (GitHub Issue #19685)
-
----
+**Domain:** 更新日志记录和查询系统 (Update Log Recording and Query System)
+**Researched:** 2026-03-26
+**Confidence:** HIGH (基于 Go 标准库和成熟生态实践)
 
 ## Recommended Stack
 
-### Core Technologies (v0.4 新增)
+### Core Technologies
 
 | Technology | Version | Purpose | Why Recommended |
 |------------|---------|---------|-----------------|
-| `github.com/r3labs/sse/v2` | v2.0.0+ | Server-Sent Events 服务器 | 成熟稳定、简单易用、与现有 `net/http` 服务器无缝集成。支持多流订阅、自动重连、断开检测。相比 `tmaxmax/go-sse` 更轻量，社区使用广泛。 |
-| `github.com/smallnest/ringbuffer` | 最新 | 环形缓冲区 (5000 行日志) | 线程安全、实现 `io.ReadWriter` 接口、零分配、高性能。相比手写 slice 更高效，自动覆盖旧日志。支持阻塞/非阻塞模式。 |
-| `os/exec` (标准库) | Go 1.24.11+ | 进程输出捕获 | 标准库，使用 `cmd.StdoutPipe()` + `cmd.StderrPipe()` 捕获输出。配合 goroutine 并发读取。 |
-| `net/http` (现有) | Go 1.24.11+ | SSE 端点集成 | 现有 HTTP API 服务器，添加 `/logs/{instance}` SSE 端点。无需引入框架。 |
+| **Go 标准库 encoding/json** | Go 1.24+ | JSON Lines 读写 | 无需额外依赖,性能足够,支持流式解码器避免内存问题。Go 1.24+ 已优化 JSON 性能。 |
+| **Go 标准库 bufio** | Go 1.24+ | 文件流式读取 | 高性能缓冲读取,Scanner 自动处理行边界,支持大文件分页查询而不加载全部到内存。 |
+| **Go 标准库 os** | Go 1.24+ | 文件追加写入 | `os.OpenFile` + `os.O_APPEND\|os.O_CREATE\|os.O_WRONLY` 实现原子追加,避免竞争条件。 |
+| **Go 标准库 time** | Go 1.24+ | 时间戳和保留策略 | 标准时间处理,配合 `time.Since()` 实现基于时间的清理逻辑。 |
+| **github.com/google/uuid** | v1.6+ | 唯一更新ID生成 | 业界标准,符合 RFC 9562,生成 UUID v4 作为更新操作唯一标识符。 |
 
-### Supporting Libraries (无需新增)
+### Supporting Libraries
 
 | Library | Version | Purpose | When to Use |
 |---------|---------|---------|-------------|
-| `bufio.Scanner` (标准库) | Go 1.24.11+ | 按行读取 stdout/stderr | 分割进程输出为独立日志行，配合 ring buffer 存储 |
-| `sync.Mutex` (标准库) | Go 1.24.11+ | 保护共享状态 | 保护 ring buffer 并发访问 (smallnest/ringbuffer 已内置线程安全) |
-| `context` (标准库) | Go 1.24.11+ | goroutine 生命周期控制 | 取消日志捕获 goroutine、SSE 连接超时控制 |
-| `log/slog` (现有) | Go 1.24.11+ | 结构化日志 | 记录日志捕获服务状态、错误信息 |
+| **os.OpenFile** | Go 1.24+ | JSONL 文件追加写入 | 每次更新操作完成时追加一行 JSON 记录。使用 `os.O_APPEND\|os.O_CREATE\|os.O_WRONLY, 0644` 确保原子追加。 |
+| **bufio.Scanner** | Go 1.24+ | JSONL 流式分页读取 | 查询接口读取文件时,逐行扫描到指定 offset,避免加载整个文件到内存。对于大行(>64KB)需要增加缓冲区大小。 |
+| **json.Decoder** | Go 1.24+ | JSON Lines 流式解码 | 配合 bufio.Scanner 逐行解码 JSON 对象,避免内存爆炸。比 `json.Unmarshal` 更高效。 |
+| **json.Encoder** | Go 1.24+ | JSON Lines 流式编码 | 写入日志时使用 `json.NewEncoder(file).Encode(record)` 确保每行一个完整 JSON 对象。 |
 
-### Development Tools (现有)
+### Development Tools
 
 | Tool | Purpose | Notes |
 |------|---------|-------|
-| Go 1.24.11 | 编译和运行时 | 项目当前版本 |
-| `github.com/spf13/viper` | 配置管理 | 现有配置库，可能需要扩展日志缓冲大小配置 |
-| `github.com/WQGroup/logger` | 日志记录 | 现有日志库，保持一致性 |
+| **Go 1.24+ 内置工具** | 编译、测试、性能分析 | 无需额外工具链,标准 `go test -bench` 即可验证 JSONL 性能。 |
+| **stdlib log/slog** | 调试日志 | 复用现有 logger (已集成 `github.com/WQGroup/logger`),为更新日志系统添加组件标识。 |
 
 ## Installation
 
 ```bash
-# v0.4 需要安装的新依赖 (2 个)
-go get github.com/r3labs/sse/v2
-go get github.com/smallnest/ringbuffer
+# 唯一新增依赖: UUID 生成库
+go get github.com/google/uuid@v1.6.0
 
-# 现有依赖保持不变:
-# - github.com/gregdel/pushover (通知)
-# - github.com/spf13/viper (配置)
-# - golang.org/x/sys (Windows 系统调用)
-# - gopkg.in/natefinch/lumberjack.v2 (日志轮转)
+# 其他功能全部使用 Go 标准库,无需额外安装
+# - encoding/json (JSON Lines 处理)
+# - bufio (流式文件读取)
+# - os (文件追加写入)
+# - time (时间处理和保留策略)
 ```
 
-## Alternatives Considered
+## Integration with Existing Stack
 
-| Recommended | Alternative | When to Use Alternative |
-|-------------|-------------|-------------------------|
-| `r3labs/sse/v2` | `tmaxmax/go-sse` | 当需要 LLM 流式响应解析 (`sse.Read`)、更现代的 API、spec-compliant 严格验证时使用 `tmaxmax/go-sse`。本项目仅需基础 SSE 服务器，`r3labs/sse` 更简单。 |
-| `smallnest/ringbuffer` | 手写 `[]string` + `Mutex` | 当需要自定义缓冲策略、复杂过期逻辑时考虑手写。本项目仅需固定大小环形缓冲，`ringbuffer` 更可靠高效。 |
-| `os/exec` + `StdoutPipe()` | `go-cmd/cmd` 包装器 | 当需要非阻塞命令执行、自动重试、复杂进程管理时使用 `go-cmd/cmd`。本项目使用标准库足够，避免额外依赖。 |
-| goroutine + channel | 单 goroutine 顺序读取 | 当 stdout/stderr 输出量小、无并发需求时顺序读取。本项目需要并发读取两个流，必须使用 goroutine。 |
-| SSE | WebSocket | 当需要双向通信、二进制数据传输、复杂协议时使用 WebSocket。本项目仅需服务器推送日志流，SSE 更简单、HTTP 友好。 |
+### 现有栈复用
+
+| 现有组件 | 复用方式 | 理由 |
+|---------|---------|------|
+| **internal/logging** | 复用现有 `./logs` 目录结构 | 统一日志管理,更新日志文件可放在 `./logs/updates.jsonl`,无需额外配置。 |
+| **internal/config** | 扩展 Config 结构体 | 在现有 `config.Config` 添加 `UpdateLogConfig` 子配置,包含文件路径和保留天数。 |
+| **internal/api/auth** | 复用 Bearer Token 认证 | 查询 API `/api/v1/update-logs` 使用与 `trigger-update` 相同的认证中间件。 |
+| **slog.Logger** | 复用现有 logger 实例 | 更新日志系统内部错误记录到主日志,使用 `logger.With("component", "updatelog")` 标识。 |
+
+### 集成点说明
+
+**1. Trigger Handler 集成 (internal/api/trigger.go)**
+```go
+// 在 TriggerHandler.Handle 中添加日志记录调用
+result, err := h.instanceManager.TriggerUpdate(ctx)
+if err == nil || result != nil {
+    // 记录更新日志(成功或部分失败都记录)
+    h.updateLogger.Record(ctx, result, r.RemoteAddr)
+}
+```
+
+**2. 文件路径策略**
+- 主日志文件: `./logs/app-YYYY-MM-DD.log` (现有)
+- 更新日志: `./logs/updates.jsonl` (新增,单一文件持续追加)
+- 理由: 单文件便于分页查询,通过 ModTime 实现基于时间的清理。
+
+**3. 清理策略集成**
+```go
+// 在应用启动时或定期调度器中执行清理
+func cleanupOldLogs(logPath string, retentionDays int) error {
+    // 读取文件,过滤保留最近 N 天的记录
+    // 使用临时文件 + rename 确保原子性
+}
+```
 
 ## What NOT to Use
 
 | Avoid | Why | Use Instead |
 |-------|-----|-------------|
-| `cmd.Process.Release()` + `cmd.StdoutPipe()` | 进程分离后无法读取输出，`StdoutPipe()` 会在进程退出后关闭 | 保持进程附着 (`cmd.Wait()`)，在 goroutine 中持续读取 |
-| `cmd.Output()` 或 `cmd.CombinedOutput()` | 阻塞直到进程退出，无法实时读取日志 | `cmd.StdoutPipe()` + goroutine 并发读取 |
-| `io.ReadAll(stdoutPipe)` | 一次性读取所有输出，内存无限增长 | `bufio.Scanner` 逐行读取 + ring buffer 固定大小 |
-| `http.Flusher` 手写 SSE | 需要处理 HTTP 头、重连、事件 ID、心跳等细节 | `r3labs/sse` 库已处理所有边界情况 |
-| `http.DefaultClient` | 超时为 0 (无超时)，可能导致连接永久挂起 | 创建自定义 `http.Client{Timeout: 30s}` (现有代码已遵循) |
-| 全局变量存储日志缓冲 | 并发访问不安全、难以测试、违反单一职责 | 每个 instance 持有自己的 `*ringbuffer.RingBuffer` |
-| `time.Sleep()` 轮询读取 | CPU 浪费、延迟高 | 使用 `bufio.Scanner.Scan()` 阻塞等待新行 |
+| **第三方 JSONL 库** (如 jsonl-go) | 标准库已足够,引入不必要依赖 | `encoding/json` + `bufio.Scanner` |
+| **数据库** (SQLite/BoltDB) | JSONL 文件满足需求,部署简单,无需 schema 迁移 | JSONL 文件 + 分页读取 |
+| **json.Unmarshal (全量加载)** | 大文件导致内存问题 | `json.Decoder` 流式解码 |
+| **os.WriteFile** | 不支持原子追加,每次重写整个文件 | `os.OpenFile` + `os.O_APPEND` |
+| **ioutil.ReadFile (已废弃)** | Go 1.16+ 废弃,性能差 | `os.Open` + `bufio.Scanner` |
+| **UUID v7** | 时间排序依赖外部库,项目需求无需 DB 索引优化 | UUID v4 (`github.com/google/uuid`) |
+| **第三方清理库** (如 dir-janitor) | 逻辑简单,自行实现更灵活 | 自实现清理函数 (见 ARCHITECTURE.md) |
 
 ## Stack Patterns by Variant
 
-### Pattern 1: 进程输出捕获 (并发读取 stdout/stderr)
+**If 文件大小 < 10MB (预估 7 天内):**
+- 使用单文件 `updates.jsonl`,直接追加写入
+- 分页查询时全量扫描到 offset (性能可接受)
+- Because: 实现简单,无并发竞争问题
 
-**实现方式:**
-```go
-// Source: Go 官方文档 + 社区最佳实践
-// 参考: https://github.com/golang/go/issues/19685 (竞态条件处理)
+**If 文件大小 > 10MB (超过 7 天未清理):**
+- 定期清理任务每天运行,删除 7 天前的记录
+- 考虑按日期分片 (updates-2026-03-26.jsonl),每天一个文件
+- Because: 单文件过大影响查询性能,分片按日期自然对齐清理逻辑
 
-import (
-    "bufio"
-    "os/exec"
-    "sync"
-)
-
-type LogCapture struct {
-    cmd       *exec.Cmd
-    buffer    *ringbuffer.RingBuffer
-    logger    *slog.Logger
-    ctx       context.Context
-    cancel    context.CancelFunc
-    wg        sync.WaitGroup
-}
-
-func (lc *LogCapture) Start() error {
-    stdoutPipe, err := lc.cmd.StdoutPipe()
-    if err != nil {
-        return fmt.Errorf("failed to create stdout pipe: %w", err)
-    }
-
-    stderrPipe, err := lc.cmd.StderrPipe()
-    if err != nil {
-        return fmt.Errorf("failed to create stderr pipe: %w", err)
-    }
-
-    // 启动进程
-    if err := lc.cmd.Start(); err != nil {
-        return fmt.Errorf("failed to start process: %w", err)
-    }
-
-    // 并发读取 stdout 和 stderr
-    lc.wg.Add(2)
-    go lc.readStream(stdoutPipe, "stdout")
-    go lc.readStream(stderrPipe, "stderr")
-
-    // 启动 goroutine 等待进程退出
-    go func() {
-        lc.wg.Wait() // 等待两个读取 goroutine 完成
-        err := lc.cmd.Wait()
-        if err != nil {
-            lc.logger.Warn("Process exited with error", "error", err)
-        } else {
-            lc.logger.Info("Process exited successfully")
-        }
-    }()
-
-    return nil
-}
-
-func (lc *LogCapture) readStream(reader io.Reader, streamName string) {
-    defer lc.wg.Done()
-
-    scanner := bufio.NewScanner(reader)
-    for scanner.Scan() {
-        select {
-        case <-lc.ctx.Done():
-            return
-        default:
-            line := scanner.Text()
-            // 写入 ring buffer (线程安全)
-            lc.buffer.Write([]byte(line + "\n"))
-        }
-    }
-
-    if err := scanner.Err(); err != nil {
-        lc.logger.Error("Failed to read stream", "stream", streamName, "error", err)
-    }
-}
-
-func (lc *LogCapture) Stop() {
-    lc.cancel() // 取消所有 goroutine
-    lc.wg.Wait() // 等待清理完成
-    if lc.cmd.Process != nil {
-        lc.cmd.Process.Kill()
-    }
-}
-```
-
-**关键点:**
-1. **必须并发读取** stdout 和 stderr，否则一个流阻塞会导致另一个流无法读取
-2. **使用 `sync.WaitGroup`** 等待两个读取 goroutine 完成后再调用 `cmd.Wait()`
-3. **避免竞态条件** - 参考 GitHub Issue #19685，在读取完成前不要调用 `cmd.Wait()`
-4. **Context 取消** - 支持优雅停止日志捕获
-
-**为什么不用 `cmd.CombinedOutput()`:**
-- `CombinedOutput()` 会阻塞直到进程退出
-- 无法实时读取日志流
-- 内存无限增长 (所有输出保存在内存中)
-
-### Pattern 2: 环形缓冲区 (固定大小日志存储)
-
-**实现方式:**
-```go
-// Source: smallnest/ringbuffer 官方文档
-// https://github.com/smallnest/ringbuffer
-
-import "github.com/smallnest/ringbuffer"
-
-type InstanceLogs struct {
-    buffer *ringbuffer.RingBuffer
-    mu     sync.Mutex // 额外保护读取操作
-}
-
-func NewInstanceLogs(maxLines int) *InstanceLogs {
-    // 假设每行平均 200 字节
-    bufferSize := maxLines * 200
-    return &InstanceLogs{
-        buffer: ringbuffer.New(bufferSize),
-    }
-}
-
-func (il *InstanceLogs) WriteLog(line string) {
-    // ringbuffer 已线程安全，直接写入
-    il.buffer.Write([]byte(line + "\n"))
-}
-
-func (il *InstanceLogs) ReadAll() ([]byte, error) {
-    il.mu.Lock()
-    defer il.mu.Unlock()
-
-    // 读取所有数据但不消费 (Peek)
-    data := make([]byte, il.buffer.Length())
-    _, err := il.buffer.Read(data)
-    if err != nil {
-        return nil, err
-    }
-    return data, nil
-}
-```
-
-**为什么使用 `smallnest/ringbuffer` 而非手写 `[]string`:**
-1. **自动覆盖** - 旧日志自动被新日志覆盖，无需手动管理索引
-2. **线程安全** - 内置并发保护，无需额外 `Mutex` (写入时)
-3. **零分配** - 固定大小内存，无频繁分配/释放
-4. **性能** - O(1) 写入和读取
-
-**配置建议:**
-```yaml
-log_buffer:
-  max_lines: 5000  # 保留最近 5000 行日志
-  line_average_size: 200  # 每行平均字节数 (用于计算缓冲区大小)
-```
-
-### Pattern 3: SSE 实时推送 (集成现有 HTTP 服务器)
-
-**实现方式:**
-```go
-// Source: r3labs/sse 官方文档 + 项目现有 HTTP 服务器
-// https://github.com/r3labs/sse
-
-import "github.com/r3labs/sse/v2"
-
-type LogStreamingService struct {
-    sseServer *sse.Server
-    instances map[string]*InstanceLogs
-    logger    *slog.Logger
-}
-
-func NewLogStreamingService(logger *slog.Logger) *LogStreamingService {
-    server := sse.New()
-    server.CreateStream("logs") // 创建全局日志流
-
-    return &LogStreamingService{
-        sseServer: server,
-        instances: make(map[string]*InstanceLogs),
-        logger:    logger,
-    }
-}
-
-// 集成到现有 HTTP 服务器 (main.go)
-func (s *LogStreamingService) RegisterRoutes(mux *http.ServeMux) {
-    // SSE 端点: GET /api/v1/logs/{instance}
-    mux.HandleFunc("GET /api/v1/logs/{instance}", s.handleLogStream)
-}
-
-func (s *LogStreamingService) handleLogStream(w http.ResponseWriter, r *http.Request) {
-    instanceName := r.PathValue("instance")
-
-    // 验证实例存在
-    logs, exists := s.instances[instanceName]
-    if !exists {
-        http.Error(w, `{"error":"instance not found"}`, http.StatusNotFound)
-        return
-    }
-
-    // 创建 SSE 流
-    streamID := fmt.Sprintf("logs-%s", instanceName)
-    s.sseServer.CreateStream(streamID)
-
-    // 在后台 goroutine 中推送日志
-    go s.streamLogs(r.Context(), streamID, logs)
-
-    // SSE 服务器处理连接
-    s.sseServer.ServeHTTP(w, r)
-}
-
-func (s *LogStreamingService) streamLogs(ctx context.Context, streamID string, logs *InstanceLogs) {
-    ticker := time.NewTicker(100 * time.Millisecond) // 每 100ms 推送一次
-    defer ticker.Stop()
-
-    var lastOffset int
-
-    for {
-        select {
-        case <-ctx.Done():
-            s.logger.Info("SSE stream closed", "stream", streamID)
-            return
-        case <-ticker.C:
-            // 读取新日志并推送
-            data, err := logs.ReadNew(lastOffset)
-            if err != nil {
-                s.logger.Error("Failed to read logs", "error", err)
-                continue
-            }
-
-            if len(data) > 0 {
-                s.sseServer.Publish(streamID, &sse.Event{
-                    Data: data,
-                })
-                lastOffset += len(data)
-            }
-        }
-    }
-}
-```
-
-**集成到现有 HTTP API 服务器:**
-```go
-// main.go 或 internal/api/server.go
-
-func main() {
-    // 现有 HTTP API 服务器
-    mux := http.NewServeMux()
-
-    // 现有端点...
-    mux.HandleFunc("POST /api/v1/trigger-update", handleTriggerUpdate)
-    mux.HandleFunc("GET /health", handleHealth)
-
-    // 新增: 日志流服务
-    logStreaming := NewLogStreamingService(logger)
-    logStreaming.RegisterRoutes(mux)
-
-    // 应用认证中间件 (可选: 日志流可能不需要认证)
-    handler := authMiddleware(cfg.API.AuthToken)(mux)
-
-    server := &http.Server{
-        Addr:         fmt.Sprintf(":%d", cfg.API.Port),
-        Handler:      handler,
-        ReadTimeout:  10 * time.Second,
-        WriteTimeout: 0, // SSE 需要长连接，设置为 0 (无超时)
-        // IdleTimeout: 120 * time.Second, // 保持连接活跃
-    }
-
-    logger.Info("Starting HTTP server", "port", cfg.API.Port)
-    if err := server.ListenAndServe(); err != nil {
-        logger.Error("HTTP server failed", "error", err)
-    }
-}
-```
-
-**关键配置:**
-- **`WriteTimeout: 0`** - SSE 需要长连接，不能设置写入超时
-- **`IdleTimeout: 120s`** - 保持空闲连接活跃，避免被服务器断开
-- **心跳机制** - 每 15 秒发送注释 `: heartbeat` 保持连接
-
-**为什么选择 `r3labs/sse` 而非 `tmaxmax/go-sse`:**
-1. **更简单** - `r3labs/sse` API 更直观，适合基础 SSE 服务器
-2. **成熟稳定** - 2015 年开始维护，社区使用广泛
-3. **轻量** - 无额外依赖，仅 SSE 功能
-4. **足够用** - 本项目无需 LLM 流式解析 (`tmaxmax/go-sse` 的优势)
-
-### Pattern 4: 进程管理变更 (不使用 Release)
-
-**现有代码 (lifecycle/starter.go):**
-```go
-// 现有模式: 进程分离
-cmd := exec.CommandContext(ctx, "cmd", "/c", command)
-cmd.Start()
-cmd.Process.Release() // 分离进程，父进程退出不影响子进程
-```
-
-**v0.4 新模式 (保持附着):**
-```go
-// 新模式: 保持进程附着以读取输出
-cmd := exec.CommandContext(ctx, "cmd", "/c", command)
-
-// 捕获 stdout/stderr
-stdoutPipe, _ := cmd.StdoutPipe()
-stderrPipe, _ := cmd.StderrPipe()
-
-cmd.Start()
-
-// 在 goroutine 中读取输出
-go readStream(stdoutPipe)
-go readStream(stderrPipe)
-
-// 不要调用 cmd.Process.Release()
-// 调用 cmd.Wait() 等待进程退出
-go func() {
-    cmd.Wait()
-    logger.Info("Process exited")
-}()
-```
-
-**架构影响:**
-- **需要重构 `lifecycle/starter.go`** - 添加可选参数控制是否捕获输出
-- **或者新建 `logcapture/capture.go`** - 专门处理带输出捕获的进程启动
-- **向后兼容** - 现有不需日志捕获的启动逻辑保持不变
+**If 并发写入压力大 (>100 req/s):**
+- 当前设计: `os.O_APPEND` 已保证写入原子性 (操作系统保证)
+- 无需额外锁机制 (文件系统层面的追加已经是原子的)
+- Because: Go 的文件追加在 Windows/Linux 都是原子操作
 
 ## Version Compatibility
 
-| Package | Version | Compatible With | Notes |
-|---------|---------|-----------------|-------|
-| Go 1.24.11 | 标准库 | 项目当前版本 | `os/exec`, `bufio`, `context`, `sync` 全部兼容 |
-| `github.com/r3labs/sse/v2` | v2.0.0+ | Go 1.24.11 | 成熟稳定，无已知兼容性问题 |
-| `github.com/smallnest/ringbuffer` | 最新 | Go 1.24.11 | 线程安全，无依赖 |
-| `net/http` (现有) | Go 1.22+ | Go 1.24.11 | ServeMux 方法匹配语法兼容 |
+| Package A | Compatible With | Notes |
+|-----------|-----------------|-------|
+| github.com/google/uuid@v1.6.0 | Go 1.24+ | 无 CGO 依赖,纯 Go 实现,兼容 Windows。 |
+| encoding/json (stdlib) | Go 1.24+ | Go 1.24 已包含性能优化,无需 json v2 (实验性)。 |
+| bufio.Scanner (stdlib) | Go 1.24+ | 默认 64KB 缓冲区,对于大 JSON 行需手动调整 `bufio.Scanner.Buffer()`。 |
+| os.OpenFile (stdlib) | Go 1.24+ | Windows 平台追加写入需使用 `os.O_APPEND`,已验证兼容。 |
 
-## Integration with Existing Codebase
+## Performance Considerations
 
-### 集成点 1: InstanceManager 扩展
+### JSONL 文件性能
 
-**现有结构 (internal/instance/manager.go):**
-```go
-type Manager struct {
-    instances map[string]*InstanceLifecycle
-    logger    *slog.Logger
-}
-```
+| 场景 | 预估性能 | 优化策略 |
+|------|---------|---------|
+| **写入** (追加单行) | ~0.1ms/次 | 使用 `json.Encoder` 直接编码,无需序列化到内存。 |
+| **查询** (1000 条,offset=500) | ~5-10ms | bufio.Scanner 逐行跳过前 500 行,性能足够。 |
+| **清理** (删除旧记录) | ~50-100ms (10MB 文件) | 使用临时文件 + rename,避免阻塞读写。 |
 
-**v0.4 扩展:**
-```go
-type Manager struct {
-    instances map[string]*InstanceLifecycle
-    logCapture map[string]*LogCapture // 新增: 每个 instance 的日志捕获器
-    logger    *slog.Logger
-}
+### 内存占用
 
-func (m *Manager) StartInstanceWithLogging(ctx context.Context, name string) error {
-    lifecycle := m.instances[name]
+| 场景 | 内存占用 | 说明 |
+|------|---------|------|
+| **写入** | < 1KB | 单个 LogRecord 序列化到缓冲区。 |
+| **查询** (limit=50) | < 100KB | 最多缓存 50 条记录返回给客户端。 |
+| **清理** | ~文件大小 | 需要临时加载文件到内存过滤,10MB 文件可接受。 |
 
-    // 创建日志捕获器
-    capture := NewLogCapture(lifecycle.config, m.logger)
-    if err := capture.Start(); err != nil {
-        return err
-    }
+### 并发控制
 
-    m.logCapture[name] = capture
-    return nil
-}
-
-func (m *Manager) StopInstanceWithLogging(ctx context.Context, name string) error {
-    if capture, exists := m.logCapture[name]; exists {
-        capture.Stop()
-        delete(m.logCapture, name)
-    }
-
-    // 调用现有的停止逻辑
-    return m.instances[name].StopForUpdate(ctx)
-}
-```
-
-### 集成点 2: config 扩展
-
-**新增配置 (v0.4):**
-```yaml
-# 日志缓冲配置
-log_buffer:
-  max_lines: 5000
-  line_average_size: 200
-
-# 现有配置保持不变...
-instances:
-  - name: "gateway"
-    port: 18790
-    start_command: "python -m nanobot.gateway"
-```
-
-**Go 配置结构:**
-```go
-type LogBufferConfig struct {
-    MaxLines        int `yaml:"max_lines" mapstructure:"max_lines"`
-    LineAverageSize int `yaml:"line_average_size" mapstructure:"line_average_size"`
-}
-
-type Config struct {
-    LogBuffer LogBufferConfig `yaml:"log_buffer" mapstructure:"log_buffer"`
-    // ... 现有字段
-}
-```
-
-### 集成点 3: HTTP API 服务器扩展
-
-**现有服务器 (internal/api/server.go):**
-```go
-type Server struct {
-    config  config.APIConfig
-    updater *updater.Updater
-    logger  *slog.Logger
-}
-
-func (s *Server) Routes() *http.ServeMux {
-    mux := http.NewServeMux()
-    mux.HandleFunc("POST /api/v1/trigger-update", s.handleTriggerUpdate)
-    mux.HandleFunc("GET /health", s.handleHealth)
-    return mux
-}
-```
-
-**v0.4 扩展:**
-```go
-type Server struct {
-    config      config.APIConfig
-    updater     *updater.Updater
-    logStreamer *LogStreamingService // 新增
-    logger      *slog.Logger
-}
-
-func (s *Server) Routes() *http.ServeMux {
-    mux := http.NewServeMux()
-
-    // 现有端点
-    mux.HandleFunc("POST /api/v1/trigger-update", s.handleTriggerUpdate)
-    mux.HandleFunc("GET /health", s.handleHealth)
-
-    // 新增: 日志流端点
-    mux.HandleFunc("GET /api/v1/logs/{instance}", s.logStreamer.handleLogStream)
-
-    return mux
-}
-```
-
-## Dependencies to Add (v0.4)
-
-| Package | Version | Purpose |
-|---------|---------|---------|
-| `github.com/r3labs/sse/v2` | v2.0.0+ | SSE 服务器 |
-| `github.com/smallnest/ringbuffer` | 最新 | 环形缓冲区 |
+| 操作 | 并发策略 | 说明 |
+|------|---------|------|
+| **写入** | 操作系统保证原子性 | `os.O_APPEND` 写入是原子的,无需应用层锁。 |
+| **读取** | 无锁读取 | 文件系统允许多进程并发读。 |
+| **清理** | 排他执行 | 使用 `sync.Mutex` 或调度器确保清理期间无写入。 |
 
 ## Sources
 
-### Server-Sent Events (SSE)
-
-- [r3labs/sse GitHub Repository](https://github.com/r3labs/sse) — HIGH confidence (官方文档)
-- [tmaxmax/go-sse GitHub Repository](https://github.com/tmaxmax/go-sse) — HIGH confidence (对比研究)
-- [How to Build Real-time Applications with Go and SSE (OneUptime, Feb 2026)](https://oneuptime.com/blog/post/2026-02-01-go-realtime-applications-sse/view) — MEDIUM confidence (最新实践)
-- [Real-Time Data Streaming with Server-Sent Events in Golang (Medium)](https://medium.com/@amineameur/real-time-data-streaming-with-server-sent-events-sse-in-golang-2ded26c9752e) — MEDIUM confidence (教程)
-- [Live website updates with Go, SSE, and htmx (ThreeDotsTech)](https://threedots.tech/post/live-website-updates-go-sse-htmx/) — HIGH confidence (权威博客)
-
-### Ring Buffer
-
-- [smallnest/ringbuffer GitHub Repository](https://github.com/smallnest/ringbuffer) — HIGH confidence (官方文档)
-- [Ring buffer in Golang (logdy.dev)](https://logdy.dev/blog/post/ring-buffer-in-golang) — MEDIUM confidence (教程)
-- [A Practical Guide to Implementing a Generic Ring Buffer in Go (Medium)](https://medium.com/checker-engineering/a-practical-guide-to-implementing-a-generic-ring-buffer-in-go-866d27ec1a05) — MEDIUM confidence (理论)
-
-### Process Output Capture
-
-- [os/exec - Go Packages (官方文档)](https://pkg.go.dev/os/exec) — HIGH confidence (Go 官方)
-- [os/exec: data race between StdoutPipe and Wait #19685](https://github.com/golang/go/issues/19685) — HIGH confidence (已知问题)
-- [Some Useful Patterns for Go's os/exec (DoltHub Blog)](https://www.dolthub.com/blog/2022-11-28-go-os-exec-patterns/) — MEDIUM confidence (最佳实践)
-- [go-cmd/cmd GitHub Repository](https://github.com/go-cmd/cmd) — LOW confidence (替代方案调研)
-
-### Log Buffering
-
-- [How to Implement Log Buffering (OneUptime, Jan 2026)](https://oneuptime.com/blog/post/2026-01-30-log-buffering/view) — MEDIUM confidence (最新实践)
+- **Go 标准库文档** — `encoding/json`, `bufio`, `os` 官方文档 (HIGH confidence)
+- **[JSON Lines 格式规范](https://jsonlines.org/)** — 官方格式定义和最佳实践 (HIGH confidence)
+- **[How to append consecutively to a JSON file in Go?](https://stackoverflow.com/questions/72456088)** — Stack Overflow 社区讨论 JSONL 追加写入 (MEDIUM confidence)
+- **[os: document that WriteFile is not atomic](https://github.com/golang/go/issues/56173)** — Go 官方 Issue 说明原子性注意事项 (HIGH confidence)
+- **[Which UUID package do you use?](https://www.reddit.com/r/golang/comments/10bg0rn/)** — Reddit 社区讨论 UUID 库选择 (MEDIUM confidence)
+- **[github.com/google/uuid](https://github.com/google/uuid)** — Google UUID 库官方文档和示例 (HIGH confidence)
+- **[Optimize JSON Serialization in Go with sonic](https://oneuptime.com/blog/optimize-json-serialization-in-go-with-sonic-or-easyjson)** — JSON 性能优化指南,确认标准库已足够 (MEDIUM confidence)
+- **现有代码库分析** — `internal/logging`, `internal/api/trigger.go`, `internal/instance/result.go` 集成点识别 (HIGH confidence)
 
 ---
-
-*Stack research for: v0.4 实时日志查看功能*
-*Researched: 2026-03-16*
-*Confidence: HIGH (基于官方文档、权威博客、GitHub Issues)*
+*Stack research for: 更新日志记录和查询系统*
+*Researched: 2026-03-26*

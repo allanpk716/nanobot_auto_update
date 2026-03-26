@@ -1,1230 +1,565 @@
-# Architecture Research: Real-time Log Viewing
+# Architecture Research: Update Log Recording and Query System
 
-**Domain:** Real-time log streaming for nanobot instances
-**Researched:** 2026-03-16
+**Domain:** HTTP API integration for update log persistence and query
+**Researched:** 2026-03-26
 **Confidence:** HIGH
-
-## Executive Summary
-
-为现有的 nanobot-auto-updater 应用集成实时日志查看功能。核心架构采用三层模式:
-1. **日志捕获层** - 修改 `lifecycle/starter.go` 以捕获 stdout/stderr
-2. **缓冲层** - 使用 ring buffer 存储每个实例最近 5000 行日志
-3. **流式传输层** - 通过 SSE (Server-Sent Events) 实时推送给客户端
-
-集成点主要在现有的 `InstanceLifecycle` 和未来的 HTTP API 服务器。架构设计遵循最小侵入原则,复用现有的日志注入模式和上下文管理。
 
 ## Existing Architecture Overview
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                     Main Application                         │
-│  (cmd/nanobot-auto-updater/main.go)                         │
-├─────────────────────────────────────────────────────────────┤
-│  ┌──────────────────────────────────────────────────────┐   │
-│  │         InstanceManager (EXISTING)                    │   │
-│  │  ┌──────────────┐  ┌──────────────┐                 │   │
-│  │  │ InstanceLife │  │ InstanceLife │  ...            │   │
-│  │  │  (gateway)   │  │  (worker)    │                 │   │
-│  │  └──────┬───────┘  └──────┬───────┘                 │   │
-│  │         │                  │                          │   │
-│  │    ┌────▼─────┐      ┌────▼─────┐                   │   │
-│  │    │Lifecycle │      │Lifecycle │                   │   │
-│  │    │Starter   │      │Starter   │                   │   │
-│  │    └──────────┘      └──────────┘                   │   │
-│  └──────────────────────────────────────────────────────┘   │
-│                                                              │
-│  Supporting Services (EXISTING):                            │
-│  ┌──────────┐  ┌──────────┐  ┌──────────┐                  │
-│  │ Updater  │  │ Notifier │  │ Logging  │                  │
-│  └──────────┘  └──────────┘  └──────────┘                  │
-└─────────────────────────────────────────────────────────────┘
-```
-
-**关键集成点:**
-- `internal/instance/lifecycle.go` - 实例生命周期管理
-- `internal/lifecycle/starter.go` - 进程启动逻辑 (需要修改)
-- 未来: `internal/api/` - HTTP API 服务器 (v0.3 中创建)
-
-## Proposed Architecture (v0.4)
-
-### System Overview
+### Current System Structure
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                     Main Application                         │
-│  (cmd/nanobot-auto-updater/main.go)                         │
-│                                                              │
-│  ┌──────────────────────────────────────────────────────┐   │
-│  │         InstanceManager (MODIFIED)                    │   │
-│  │  ┌─────────────────────────────────────────────┐     │   │
-│  │  │  InstanceLifecycle (MODIFIED)                │     │   │
-│  │  │  - config                                   │     │   │
-│  │  │  - logger                                   │     │   │
-│  │  │  - logBuffer *LogBuffer (NEW) ←─────────────┼──┐  │   │
-│  │  └─────────────────────────────────────────────┘  │  │   │
-│  │         │                                          │  │   │
-│  │    ┌────▼─────┐                                   │  │   │
-│  │    │Lifecycle │ (MODIFIED)                        │  │   │
-│  │    │Starter   │                                   │  │   │
-│  │    │- cmd     │                                   │  │   │
-│  │    │- stdout ─┼─────────────────────┐            │  │   │
-│  │    │- stderr ─┼──────────┐          │            │  │   │
-│  │    └──────────┘          │          │            │  │   │
-│  └──────────────────────────┼──────────┼────────────┘  │   │
-│                             │          │               │  │   │
-│                             ▼          ▼               │  │   │
-│                    ┌──────────────────────┐           │  │   │
-│                    │   LogBuffer (NEW)    │           │  │   │
-│                    │  - ring buffer       │           │  │   │
-│                    │  - 5000 lines        │           │  │   │
-│                    │  - broadcaster chan  │◄──────────┘  │   │
-│                    │  - subscribers map   │              │   │
-│                    └──────────┬───────────┘              │   │
-│                               │                          │   │
-│  ┌────────────────────────────┼──────────────────────┐  │   │
-│  │   HTTP API Server (v0.3)   │                      │  │   │
-│  │  ┌──────────────┐          │                      │  │   │
-│  │  │ /api/v1/     │          │                      │  │   │
-│  │  │ trigger-upd  │          │                      │  │   │
-│  │  └──────────────┘          │                      │  │   │
-│  │  ┌──────────────┐          │                      │  │   │
-│  │  │ /logs/:name  │◄─────────┘                      │  │   │
-│  │  │  (SSE)       │  ┌──────────────────────┐      │  │   │
-│  │  │  - auth      │  │ LogBufferManager     │      │  │   │
-│  │  │  - stream    │  │ (NEW)                │      │  │   │
-│  │  └──────────────┘  │ - buffers map        │◄─────┘  │   │
-│  │                    │ - GetBuffer(name)    │         │   │
-│  │  ┌──────────────┐  │ - Subscribe()        │         │   │
-│  │  │ /logs/:name  │  └──────────────────────┘         │   │
-│  │  │  /history    │                                   │   │
-│  │  │  (JSON)      │                                   │   │
-│  │  └──────────────┘                                   │   │
-│  └──────────────────────────────────────────────────────┘   │
-└─────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────┐
+│                        HTTP API Layer                           │
+├─────────────────────────────────────────────────────────────────┤
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐          │
+│  │ trigger-     │  │ SSE Handler  │  │ Help Handler │          │
+│  │ update       │  │              │  │              │          │
+│  │ (w/ Auth)    │  │              │  │ (no auth)    │          │
+│  └──────┬───────┘  └──────────────┘  └──────────────┘          │
+│         │                                                       │
+│  ┌──────▼──────────────────────────────────────────────┐       │
+│  │           AuthMiddleware (Bearer Token)             │       │
+│  └─────────────────────────────────────────────────────┘       │
+├─────────────────────────────────────────────────────────────────┤
+│                    Instance Management                          │
+├─────────────────────────────────────────────────────────────────┤
+│  ┌──────────────────────────────────────────────────────┐      │
+│  │          InstanceManager (concurrent control)        │      │
+│  │  - TriggerUpdate() → UpdateAll()                     │      │
+│  │  - atomic.Bool isUpdating                            │      │
+│  └──────┬───────────────────────────────────────┬──────┘      │
+│         │                                       │              │
+│  ┌──────▼──────────┐                   ┌───────▼──────────┐   │
+│  │ InstanceLifecycle│                   │   Updater (UV)   │   │
+│  │  - StopForUpdate │                   │  - Update()      │   │
+│  │  - StartAfter... │                   └──────────────────┘   │
+│  │  - LogBuffer     │                                          │
+│  └──────────────────┘                                          │
+├─────────────────────────────────────────────────────────────────┤
+│                      Data Persistence                           │
+├─────────────────────────────────────────────────────────────────┤
+│  ┌──────────────────┐  ┌──────────────────────────────────┐    │
+│  │  LogBuffer (mem) │  │  File Logger (daily rotation)    │    │
+│  │  - 5000 lines    │  │  - ./logs/app-YYYY-MM-DD.log     │    │
+│  │  - stdout/stderr │  │  - 7 day retention               │    │
+│  └──────────────────┘  └──────────────────────────────────┘    │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
-### Component Responsibilities
+### Current Component Responsibilities
 
-| Component | Responsibility | Implementation |
-|-----------|----------------|----------------|
-| **LogBuffer** (NEW) | 缓冲单个实例的日志,管理订阅者 | `internal/logbuffer/buffer.go` - ring buffer + broadcaster |
-| **LogBufferManager** (NEW) | 管理所有实例的 LogBuffer,提供按名称查找 | `internal/logbuffer/manager.go` - map + sync.RWMutex |
-| **Log Capture** (MODIFIED) | 在 `starter.go` 中捕获 stdout/stderr,写入 LogBuffer | `internal/lifecycle/starter.go` - 使用 `cmd.StdoutPipe()` + goroutine |
-| **SSE Handler** (NEW) | HTTP handler 处理 `/logs/:name` SSE 连接 | `internal/api/log_handler.go` - 订阅 LogBuffer,推送事件 |
-| **History Handler** (NEW) | HTTP handler 返回历史日志 (JSON) | `internal/api/log_handler.go` - 读取 buffer 历史数据 |
-| **InstanceLifecycle** (MODIFIED) | 持有 LogBuffer 引用,传递给 starter | `internal/instance/lifecycle.go` - 添加 `logBuffer` 字段 |
-| **InstanceManager** (MODIFIED) | 初始化 LogBufferManager,传递给实例 | `internal/instance/manager.go` - 添加 `logBufferManager` 字段 |
+| Component | Responsibility | Integration Point |
+|-----------|----------------|-------------------|
+| TriggerHandler | HTTP endpoint for update triggering | `internal/api/trigger.go` |
+| InstanceManager | Orchestrates stop→update→start flow | `internal/instance/manager.go` |
+| InstanceLifecycle | Per-instance lifecycle management | `internal/instance/lifecycle.go` |
+| LogBuffer | In-memory circular buffer (5000 lines) | `internal/logbuffer/buffer.go` |
+| Updater | UV package manager update logic | `internal/updater/updater.go` |
+| File Logger | Application logs with rotation | `internal/logging/logging.go` |
+| AuthMiddleware | Bearer token validation | `internal/api/auth.go` |
 
-## New Components Detail
+## Proposed Architecture for Update Log Recording
 
-### 1. LogBuffer (`internal/logbuffer/buffer.go`)
+### Integration Points
 
-**Purpose:** 存储单个实例的日志并管理订阅者广播
+**Primary Integration: TriggerHandler**
 
-**Structure:**
+The update log recording system integrates at the `TriggerHandler.Handle()` level:
+
 ```go
-package logbuffer
+// File: internal/api/trigger.go
+func (h *TriggerHandler) Handle(w http.ResponseWriter, r *http.Request) {
+    // 1. Existing: Validate method
+    // 2. Existing: Create context with timeout
 
-import (
-    "sync"
-    "time"
-)
+    // 3. NEW: Create UpdateLogRecorder
+    recorder := NewUpdateLogRecorder(h.logger)
 
-// LogLine represents a single log line with metadata
-type LogLine struct {
-    Timestamp time.Time `json:"timestamp"`
-    Stream    string    `json:"stream"` // "stdout" or "stderr"
-    Content   string    `json:"content"`
-    LineNum   int64     `json:"line_num"`
-}
+    // 4. Existing: Execute update
+    result, err := h.instanceManager.TriggerUpdate(ctx)
 
-// LogBuffer is a thread-safe circular buffer for log lines with broadcasting
-type LogBuffer struct {
-    instanceName string
-    maxSize      int                // Maximum number of lines to store
-    lines        []LogLine          // Ring buffer storage
-    head         int                // Write position
-    count        int                // Current number of lines
-    lineNum      int64              // Global line counter
+    // 5. NEW: Record update result
+    logEntry := recorder.Record(ctx, result, err, r.Header.Get("X-Trigger-Source"))
 
-    // Broadcasting
-    subscribers  map[chan LogLine]bool
-    newSub       chan chan LogLine
-    removeSub    chan chan LogLine
-    broadcast    chan LogLine
-
-    mu           sync.RWMutex
-    stopCh       chan struct{}
-}
-
-// NewLogBuffer creates a new log buffer for an instance
-func NewLogBuffer(instanceName string, maxSize int) *LogBuffer {
-    lb := &LogBuffer{
-        instanceName: instanceName,
-        maxSize:      maxSize,
-        lines:        make([]LogLine, maxSize),
-        subscribers:  make(map[chan LogLine]bool),
-        newSub:       make(chan chan LogLine, 10),
-        removeSub:    make(chan chan LogLine, 10),
-        broadcast:    make(chan LogLine, 100),
-        stopCh:       make(chan struct{}),
-    }
-    go lb.run()
-    return lb
-}
-
-// Write adds a log line to the buffer (implements io.Writer for stdout/stderr)
-func (lb *LogBuffer) Write(stream string) io.Writer {
-    return &logWriter{buffer: lb, stream: stream}
-}
-
-// WriteLine adds a log line to the buffer (internal method)
-func (lb *LogBuffer) writeLine(stream, content string) {
-    lb.mu.Lock()
-    line := LogLine{
-        Timestamp: time.Now(),
-        Stream:    stream,
-        Content:   content,
-        LineNum:   lb.lineNum,
-    }
-    lb.lineNum++
-
-    // Ring buffer write
-    lb.lines[lb.head] = line
-    lb.head = (lb.head + 1) % lb.maxSize
-    if lb.count < lb.maxSize {
-        lb.count++
-    }
-    lb.mu.Unlock()
-
-    // Broadcast to subscribers
-    select {
-    case lb.broadcast <- line:
-    default:
-        // Channel full, skip (non-blocking)
-    }
-}
-
-// Subscribe returns a channel for receiving new log lines
-func (lb *LogBuffer) Subscribe() chan LogLine {
-    ch := make(chan LogLine, 50)
-    lb.newSub <- ch
-    return ch
-}
-
-// Unsubscribe removes a subscriber
-func (lb *LogBuffer) Unsubscribe(ch chan LogLine) {
-    lb.removeSub <- ch
-}
-
-// GetHistory returns the last n lines (or all if n > count)
-func (lb *LogBuffer) GetHistory(n int) []LogLine {
-    lb.mu.RLock()
-    defer lb.mu.RUnlock()
-
-    if n > lb.count {
-        n = lb.count
+    // 6. NEW: Persist log entry
+    if persistErr := h.logStore.Append(logEntry); persistErr != nil {
+        h.logger.Error("Failed to persist update log", "error", persistErr)
     }
 
-    result := make([]LogLine, n)
-    start := (lb.head - n + lb.maxSize) % lb.maxSize
-
-    for i := 0; i < n; i++ {
-        result[i] = lb.lines[(start+i)%lb.maxSize]
-    }
-
-    return result
-}
-
-// run handles subscriber management and broadcasting in a single goroutine
-func (lb *LogBuffer) run() {
-    for {
-        select {
-        case <-lb.stopCh:
-            return
-
-        case ch := <-lb.newSub:
-            lb.subscribers[ch] = true
-
-        case ch := <-lb.removeSub:
-            delete(lb.subscribers, ch)
-            close(ch)
-
-        case line := <-lb.broadcast:
-            for ch := range lb.subscribers {
-                select {
-                case ch <- line:
-                default:
-                    // Slow client, skip this line
-                }
-            }
-        }
-    }
-}
-
-// Close stops the broadcaster and closes all subscriber channels
-func (lb *LogBuffer) Close() {
-    close(lb.stopCh)
-    for ch := range lb.subscribers {
-        close(ch)
-    }
-}
-
-// logWriter implements io.Writer for a specific stream (stdout/stderr)
-type logWriter struct {
-    buffer *LogBuffer
-    stream string
-}
-
-func (lw *logWriter) Write(p []byte) (n int, err error) {
-    // Split by lines and write each line
-    content := string(p)
-    lines := strings.Split(content, "\n")
-
-    for _, line := range lines {
-        if line != "" {
-            lw.buffer.writeLine(lw.stream, line)
-        }
-    }
-
-    return len(p), nil
+    // 7. Existing: Return JSON response
+    // ...
 }
 ```
 
-**Key Features:**
-- **Ring Buffer**: 固定大小,覆盖最旧日志
-- **Thread-Safe**: 使用 `sync.RWMutex` 保护并发访问
-- **Broadcasting**: 单 goroutine 管理所有订阅者,避免竞态条件
-- **Non-Blocking**: 广播时使用 `select + default` 避免慢客户端阻塞
+**Rationale:**
+- TriggerHandler already has access to UpdateResult and errors
+- Context timeout management already in place
+- Authentication already validated by middleware
+- Single integration point minimizes changes to existing code
 
-### 2. LogBufferManager (`internal/logbuffer/manager.go`)
+### New Component Structure
 
-**Purpose:** 管理所有实例的 LogBuffer,提供按名称查找
-
-**Structure:**
-```go
-package logbuffer
-
-import "sync"
-
-// Manager manages log buffers for all instances
-type Manager struct {
-    buffers map[string]*LogBuffer
-    mu      sync.RWMutex
-}
-
-// NewManager creates a new log buffer manager
-func NewManager() *Manager {
-    return &Manager{
-        buffers: make(map[string]*LogBuffer),
-    }
-}
-
-// GetBuffer returns the log buffer for an instance, creating it if needed
-func (m *Manager) GetBuffer(instanceName string, maxSize int) *LogBuffer {
-    m.mu.Lock()
-    defer m.mu.Unlock()
-
-    if buf, exists := m.buffers[instanceName]; exists {
-        return buf
-    }
-
-    buf := NewLogBuffer(instanceName, maxSize)
-    m.buffers[instanceName] = buf
-    return buf
-}
-
-// GetBufferIfExists returns the buffer only if it exists
-func (m *Manager) GetBufferIfExists(instanceName string) (*LogBuffer, bool) {
-    m.mu.RLock()
-    defer m.mu.RUnlock()
-
-    buf, exists := m.buffers[instanceName]
-    return buf, exists
-}
-
-// CloseAll closes all log buffers
-func (m *Manager) CloseAll() {
-    m.mu.Lock()
-    defer m.mu.Unlock()
-
-    for _, buf := range m.buffers {
-        buf.Close()
-    }
-    m.buffers = make(map[string]*LogBuffer)
-}
 ```
-
-### 3. Modified Starter (`internal/lifecycle/starter.go`)
-
-**Changes Required:**
-- 添加 `logBuffer *logbuffer.LogBuffer` 参数
-- 使用 `cmd.StdoutPipe()` 和 `cmd.StderrPipe()` 捕获输出
-- 启动 goroutine 读取并写入 LogBuffer
-
-**Modified Signature:**
-```go
-// StartNanobot starts nanobot with log capture
-func StartNanobot(
-    ctx context.Context,
-    command string,
-    port uint32,
-    startupTimeout time.Duration,
-    logBuffer *logbuffer.LogBuffer,  // NEW PARAMETER
-    logger *slog.Logger,
-) error {
-    logger.Info("Starting nanobot with log capture", "command", command, "port", port)
-
-    cmd := exec.CommandContext(ctx, "cmd", "/c", command)
-    cmd.Env = append(os.Environ(), "PYTHONIOENCODING=utf-8")
-    cmd.SysProcAttr = &windows.SysProcAttr{
-        HideWindow:    true,
-        CreationFlags: windows.CREATE_NO_WINDOW | windows.CREATE_NEW_PROCESS_GROUP,
-    }
-
-    // NEW: Capture stdout and stderr
-    if logBuffer != nil {
-        stdoutPipe, err := cmd.StdoutPipe()
-        if err != nil {
-            return fmt.Errorf("failed to create stdout pipe: %w", err)
-        }
-        stderrPipe, err := cmd.StderrPipe()
-        if err != nil {
-            return fmt.Errorf("failed to create stderr pipe: %w", err)
-        }
-
-        // Stream stdout to log buffer
-        go streamToBuffer(stdoutPipe, logBuffer, "stdout", logger)
-        // Stream stderr to log buffer
-        go streamToBuffer(stderrPipe, logBuffer, "stderr", logger)
-    }
-
-    // Start process
-    if err := cmd.Start(); err != nil {
-        logger.Error("Failed to start nanobot process", "error", err)
-        return fmt.Errorf("failed to start nanobot: %w", err)
-    }
-
-    logger.Info("Nanobot process started with log capture", "pid", cmd.Process.Pid)
-
-    // Release process
-    if err := cmd.Process.Release(); err != nil {
-        logger.Warn("Failed to detach nanobot process (non-fatal)", "error", err)
-        return fmt.Errorf("failed to detach nanobot process: %w", err)
-    }
-
-    // Wait for port
-    if err := waitForPortListening(ctx, port, startupTimeout, logger); err != nil {
-        return fmt.Errorf("nanobot startup verification failed: %w", err)
-    }
-
-    logger.Info("Nanobot startup verified", "port", port)
-    return nil
-}
-
-// streamToBuffer reads from a pipe and writes to the log buffer
-func streamToBuffer(pipe io.Reader, buffer *logbuffer.LogBuffer, stream string, logger *slog.Logger) {
-    scanner := bufio.NewScanner(pipe)
-    for scanner.Scan() {
-        line := scanner.Text()
-        buffer.WriteLine(stream, line)
-        // Also log to application logger for debugging
-        logger.Debug("Captured log line", "stream", stream, "line", line)
-    }
-    if err := scanner.Err(); err != nil {
-        logger.Error("Error reading from pipe", "stream", stream, "error", err)
-    }
-}
-```
-
-**Integration Points:**
-- 向后兼容: `logBuffer` 参数可以为 `nil` (禁用日志捕获)
-- 复用现有的 `cmd.Start()` 和 `waitForPortListening()` 逻辑
-- 不影响进程管理 (Release + 退出逻辑不变)
-
-### 4. SSE Handler (`internal/api/log_handler.go`)
-
-**Purpose:** 处理 `/logs/:name` SSE 连接,实时推送日志流
-
-**Structure:**
-```go
-package api
-
-import (
-    "encoding/json"
-    "fmt"
-    "net/http"
-    "time"
-
-    "github.com/HQGroup/nanobot-auto-updater/internal/logbuffer"
-)
-
-// LogHandler handles log streaming requests
-type LogHandler struct {
-    bufferManager *logbuffer.Manager
-}
-
-// NewLogHandler creates a new log handler
-func NewLogHandler(bufferManager *logbuffer.Manager) *LogHandler {
-    return &LogHandler{
-        bufferManager: bufferManager,
-    }
-}
-
-// ServeSSE handles GET /api/v1/logs/:name/stream (SSE endpoint)
-func (h *LogHandler) ServeSSE(w http.ResponseWriter, r *http.Request) {
-    instanceName := r.PathValue("name")
-    if instanceName == "" {
-        http.Error(w, "instance name required", http.StatusBadRequest)
-        return
-    }
-
-    // Get buffer
-    buffer, exists := h.bufferManager.GetBufferIfExists(instanceName)
-    if !exists {
-        http.Error(w, "instance not found", http.StatusNotFound)
-        return
-    }
-
-    // Set SSE headers
-    w.Header().Set("Content-Type", "text/event-stream")
-    w.Header().Set("Cache-Control", "no-cache")
-    w.Header().Set("Connection", "keep-alive")
-    w.Header().Set("Access-Control-Allow-Origin", "*")
-
-    flusher, ok := w.(http.Flusher)
-    if !ok {
-        http.Error(w, "streaming not supported", http.StatusInternalServerError)
-        return
-    }
-
-    // Subscribe to log updates
-    subCh := buffer.Subscribe()
-    defer buffer.Unsubscribe(subCh)
-
-    // Send initial connection confirmation
-    fmt.Fprintf(w, "event: connected\ndata: {\"instance\":\"%s\"}\n\n", instanceName)
-    flusher.Flush()
-
-    // Send last 100 lines as history
-    history := buffer.GetHistory(100)
-    for _, line := range history {
-        data, _ := json.Marshal(line)
-        fmt.Fprintf(w, "event: log\ndata: %s\n\n", data)
-        flusher.Flush()
-    }
-
-    // Stream new logs
-    ctx := r.Context()
-
-    // Start heartbeat goroutine
-    heartbeatCh := make(chan struct{})
-    go func() {
-        ticker := time.NewTicker(30 * time.Second)
-        defer ticker.Stop()
-        defer close(heartbeatCh)
-
-        for {
-            select {
-            case <-ctx.Done():
-                return
-            case <-ticker.C:
-                fmt.Fprint(w, ": heartbeat\n\n")
-                flusher.Flush()
-            }
-        }
-    }()
-
-    for {
-        select {
-        case <-ctx.Done():
-            return
-
-        case <-heartbeatCh:
-            return
-
-        case line := <-subCh:
-            data, _ := json.Marshal(line)
-            fmt.Fprintf(w, "event: log\ndata: %s\n\n", data)
-            flusher.Flush()
-        }
-    }
-}
-
-// ServeHistory handles GET /api/v1/logs/:name/history (JSON endpoint)
-func (h *LogHandler) ServeHistory(w http.ResponseWriter, r *http.Request) {
-    instanceName := r.PathValue("name")
-    if instanceName == "" {
-        http.Error(w, "instance name required", http.StatusBadRequest)
-        return
-    }
-
-    // Get buffer
-    buffer, exists := h.bufferManager.GetBufferIfExists(instanceName)
-    if !exists {
-        http.Error(w, "instance not found", http.StatusNotFound)
-        return
-    }
-
-    // Get all history (or query param ?lines=100)
-    lines := buffer.GetHistory(5000)
-
-    w.Header().Set("Content-Type", "application/json")
-    json.NewEncoder(w).Encode(map[string]interface{}{
-        "instance": instanceName,
-        "count":    len(lines),
-        "lines":    lines,
-    })
-}
-```
-
-**SSE Event Format:**
-```
-event: connected
-data: {"instance":"gateway"}
-
-event: log
-data: {"timestamp":"2026-03-16T10:00:00Z","stream":"stdout","content":"Starting server...","line_num":1}
-
-event: log
-data: {"timestamp":"2026-03-16T10:00:01Z","stream":"stderr","content":"Warning: ...","line_num":2}
-
-: heartbeat
-```
-
-### 5. Modified InstanceLifecycle (`internal/instance/lifecycle.go`)
-
-**Changes Required:**
-- 添加 `logBuffer *logbuffer.LogBuffer` 字段
-- 在 `StartAfterUpdate()` 中传递给 `lifecycle.StartNanobot()`
-
-**Modified Structure:**
-```go
-type InstanceLifecycle struct {
-    config    config.InstanceConfig
-    logger    *slog.Logger
-    logBuffer *logbuffer.LogBuffer  // NEW FIELD
-}
-
-// NewInstanceLifecycle creates an instance lifecycle manager with log buffer
-func NewInstanceLifecycle(cfg config.InstanceConfig, logBuffer *logbuffer.LogBuffer, baseLogger *slog.Logger) *InstanceLifecycle {
-    instanceLogger := baseLogger.With("instance", cfg.Name).With("component", "instance-lifecycle")
-
-    return &InstanceLifecycle{
-        config:    cfg,
-        logger:    instanceLogger,
-        logBuffer: logBuffer,  // NEW
-    }
-}
-
-// StartAfterUpdate starts the instance with log capture
-func (il *InstanceLifecycle) StartAfterUpdate(ctx context.Context) error {
-    il.logger.Info("Starting instance after update with log capture")
-
-    startupTimeout := il.config.StartupTimeout
-    if startupTimeout == 0 {
-        startupTimeout = 30 * time.Second
-    }
-
-    // Pass log buffer to starter
-    if err := lifecycle.StartNanobot(ctx, il.config.StartCommand, il.config.Port, startupTimeout, il.logBuffer, il.logger); err != nil {
-        return &InstanceError{
-            InstanceName: il.config.Name,
-            Operation:    "start",
-            Port:         il.config.Port,
-            Err:          fmt.Errorf("failed to start instance: %w", err),
-        }
-    }
-
-    il.logger.Info("Instance started successfully with log capture")
-    return nil
-}
-```
-
-### 6. Modified InstanceManager (`internal/instance/manager.go`)
-
-**Changes Required:**
-- 添加 `logBufferManager *logbuffer.Manager` 字段
-- 在创建 `InstanceLifecycle` 时传递对应的 `LogBuffer`
-
-**Modified Structure:**
-```go
-type InstanceManager struct {
-    instances        []*InstanceLifecycle
-    logBufferManager *logbuffer.Manager  // NEW FIELD
-    logger           *slog.Logger
-}
-
-// NewInstanceManager creates an instance manager with log buffer support
-func NewInstanceManager(cfg *config.Config, baseLogger *slog.Logger) *InstanceManager {
-    logger := baseLogger.With("component", "instance-manager")
-
-    // Create log buffer manager
-    logBufferManager := logbuffer.NewManager()
-
-    instances := make([]*InstanceLifecycle, 0, len(cfg.Instances))
-    for _, instCfg := range cfg.Instances {
-        // Create log buffer for this instance (5000 lines)
-        logBuf := logBufferManager.GetBuffer(instCfg.Name, 5000)
-
-        // Pass log buffer to instance lifecycle
-        lifecycle := NewInstanceLifecycle(instCfg, logBuf, baseLogger)
-        instances = append(instances, lifecycle)
-    }
-
-    return &InstanceManager{
-        instances:        instances,
-        logBufferManager: logBufferManager,
-        logger:           logger,
-    }
-}
-
-// GetLogBufferManager returns the log buffer manager (for API handlers)
-func (m *InstanceManager) GetLogBufferManager() *logbuffer.Manager {
-    return m.logBufferManager
-}
+internal/
+├── updatelog/               # NEW: Update log domain
+│   ├── types.go             # UpdateLogEntry, UpdateLogResult structures
+│   ├── recorder.go          # UpdateLogRecorder (business logic)
+│   ├── store.go             # File-based log persistence (JSON Lines)
+│   ├── store_test.go        # Unit tests for store
+│   ├── cleanup.go           # 7-day retention cleanup logic
+│   └── cleanup_test.go      # Unit tests for cleanup
+├── api/
+│   ├── trigger.go           # MODIFY: Integrate recorder
+│   ├── updatelog_handler.go # NEW: Query API handler
+│   └── auth.go              # REUSE: Existing middleware
+└── config/
+    └── config.go            # MODIFY: Add update log config
 ```
 
 ## Data Flow
 
-### Log Capture Flow
+### Update Log Recording Flow
 
 ```
-[Nanobot Process]
-    stdout/stderr
-         ↓
-[cmd.StdoutPipe() / cmd.StderrPipe()]
-         ↓
-[bufio.Scanner] (goroutine)
-         ↓
-[LogBuffer.WriteLine()]
-         ↓
-[Ring Buffer Storage] (5000 lines)
-         ↓
-[Broadcast Channel] → [Subscriber Channels]
-         ↓                    ↓
-    [History API]      [SSE Handler]
+HTTP POST /api/v1/trigger-update
+    ↓
+AuthMiddleware validates Bearer token
+    ↓
+TriggerHandler.Handle()
+    ↓
+    ├─→ Create UpdateLogRecorder (new)
+    ├─→ InstanceManager.TriggerUpdate()
+    │       ↓
+    │   Stop all instances → UV Update → Start all instances
+    │       ↓
+    │   Return UpdateResult + error
+    ├─→ recorder.Record(result, error) → UpdateLogEntry (new)
+    │       ↓
+    │   Extract instance logs from LogBuffer (new)
+    │       ↓
+    │   Build complete log entry
+    ├─→ UpdateLogStore.Append(entry) → File write (new)
+    │       ↓
+    │   Write JSON Lines to ./logs/update-logs.jsonl
+    │       ↓
+    │   Trigger cleanup if needed
+    └─→ Return JSON response (existing)
 ```
 
-### SSE Connection Flow
+### Update Log Query Flow
 
 ```
-[Client: GET /api/v1/logs/gateway/stream]
+HTTP GET /api/v1/update-logs?limit=10&offset=0
     ↓
-[Auth Middleware] → Validate Bearer token
+AuthMiddleware validates Bearer token
     ↓
-[LogHandler.ServeSSE()]
+UpdateLogHandler.Handle()
     ↓
-[bufferManager.GetBufferIfExists("gateway")]
-    ↓ (exists)
-[buffer.Subscribe()] → Create subscriber channel
-    ↓
-[Send initial history] → Last 100 lines (event: log)
-    ↓
-[Stream loop]
-    ├─> [Heartbeat goroutine] → Every 30s: ": heartbeat"
-    └─> [Read from subCh] → New line: event: log with JSON data
-         ↓
-    [Client receives SSE events]
+    ├─→ Parse limit/offset query params
+    ├─→ UpdateLogStore.Query(limit, offset)
+    │       ↓
+    │   Read ./logs/update-logs.jsonl
+    │       ↓
+    │   Parse JSON Lines
+    │       ↓
+    │   Apply pagination
+    │       ↓
+    │   Return []UpdateLogEntry
+    └─→ Return JSON response (200 OK)
 ```
 
-### History API Flow
+### Data Transformation Flow
 
 ```
-[Client: GET /api/v1/logs/gateway/history]
+UpdateResult (instance package)
     ↓
-[Auth Middleware] → Validate Bearer token
-    ↓
-[LogHandler.ServeHistory()]
-    ↓
-[buffer.GetHistory(5000)] → Read all lines from ring buffer
-    ↓
-[JSON Response]
-{
-  "instance": "gateway",
-  "count": 3245,
-  "lines": [
-    {"timestamp": "...", "stream": "stdout", "content": "...", "line_num": 1},
-    ...
-  ]
-}
+UpdateLogRecorder.Record()
+    ├─ Extract instance names (Stopped, Started)
+    ├─ Extract errors (StopFailed, StartFailed)
+    ├─ Capture instance logs from LogBuffer.GetHistory()
+    ├─ Build InstanceUpdateResult for each instance
+    └─ Build UpdateLogEntry
+        ↓
+UpdateLogStore.Append()
+    ├─ Serialize to JSON
+    ├─ Append to JSON Lines file
+    └─ Trigger cleanup if file size threshold exceeded
 ```
-
-## Project Structure
-
-```
-nanobot-auto-updater/
-├── cmd/
-│   └── nanobot-auto-updater/
-│       └── main.go              # MODIFIED: Wire LogBufferManager to API
-├── internal/
-│   ├── logbuffer/               # NEW PACKAGE
-│   │   ├── buffer.go            # LogBuffer with ring buffer + broadcast
-│   │   ├── buffer_test.go       # Unit tests
-│   │   ├── manager.go           # LogBufferManager
-│   │   └── manager_test.go      # Unit tests
-│   ├── api/                     # NEW PACKAGE (v0.3)
-│   │   ├── server.go            # HTTP server lifecycle
-│   │   ├── handlers.go          # /api/v1/trigger-update
-│   │   ├── log_handler.go       # NEW: /api/v1/logs/:name/*
-│   │   ├── middleware.go        # Bearer token auth
-│   │   └── server_test.go
-│   ├── instance/                # MODIFIED
-│   │   ├── manager.go           # MODIFIED: Add logBufferManager field
-│   │   ├── lifecycle.go         # MODIFIED: Add logBuffer field
-│   │   └── errors.go
-│   ├── lifecycle/               # MODIFIED
-│   │   ├── starter.go           # MODIFIED: Add logBuffer parameter, capture stdout/stderr
-│   │   ├── stopper.go
-│   │   └── detector.go
-│   ├── config/
-│   │   └── config.go            # UNCHANGED (v0.3 adds API config)
-│   ├── updater/                 # UNCHANGED
-│   ├── notifier/                # UNCHANGED
-│   └── logging/                 # UNCHANGED
-└── config.yaml                  # UNCHANGED
-```
-
-## Build Order (Suggested Implementation Phases)
-
-### Phase 1: Log Buffer Core (Foundation)
-**Goal:** Implement log buffer infrastructure
-
-**Changes:**
-1. Create `internal/logbuffer/` package
-2. Implement `LogBuffer` with ring buffer + broadcasting
-3. Implement `LogBufferManager` for multi-instance support
-4. Add comprehensive unit tests (concurrency, ring buffer edge cases)
-
-**Dependencies:** None
-
-**Validation:**
-- Unit tests pass with 100% coverage
-- Ring buffer correctly handles wrap-around
-- Broadcasting works with multiple subscribers
-- No goroutine leaks
-
----
-
-### Phase 2: Integrate Log Capture into Starter
-**Goal:** Capture nanobot process stdout/stderr
-
-**Changes:**
-1. Modify `internal/lifecycle/starter.go`:
-   - Add `logBuffer *logbuffer.LogBuffer` parameter
-   - Use `cmd.StdoutPipe()` and `cmd.StderrPipe()`
-   - Add `streamToBuffer()` goroutine
-2. Add integration tests with mock processes
-3. Verify backward compatibility (nil logBuffer works)
-
-**Dependencies:** Phase 1
-
-**Validation:**
-- Process starts successfully with log capture
-- Logs appear in buffer
-- No blocking on slow buffer
-- Process lifecycle (start/stop) unaffected
-
----
-
-### Phase 3: Wire Log Buffers to Instance Lifecycle
-**Goal:** Connect LogBuffer to InstanceLifecycle and InstanceManager
-
-**Changes:**
-1. Modify `internal/instance/lifecycle.go`:
-   - Add `logBuffer *logbuffer.LogBuffer` field
-   - Pass logBuffer to `lifecycle.StartNanobot()`
-2. Modify `internal/instance/manager.go`:
-   - Add `logBufferManager *logbuffer.Manager` field
-   - Create buffers for each instance in constructor
-   - Add `GetLogBufferManager()` method
-3. Update tests with mock log buffers
-
-**Dependencies:** Phase 2
-
-**Validation:**
-- Each instance has its own LogBuffer
-- Buffers accessible via manager
-- Existing update flow (stop→update→start) works unchanged
-
----
-
-### Phase 4: SSE Handler Implementation
-**Goal:** Implement HTTP endpoints for log viewing
-
-**Changes:**
-1. Create `internal/api/log_handler.go`:
-   - Implement `LogHandler` struct
-   - Implement `ServeSSE()` for `/logs/:name/stream`
-   - Implement `ServeHistory()` for `/logs/:name/history`
-2. Add route registration in `internal/api/server.go`:
-   ```go
-   mux.HandleFunc("GET /api/v1/logs/{name}/stream", logHandler.ServeSSE)
-   mux.HandleFunc("GET /api/v1/logs/{name}/history", logHandler.ServeHistory)
-   ```
-3. Add unit tests with mock buffers
-
-**Dependencies:** Phase 3, v0.3 API server
-
-**Validation:**
-- SSE connection established
-- History API returns JSON
-- Heartbeat keeps connection alive
-- Client disconnect detected via context
-
----
-
-### Phase 5: Integration Testing
-**Goal:** Validate end-to-end log viewing
-
-**Tests:**
-1. Start instance with log capture
-2. Connect SSE client → verify receives logs in real-time
-3. Request history → verify all lines returned
-4. Disconnect client → verify no goroutine leak
-5. Slow client → verify non-blocking behavior
-6. Multiple instances → verify isolation
-
-**Dependencies:** All phases
-
-**Validation:** E2E test passes, memory stable, no leaks
-
----
-
-### Phase 6: Documentation and Examples
-**Goal:** Provide usage documentation
-
-**Changes:**
-1. Update `README.md` with log viewing API documentation
-2. Add API examples:
-   - `curl` commands for history endpoint
-   - JavaScript EventSource example for SSE
-   - Error handling examples
-3. Document configuration (buffer size)
-
-**Dependencies:** Phase 5
-
-**Validation:** Documentation reviewed and tested
 
 ## Architectural Patterns
 
-### Pattern 1: Ring Buffer for Memory Efficiency
+### Pattern 1: Domain-Driven Package Structure
 
-**What:** Fixed-size circular buffer to store recent logs without unbounded memory growth
+**What:** Separate package `internal/updatelog` for all update log concerns
 
-**When:** All log capture scenarios
+**When to use:** When adding a new bounded context to existing application
 
 **Trade-offs:**
-- ✅ Bounded memory usage (5000 lines × ~200 bytes = ~1MB per instance)
-- ✅ No need for log rotation or cleanup
-- ✅ Simple implementation with array
-- ❌ Loses old logs (acceptable for real-time viewing)
+- **Pros:** Clear separation of concerns, testable in isolation, reusable
+- **Cons:** Additional package, more files to maintain
 
 **Example:**
 ```go
-// Ring buffer write
-lb.lines[lb.head] = line
-lb.head = (lb.head + 1) % lb.maxSize
-if lb.count < lb.maxSize {
-    lb.count++
+// internal/updatelog/recorder.go
+package updatelog
+
+type UpdateLogRecorder struct {
+    logger *slog.Logger
 }
 
-// Ring buffer read (last n lines)
-start := (lb.head - n + lb.maxSize) % lb.maxSize
-for i := 0; i < n; i++ {
-    result[i] = lb.lines[(start+i)%lb.maxSize]
+func (r *UpdateLogRecorder) Record(
+    ctx context.Context,
+    result *instance.UpdateResult,
+    updateErr error,
+    triggerSource string,
+    instanceLogs map[string][]logbuffer.LogEntry,
+) *UpdateLogEntry {
+    // Transform UpdateResult to UpdateLogEntry
+    entry := &UpdateLogEntry{
+        ID:              generateID(),
+        Timestamp:       time.Now(),
+        TriggerSource:   triggerSource,
+        Success:         updateErr == nil && !result.HasErrors(),
+    }
+
+    // Build instance results with logs
+    for _, name := range result.Stopped {
+        entry.Instances = append(entry.Instances, InstanceUpdateResult{
+            InstanceName: name,
+            Status:       "stopped_success",
+            Logs:         instanceLogs[name],
+        })
+    }
+    // ... similar for other results
+
+    return entry
 }
 ```
 
----
+### Pattern 2: File-Based JSON Lines Storage
 
-### Pattern 2: Broadcast Channel Pattern
+**What:** Append-only log file with JSON Lines format
 
-**What:** Single goroutine manages all subscribers, ensuring thread-safe broadcasting
-
-**When:** Multiple SSE clients need to receive same log stream
+**When to use:** When query requirements are simple (recent N entries) and append performance is critical
 
 **Trade-offs:**
-- ✅ Thread-safe (no race conditions)
-- ✅ Centralized subscriber management
-- ✅ Easy to add/remove subscribers
-- ❌ Single goroutine overhead (minimal)
+- **Pros:** Simple implementation, efficient append, no external dependencies
+- **Cons:** O(n) read for pagination, requires full file scan for queries
 
 **Example:**
 ```go
-func (lb *LogBuffer) run() {
-    for {
-        select {
-        case ch := <-lb.newSub:
-            lb.subscribers[ch] = true
+// internal/updatelog/store.go
+type UpdateLogStore struct {
+    filePath string
+    logger   *slog.Logger
+}
 
-        case line := <-lb.broadcast:
-            for ch := range lb.subscribers {
-                select {
-                case ch <- line:
-                default:
-                    // Skip slow client
-                }
-            }
+func (s *UpdateLogStore) Append(entry *UpdateLogEntry) error {
+    // Open file in append mode
+    f, err := os.OpenFile(s.filePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+    if err != nil {
+        return err
+    }
+    defer f.Close()
+
+    // Write JSON line
+    encoder := json.NewEncoder(f)
+    return encoder.Encode(entry)
+}
+
+func (s *UpdateLogStore) Query(limit, offset int) ([]*UpdateLogEntry, error) {
+    // Read file line by line
+    f, err := os.Open(s.filePath)
+    if err != nil {
+        return nil, err
+    }
+    defer f.Close()
+
+    var entries []*UpdateLogEntry
+    scanner := bufio.NewScanner(f)
+    lineNum := 0
+
+    for scanner.Scan() {
+        lineNum++
+        if lineNum <= offset {
+            continue
         }
+        if lineNum > offset+limit {
+            break
+        }
+
+        var entry UpdateLogEntry
+        if err := json.Unmarshal(scanner.Bytes(), &entry); err != nil {
+            s.logger.Warn("Failed to parse log entry", "line", lineNum, "error", err)
+            continue
+        }
+        entries = append(entries, &entry)
     }
+
+    return entries, scanner.Err()
 }
 ```
 
----
+### Pattern 3: Lazy Log Capture
 
-### Pattern 3: SSE with Heartbeat
+**What:** Capture instance logs only when recording an update log (not during normal operation)
 
-**What:** Send periodic SSE comments to keep connection alive through proxies
-
-**When:** Long-lived SSE connections (all production deployments)
+**When to use:** When log capture is expensive and only needed for specific operations
 
 **Trade-offs:**
-- ✅ Prevents proxy timeout (Nginx default 60s)
-- ✅ Simple implementation (just `: ping\n\n`)
-- ✅ No client-side handling needed
-- ❌ Minimal bandwidth overhead (10 bytes every 30s)
+- **Pros:** No performance overhead during normal instance operation
+- **Cons:** Requires access to LogBuffer at recording time
 
 **Example:**
 ```go
-go func() {
-    ticker := time.NewTicker(30 * time.Second)
-    defer ticker.Stop()
+// In TriggerHandler.Handle()
+func (h *TriggerHandler) Handle(w http.ResponseWriter, r *http.Request) {
+    // ... execute update ...
 
-    for {
-        select {
-        case <-ctx.Done():
-            return
-        case <-ticker.C:
-            fmt.Fprint(w, ": heartbeat\n\n")
-            flusher.Flush()
+    // Capture instance logs AFTER update completes
+    instanceLogs := make(map[string][]logbuffer.LogEntry)
+    for _, name := range getAllInstanceNames(result) {
+        buffer, err := h.instanceManager.GetLogBuffer(name)
+        if err != nil {
+            h.logger.Warn("Failed to get log buffer", "instance", name, "error", err)
+            continue
         }
+        instanceLogs[name] = buffer.GetHistory()
     }
-}()
-```
 
----
-
-### Pattern 4: Context-Aware Shutdown
-
-**What:** Use `r.Context()` to detect client disconnect and clean up resources
-
-**When:** All SSE handlers
-
-**Trade-offs:**
-- ✅ Automatic cleanup on client disconnect
-- ✅ Works with HTTP/2 and proxies
-- ✅ Standard Go pattern
-- ❌ Requires explicit select in loop
-
-**Example:**
-```go
-ctx := r.Context()
-
-for {
-    select {
-    case <-ctx.Done():
-        // Client disconnected, cleanup and return
-        return
-    case line := <-subCh:
-        // Send log line
-    }
+    // Record with logs
+    logEntry := recorder.Record(ctx, result, err, triggerSource, instanceLogs)
 }
 ```
 
-## Anti-Patterns to Avoid
+## Component Integration Details
 
-### Anti-Pattern 1: Blocking Writes to Full Buffer
+### Integration Point 1: TriggerHandler Modification
 
-**What people do:** Use unbuffered channels for broadcasting, causing slow clients to block writes
+**File:** `internal/api/trigger.go`
 
-**Why it's wrong:** One slow client blocks log capture for all instances
+**Changes:**
+1. Add `UpdateLogRecorder` and `UpdateLogStore` to TriggerHandler struct
+2. Initialize in `NewTriggerHandler()`
+3. Call `recorder.Record()` after `TriggerUpdate()` completes
+4. Call `store.Append()` to persist log entry
 
-**Do this instead:** Use buffered channels + `select + default` to skip slow clients
+**Why this integration point:**
+- Minimal changes to existing code
+- Access to complete UpdateResult
+- Error context available
+- HTTP request context (trigger source) available
 
-```go
-// BAD
-for ch := range subscribers {
-    ch <- line  // Blocks if client slow
-}
+### Integration Point 2: Server Registration
 
-// GOOD
-for ch := range subscribers {
-    select {
-    case ch <- line:
-    default:
-        // Skip this client, continue
-    }
-}
-```
+**File:** `internal/api/server.go`
 
----
+**Changes:**
+1. Create new `UpdateLogHandler` instance
+2. Register new route: `GET /api/v1/update-logs`
+3. Wrap with existing `AuthMiddleware` (reuse Bearer token validation)
 
-### Anti-Pattern 2: Unbounded Log Storage
+**Why this integration point:**
+- Consistent with existing route registration pattern
+- Reuses existing authentication infrastructure
+- Centralized route management
 
-**What people do:** Append logs to slice without limit, causing memory exhaustion
+### Integration Point 3: Configuration Extension
 
-**Why it's wrong:** Long-running processes accumulate GB of logs, OOM crash
+**File:** `internal/config/config.go`
 
-**Do this instead:** Use ring buffer with fixed size
+**Changes:**
+1. Add `UpdateLogConfig` struct with retention settings
+2. Add to main `Config` struct
+3. Add validation for retention days (minimum 1, maximum 365)
+4. Set default: 7 days retention
 
-```go
-// BAD
-lb.lines = append(lb.lines, line)  // Grows unbounded
-
-// GOOD
-lb.lines[lb.head] = line
-lb.head = (lb.head + 1) % lb.maxSize
-```
-
----
-
-### Anti-Pattern 3: Goroutine Leak in SSE Handler
-
-**What people do:** Start goroutines without tying to context cancellation
-
-**Why it's wrong:** Client disconnects, but goroutines keep running, memory leak
-
-**Do this instead:** Always select on `ctx.Done()` in goroutines
-
-```go
-// BAD
-go func() {
-    for {
-        time.Sleep(30 * time.Second)
-        fmt.Fprint(w, ": ping\n\n")
-    }
-}()
-
-// GOOD
-go func() {
-    ticker := time.NewTicker(30 * time.Second)
-    defer ticker.Stop()
-
-    for {
-        select {
-        case <-ctx.Done():
-            return  // Exit on client disconnect
-        case <-ticker.C:
-            fmt.Fprint(w, ": ping\n\n")
-        }
-    }
-}()
-```
-
----
-
-### Anti-Pattern 4: Global Log Buffer Map
-
-**What people do:** Use global `map[string]*LogBuffer` without synchronization
-
-**Why it's wrong:** Race conditions, hard to test, implicit dependencies
-
-**Do this instead:** Pass `LogBufferManager` explicitly as dependency
-
-```go
-// BAD
-var globalBuffers = make(map[string]*LogBuffer)
-
-// GOOD
-type InstanceManager struct {
-    logBufferManager *logbuffer.Manager  // Explicit dependency
-}
-```
-
----
-
-### Anti-Pattern 5: Reading Pipes Without Goroutines
-
-**What people do:** Sequentially read stdout then stderr without goroutines
-
-**Why it's wrong:** If stdout blocks, stderr fills pipe buffer → deadlock
-
-**Do this instead:** Read both streams concurrently with goroutines
-
-```go
-// BAD
-stdout, _ := cmd.StdoutPipe()
-stderr, _ := cmd.StderrPipe()
-io.ReadAll(stdout)  // Blocks
-io.ReadAll(stderr)  // Never reached
-
-// GOOD
-go streamToBuffer(stdoutPipe, buffer, "stdout")
-go streamToBuffer(stderrPipe, buffer, "stderr")
-```
+**Why this integration point:**
+- Follows existing configuration pattern
+- Allows future extensibility (log path, retention policy)
+- Consistent with other feature configurations (API, Monitor)
 
 ## Scaling Considerations
 
-| Scale | Architecture Adjustments |
-|-------|--------------------------|
-| **1-10 instances** | Current design optimal - single process, in-memory buffers |
-| **10-50 instances** | Consider reducing buffer size (1000 lines), add compression for history API |
-| **50+ instances** | Consider external log aggregation (Loki, Elasticsearch) |
+| Scale | Log Volume | Architecture Adjustments |
+|-------|------------|--------------------------|
+| 0-100 updates/day | < 100 KB/day | Current architecture sufficient |
+| 100-1000 updates/day | ~1 MB/day | Add index file for O(1) seeks |
+| 1000+ updates/day | > 10 MB/day | Consider SQLite or database |
 
-### Scaling Priorities
+### First Bottleneck: File Read Performance
 
-1. **First bottleneck:** Memory usage (5000 lines × N instances)
-   - **Solution:** Reduce buffer size or add size-based eviction (e.g., 1MB max per buffer)
+**What breaks first:** Query API response time degrades as log file grows (O(n) read)
 
-2. **Second bottleneck:** SSE connections (file descriptor limits)
-   - **Solution:** Increase `ulimit -n`, add connection timeout (disconnect idle clients)
+**How to fix:**
+1. Add in-memory cache of recent N log entries (e.g., 100 entries)
+2. Serve queries from cache when possible
+3. Fall back to file read only for historical queries
 
-**Note:** Current design optimized for 1-10 instances (typical personal usage). Horizontal scaling requires external log storage.
+### Second Bottleneck: Disk Space
 
-## Integration Points
+**What breaks next:** Log files consume too much disk space
 
-### External Services
+**How to fix:**
+1. Implement more aggressive cleanup (3-day retention)
+2. Add compression for old log files
+3. Add log rotation by file size (not just by date)
 
-| Service | Integration Pattern | Notes |
-|---------|---------------------|-------|
-| Nanobot processes | `cmd.StdoutPipe()` + goroutines | Non-blocking reads, graceful degradation |
-| HTTP Clients (SSE) | Standard `EventSource` API | Browser auto-reconnects with Last-Event-ID |
-| Monitoring (future) | History API endpoint | Poll `/logs/:name/history` for metrics |
+## Anti-Patterns to Avoid
 
-### Internal Boundaries
+### Anti-Pattern 1: Storing Logs in Memory Only
 
-| Boundary | Communication | Notes |
-|----------|---------------|-------|
-| Starter → LogBuffer | `io.Writer` interface | Decoupled, testable |
-| LogBuffer → SSE Handler | Channels (broadcast) | Thread-safe, non-blocking |
-| InstanceManager → API Server | `GetLogBufferManager()` | Explicit dependency injection |
+**What people do:** Keep update logs only in memory for fast access
+
+**Why it's wrong:** Logs lost on application restart, defeats audit purpose
+
+**Do this instead:** Persist to file immediately after each update, use memory only for optional caching
+
+### Anti-Pattern 2: Capturing Logs During Instance Operation
+
+**What people do:** Continuously capture logs to update log storage while instance is running
+
+**Why it's wrong:** Massive performance overhead, LogBuffer already handles real-time logs
+
+**Do this instead:** Capture logs only when recording update results (lazy capture pattern)
+
+### Anti-Pattern 3: Complex Query Support
+
+**What people do:** Add search, filtering, aggregation to log query API
+
+**Why it's wrong:** Over-engineering for simple requirement (recent N updates), performance issues
+
+**Do this instead:** Keep query simple (limit/offset only), accept O(n) read performance for reasonable file sizes
+
+### Anti-Pattern 4: Separate Authentication for Query API
+
+**What people do:** Create new authentication mechanism for update log query endpoint
+
+**Why it's wrong:** Duplicate logic, inconsistent security model, maintenance burden
+
+**Do this instead:** Reuse existing `AuthMiddleware` with same Bearer token
+
+## Build Order Recommendation
+
+Based on dependency analysis, recommended build order:
+
+### Phase 1: Core Data Structures (no dependencies)
+1. **Create `internal/updatelog/types.go`**
+   - Define `UpdateLogEntry` struct
+   - Define `InstanceUpdateResult` struct
+   - Define JSON tags for serialization
+
+2. **Create `internal/updatelog/recorder.go`**
+   - Implement `UpdateLogRecorder.Record()` method
+   - Transform `instance.UpdateResult` to `UpdateLogEntry`
+   - Unit tests for transformation logic
+
+### Phase 2: Persistence Layer (depends on Phase 1)
+3. **Create `internal/updatelog/store.go`**
+   - Implement `UpdateLogStore.Append()` method
+   - Implement `UpdateLogStore.Query()` method
+   - Handle JSON Lines file operations
+   - Unit tests with temporary files
+
+4. **Create `internal/updatelog/cleanup.go`**
+   - Implement 7-day retention cleanup logic
+   - Parse timestamp from log entries
+   - Delete old entries
+   - Unit tests for date calculations
+
+### Phase 3: Integration (depends on Phase 1 & 2)
+5. **Modify `internal/api/trigger.go`**
+   - Add recorder and store to TriggerHandler
+   - Integrate log recording after update completes
+   - Capture instance logs from LogBuffer
+   - Integration tests
+
+6. **Modify `internal/config/config.go`**
+   - Add UpdateLogConfig struct
+   - Add validation
+   - Set defaults
+
+### Phase 4: Query API (depends on Phase 2)
+7. **Create `internal/api/updatelog_handler.go`**
+   - Implement query handler
+   - Parse limit/offset parameters
+   - Call store.Query()
+   - Return JSON response
+   - Unit tests
+
+8. **Modify `internal/api/server.go`**
+   - Register new route
+   - Apply AuthMiddleware
+   - Integration tests
+
+### Rationale for Build Order
+
+**Why recorder before persistence:**
+- Recorder has no dependencies, can be tested in isolation
+- Defines the data contract (UpdateLogEntry) that persistence uses
+- Allows parallel development of transformation logic
+
+**Why persistence before integration:**
+- Integration tests require working persistence layer
+- File operations are independent of HTTP layer
+- Allows testing persistence with mock recorder
+
+**Why integration before query API:**
+- Query API depends on having data to query
+- Integration tests validate end-to-end recording flow
+- Ensures query API has realistic data to work with
 
 ## Testing Strategy
 
-### Unit Tests
-- **LogBuffer:** Ring buffer edge cases, concurrency, broadcasting
-- **LogBufferManager:** Multi-instance isolation, GetBuffer creation
-- **Starter:** Mock `exec.Cmd`, verify pipes captured
-- **SSE Handler:** Mock buffers, verify event format, heartbeat
+### Unit Tests (isolated, fast)
+- **recorder_test.go:** Verify UpdateResult → UpdateLogEntry transformation
+- **store_test.go:** Verify file append/read with temp files
+- **cleanup_test.go:** Verify retention logic with mock timestamps
 
-### Integration Tests
-- Start real process with log capture → verify logs appear
-- Multiple SSE clients → verify all receive same stream
-- Slow client → verify non-blocking behavior
+### Integration Tests (with dependencies)
+- **trigger_test.go:** Verify log recording during trigger-update flow
+- **updatelog_handler_test.go:** Verify query API with real store
 
-### End-to-End Tests
-- Full application with API + instances
-- Connect SSE client via `EventSource` → verify real-time logs
-- Request history → verify JSON response
-- Client disconnect → verify no goroutine leak (use `runtime.NumGoroutine()`)
+### End-to-End Tests (full system)
+- Start server → Trigger update → Query logs → Verify result
+
+## Configuration Schema
+
+```yaml
+# config.yaml
+update_log:
+  enabled: true              # Enable/disable log recording
+  retention_days: 7          # Keep logs for 7 days
+  max_file_size_mb: 100      # Rotate file if exceeds 100MB
+  log_path: "./logs/update-logs.jsonl"  # Log file path
+```
+
+## Error Handling Strategy
+
+| Error Location | Handling | Response |
+|----------------|----------|----------|
+| Log recording fails | Log error, continue | Return success (update succeeded) |
+| Log persistence fails | Log error, continue | Return success (non-critical) |
+| Log cleanup fails | Log error, continue | Continue operation |
+| Query file read fails | Log error, return error | Return 500 Internal Server Error |
+| Invalid query params | Return error | Return 400 Bad Request |
+
+**Rationale:**
+- Update log recording is non-critical (audit trail, not core functionality)
+- Failed logging should not block successful updates
+- Query errors should be reported to user (expected data unavailable)
 
 ## Sources
 
-### Official Documentation
-- [Go os/exec package](https://pkg.go.dev/os/exec) - StdoutPipe/StderrPipe usage
-- [Go net/http package](https://pkg.go.dev/net/http) - SSE with Flusher interface
-- [MDN Server-Sent Events](https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events) - SSE protocol specification
-
-### Architecture Patterns
-- [How to Build Real-time Applications with Go and SSE](https://oneuptime.com/blog/post/2026-02-01-go-realtime-applications-sse/view) - SSE broker pattern, heartbeat, reconnection (HIGH confidence)
-- [smallnest/ringbuffer](https://github.com/smallnest/ringbuffer) - Thread-safe ring buffer implementation in Go (HIGH confidence)
-- [Capture stdout from command exec in real time](https://stackoverflow.com/questions/48353768) - Real-time pipe reading with goroutines (HIGH confidence)
-
-### Best Practices
-- [Go Channel Patterns](https://oneuptime.com/blog/post/2026-01-23-go-channel-patterns/view) - Non-blocking select, channel buffering (HIGH confidence)
-- [Go errgroup for Goroutine Coordination](https://oneuptime.com/blog/post/2026-01-07-go-errgroup/view) - Context cancellation patterns (HIGH confidence)
+- **Existing Code:** `internal/api/trigger.go` (Phase 28 implementation)
+- **Existing Code:** `internal/instance/manager.go` (UpdateResult structure)
+- **Existing Code:** `internal/logbuffer/buffer.go` (log capture mechanism)
+- **Existing Code:** `internal/api/auth.go` (authentication middleware)
+- **Existing Code:** `internal/logging/daily_rotate.go` (file rotation pattern)
+- **PROJECT.md:** v0.6 milestone requirements (update log recording and query)
 
 ---
-*Architecture research for: Real-time log viewing integration*
-*Researched: 2026-03-16*
+
+*Architecture research for: Update Log Recording and Query System*
+*Researched: 2026-03-26*

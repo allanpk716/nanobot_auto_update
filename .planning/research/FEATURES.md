@@ -1,8 +1,8 @@
 # Feature Research
 
-**Domain:** Real-time log viewing via Server-Sent Events (SSE)
-**Researched:** 2026-03-16
-**Confidence:** HIGH (multiple authoritative sources, official documentation, established patterns)
+**Domain:** Update log recording and query system for nanobot auto-updater
+**Researched:** 2026-03-26
+**Confidence:** HIGH
 
 ## Feature Landscape
 
@@ -12,13 +12,12 @@ Features users assume exist. Missing these = product feels incomplete.
 
 | Feature | Why Expected | Complexity | Notes |
 |---------|--------------|------------|-------|
-| Auto-scroll to latest logs | Real-time viewers must show newest entries automatically; users expect "tail -f" behavior | LOW | Toggle button to pause/resume (Grafana, Logcat pattern) |
-| Pause/Resume streaming | Users need to inspect specific log lines without new entries disrupting view | LOW | Essential for debugging; standard in Grafana Explore, journalctl, Logcat |
-| Instance selection | Project has multi-instance management; log viewer must support selecting which instance to view | MEDIUM | Depends on existing instance selection feature; route param or dropdown |
-| Basic text search/filter | Finding specific log entries is fundamental; users expect Ctrl+F or simple search box | MEDIUM | Grep-like pattern matching; regex support optional for MVP |
-| Circular buffer (fixed memory) | Log viewer cannot consume unbounded memory; recent logs only (e.g., 5000 lines) | LOW | Ring buffer pattern prevents OOM; standard practice in log aggregation |
-| Real-time updates | Logs must appear immediately as generated; no manual refresh | MEDIUM | SSE provides this by design; built-in reconnection on disconnect |
-| Clear/distinguish stdout vs stderr | Differentiating error output from normal output is critical for debugging | LOW | Color coding or prefix/tag to differentiate streams |
+| **Update execution logging** | Every update operation should be recorded for troubleshooting | MEDIUM | Record start/end time, instances updated, success/failure status |
+| **Log persistence** | Logs should survive application restart | LOW | Write to file in JSON Lines format (standard for audit logs) |
+| **Query by time range** | Users need to find recent updates quickly | LOW | Filter logs by timestamp (last N hours/days) |
+| **Log cleanup** | Logs shouldn't grow indefinitely | MEDIUM | Auto-delete logs older than retention period (7 days specified) |
+| **Authentication** | Query API must be protected like trigger-update | LOW | Reuse existing Bearer Token authentication |
+| **Request ID tracking** | Each update should have unique identifier for debugging | LOW | UUID or timestamp-based ID attached to every update operation |
 
 ### Differentiators (Competitive Advantage)
 
@@ -26,13 +25,12 @@ Features that set the product apart. Not required, but valuable.
 
 | Feature | Value Proposition | Complexity | Notes |
 |---------|-------------------|------------|-------|
-| Built-in Web UI | No external tools needed; single binary serves both API and UI | MEDIUM | Embed static files in Go binary; simple HTML/CSS/JS interface |
-| Instance-specific log buffers | Each nanobot instance maintains its own log history | MEDIUM | Map of instance name → circular buffer; isolated log streams |
-| Timestamp preservation | Maintain original log timestamps from nanobot process, not arrival time | LOW | Prefix logs with nanosecond timestamps; critical for debugging timing issues |
-| Connection status indicator | Visual feedback when SSE connection is active/reconnecting/disconnected | LOW | Browser EventSource readyState; improves user confidence |
-| Log line highlighting | Highlight errors (stderr) or search matches in different colors | MEDIUM | CSS classes for visual distinction; aids rapid scanning |
-| Gzip compression for SSE | Reduce bandwidth for high-volume log streams | LOW | Be careful: can disable streaming in some browsers; test thoroughly |
-| Configurable buffer size | Allow users to adjust log retention (default 5000, config in YAML) | LOW | Instance-level config option; trade memory for history depth |
+| **Instance-level detail** | See which specific instances succeeded/failed | MEDIUM | Record per-instance status, error messages, stdout/stderr |
+| **Full output capture** | Complete stdout/stderr for debugging failed updates | MEDIUM | Link to existing ring buffer logs or capture separately |
+| **Pagination** | Query large datasets efficiently | LOW | Standard limit/offset pattern for API responses |
+| **Filter by status** | Quickly find failed updates vs successful ones | LOW | Add `status` query parameter (success/failed/all) |
+| **Trigger source tracking** | Know who/what initiated the update | LOW | Record HTTP client info, timestamp, authentication details |
+| **Duration tracking** | Measure how long updates take | LOW | Calculate and store elapsed time for performance analysis |
 
 ### Anti-Features (Commonly Requested, Often Problematic)
 
@@ -40,187 +38,264 @@ Features that seem good but create problems.
 
 | Feature | Why Requested | Why Problematic | Alternative |
 |---------|---------------|-----------------|-------------|
-| Full log history (unlimited buffer) | "I want to see all logs since instance started" | Unbounded memory growth → OOM crash; Go process killed by OS | Fixed circular buffer (5000 lines); export to file if needed |
-| Bidirectional communication (WebSocket) | "Client should send filter commands to server" | SSE is simpler for one-way streaming; WebSocket adds complexity for minimal gain | SSE for streaming; separate HTTP API endpoints for control operations |
-| Log persistence to disk | "Save all logs for later analysis" | Not the goal of real-time viewer; file I/O overhead; disk space management | Keep existing log file logging; real-time viewer is for live debugging only |
-| Complex query language | "SQL-like queries on logs" | Over-engineering for MVP; steep learning curve; performance issues | Simple text search/grep; defer advanced queries to future version |
-| Authentication/Authorization | "Protect log endpoint with login" | Existing HTTP API likely already has auth (or local-only); adds complexity for internal tool | Rely on existing API auth; localhost-only binding; firewall rules |
-| Binary log format support | "Efficient binary encoding" | SSE is text-only; adds serialization complexity; debugging harder | Plain text logs; structured JSON logs if needed (still text-based) |
-| Multiple simultaneous log views | "Merge logs from multiple instances in one view" | Makes log correlation harder; interleaving logic complex; confusing UX | Instance selection; one instance at a time; clearer debugging |
+| **Unlimited log retention** | Keep all history forever | Storage grows unbounded, query performance degrades | Implement 7-day retention with clear documentation |
+| **Database storage** | Better querying with SQL | Adds database dependency to simple file-based system | JSON Lines format provides simple querying without DB overhead |
+| **Real-time log streaming** | Watch updates as they happen | Already implemented in v0.4 via SSE, don't duplicate | Reuse existing `/api/v1/logs/:instance` SSE endpoint |
+| **Log search (text search)** | Find specific error messages | Adds significant complexity (regex, indexing) | Defer to v2; for now, query returns structured data that's easy to filter client-side |
+| **Log export (CSV/Excel)** | Download for external analysis | Adds format conversion complexity | JSON API response is already exportable; client can transform if needed |
+| **Multi-tenant log isolation** | Separate logs per user | System is single-tenant (one admin user) | Keep simple; all logs are for single operator |
 
 ## Feature Dependencies
 
 ```
-[Real-time SSE streaming]
-    └──requires──> [stdout/stderr capture from nanobot process]
-                       └──requires──> [Process lifecycle management (existing v0.2 feature)]
+[HTTP POST /api/v1/trigger-update] (existing Phase 28)
+    └──triggers──> [Update execution logging]
+                       └──writes──> [JSON Lines file]
+                                          └──read-by──> [GET /api/v1/update-logs]
+                                                              └──requires──> [Bearer Token auth] (existing Phase 28)
 
-[Circular buffer]
-    └──requires──> [Memory management strategy]
-    └──requires──> [Instance-specific buffer map]
+[Update execution logging]
+    └──requires──> [Request ID generation]
+    └──requires──> [Instance status tracking] (existing v0.2)
 
-[Instance selection]
-    └──requires──> [Multi-instance configuration (v0.2 feature)]
-    └──requires──> [Instance name → log buffer mapping]
+[JSON Lines file]
+    └──managed-by──> [Log cleanup job]
+                         └──requires──> [Retention policy config]
 
-[Web UI]
-    └──requires──> [SSE endpoint]
-    └──requires──> [Static file serving (Go http.FileServer)]
-
-[Pause/Resume]
-    └──requires──> [Client-side buffer (browser holds logs while paused)]
-    └──requires──> [Auto-scroll toggle button]
-
-[Text search]
-    └──requires──> [Client-side search implementation (browser Ctrl+F or custom JS)]
-    └──enhances──> [Log highlighting feature]
-
-[Log highlighting]
-    └──enhances──> [Text search]
-    └──requires──> [CSS styling for match highlighting]
+[GET /api/v1/update-logs]
+    └──supports──> [Pagination (limit/offset)]
+    └──supports──> [Status filtering]
+    └──supports──> [Time range filtering]
 ```
 
 ### Dependency Notes
 
-- **SSE requires stdout/stderr capture:** Must intercept nanobot process output before SSE can stream it. Use `cmd.StdoutPipe()` and `cmd.StderrPipe()` in Go.
-- **Circular buffer requires instance map:** Each instance needs isolated buffer; global buffer would mix logs from different instances.
-- **Instance selection requires v0.2 feature:** Existing multi-instance management provides instance list; log viewer extends it.
-- **Pause/Resume uses client-side buffering:** Server keeps streaming; client discards or buffers based on pause state. Simpler than server-side pause.
-- **Text search enhances highlighting:** Search can trigger highlighting; both use similar DOM manipulation patterns.
-- **Web UI conflicts with authentication (if complex):** Simple auth (API key in URL param) is fine; OAuth/SAML would overcomplicate internal tool.
+- **Update logging requires trigger-update endpoint:** Logging only happens when updates are triggered via existing API
+- **Query API requires Bearer Token auth:** Reuse authentication from Phase 28 for consistency
+- **Log cleanup requires retention policy:** Need configuration for how long to keep logs (7 days specified in PROJECT.md)
+- **Instance status tracking (existing v0.2):** Reuse multi-instance error aggregation and reporting
+- **Real-time streaming (existing v0.4):** Don't duplicate SSE functionality; update logs are historical records
 
 ## MVP Definition
 
-### Launch With (v0.4)
+### Launch With (v0.6)
 
 Minimum viable product — what's needed to validate the concept.
 
-- [x] stdout/stderr capture from nanobot process — Core requirement; without this, no logs to show
-- [x] Circular buffer per instance (5000 lines) — Prevents memory issues; standard practice
-- [x] SSE endpoint for streaming logs (`/api/instances/{name}/logs/stream`) — Real-time delivery mechanism
-- [x] Instance selection — Multi-instance context requires this; cannot view all logs at once
-- [x] Basic Web UI with auto-scroll — Simple HTML page with EventSource connection
-- [x] Pause/Resume toggle — Essential for inspecting logs; standard pattern
-- [x] Distinguish stdout vs stderr (color coding) — Critical for debugging; visual differentiation
+- [x] **Record update metadata** — Update ID, start/end timestamp, trigger source, overall status
+- [x] **Record instance results** — For each instance: success/failure, error message, stdout/stderr reference
+- [x] **JSON Lines file persistence** — Append-only log file in standard format
+- [x] **GET /api/v1/update-logs endpoint** — Query recent update history
+- [x] **Pagination support** — limit and offset parameters (standard REST pattern)
+- [x] **Bearer Token authentication** — Reuse existing auth mechanism
+- [x] **7-day log cleanup** — Time-based deletion of old logs (on startup or scheduled)
 
-### Add After Validation (v0.4.x)
+### Add After Validation (v0.6.x)
 
 Features to add once core is working.
 
-- [ ] Text search/filter — Users will request this quickly; common pattern (Grafana, journalctl)
-- [ ] Log line highlighting — Improves usability; relatively simple CSS addition
-- [ ] Connection status indicator — Helps users understand when streaming is active vs disconnected
-- [ ] Configurable buffer size — Power users may want more history; easy config addition
-- [ ] Timestamp preservation — Ensure logs show when they were generated, not when received
+- [ ] **Filter by status** — Query parameter `?status=success|failed`
+- [ ] **Filter by time range** — Query parameters `?from=<timestamp>&to=<timestamp>`
+- [ ] **Log file rotation** — Rotate logs daily or by size to prevent single large file
+- [ ] **Configurable retention** — Allow customization of 7-day default
 
-### Future Consideration (v0.5+)
+### Future Consideration (v2+)
 
 Features to defer until product-market fit is established.
 
-- [ ] Log export (download as file) — Useful for sharing logs; requires UI button and endpoint
-- [ ] Regex search support — Advanced users only; adds complexity to search UI
-- [ ] Log level filtering (INFO/WARN/ERROR) — Requires structured logging from nanobot; may not apply
-- [ ] Dark mode UI — Nice to have; CSS theming; low priority
-- [ ] Multiple log views (side-by-side comparison) — Complex UI; unclear value proposition
+- [ ] **Full-text search** — Search log contents (requires indexing)
+- [ ] **Log export formats** — CSV, Excel, PDF export
+- [ ] **Multi-file log storage** — Partition logs by day for faster queries
+- [ ] **Log compression** — Compress old logs instead of deleting
+- [ ] **Log analytics** — Statistics on update success rates, duration trends
 
 ## Feature Prioritization Matrix
 
 | Feature | User Value | Implementation Cost | Priority |
 |---------|------------|---------------------|----------|
-| stdout/stderr capture | HIGH | MEDIUM | P1 |
-| SSE streaming endpoint | HIGH | MEDIUM | P1 |
-| Circular buffer per instance | HIGH | LOW | P1 |
-| Instance selection | HIGH | LOW | P1 |
-| Auto-scroll | HIGH | LOW | P1 |
-| Pause/Resume | HIGH | LOW | P1 |
-| Basic Web UI | HIGH | MEDIUM | P1 |
-| stdout/stderr distinction | HIGH | LOW | P1 |
-| Text search/filter | MEDIUM | MEDIUM | P2 |
-| Log highlighting | MEDIUM | LOW | P2 |
-| Connection status | MEDIUM | LOW | P2 |
-| Timestamp preservation | MEDIUM | LOW | P2 |
-| Configurable buffer size | LOW | LOW | P3 |
-| Log export | LOW | MEDIUM | P3 |
-| Regex search | LOW | MEDIUM | P3 |
-| Log level filtering | LOW | HIGH | P3 |
+| Update execution logging | HIGH | MEDIUM | P1 |
+| JSON Lines file persistence | HIGH | LOW | P1 |
+| GET /api/v1/update-logs | HIGH | LOW | P1 |
+| Bearer Token authentication | HIGH | LOW | P1 (reuse existing) |
+| Request ID tracking | HIGH | LOW | P1 |
+| Pagination (limit/offset) | MEDIUM | LOW | P1 |
+| 7-day log cleanup | HIGH | MEDIUM | P1 |
+| Instance-level detail | HIGH | MEDIUM | P1 |
+| Full output capture | MEDIUM | MEDIUM | P2 |
+| Filter by status | MEDIUM | LOW | P2 |
+| Filter by time range | MEDIUM | LOW | P2 |
+| Log file rotation | LOW | MEDIUM | P2 |
+| Configurable retention | LOW | LOW | P3 |
+| Full-text search | LOW | HIGH | P3 |
+| Log export formats | LOW | MEDIUM | P3 |
+| Multi-file log storage | LOW | MEDIUM | P3 |
+| Log compression | LOW | MEDIUM | P3 |
+| Log analytics | LOW | HIGH | P3 |
 
 **Priority key:**
-- P1: Must have for launch (MVP)
-- P2: Should have, add when possible (post-MVP)
-- P3: Nice to have, future consideration (v0.5+)
+- P1: Must have for v0.6 launch
+- P2: Should have, add when possible (v0.6.x)
+- P3: Nice to have, future consideration (v2+)
+
+## What to Record in Update Logs
+
+Based on research and project requirements, each update log entry should contain:
+
+### Core Metadata
+```json
+{
+  "update_id": "uuid-v4",
+  "triggered_at": "2026-03-26T10:30:00.123Z",
+  "completed_at": "2026-03-26T10:30:45.456Z",
+  "duration_ms": 45333,
+  "trigger_source": "HTTP API",
+  "status": "success|partial|failed",
+  "authenticated_as": "bearer-token-identifier"
+}
+```
+
+### Instance-Level Results
+```json
+{
+  "instances": [
+    {
+      "name": "gateway",
+      "port": 18790,
+      "status": "success|failed",
+      "error_message": "string or null",
+      "started_at": "2026-03-26T10:30:10.000Z",
+      "completed_at": "2026-03-26T10:30:25.000Z",
+      "duration_ms": 15000,
+      "stdout_ref": "ring-buffer-id or null",
+      "stderr_ref": "ring-buffer-id or null"
+    }
+  ]
+}
+```
+
+### Aggregated Summary
+```json
+{
+  "summary": {
+    "total_instances": 2,
+    "successful": 1,
+    "failed": 1,
+    "skipped": 0
+  }
+}
+```
+
+## Query API Design
+
+### Endpoint
+```
+GET /api/v1/update-logs?limit=20&offset=0&status=failed
+```
+
+### Request Parameters
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `limit` | int | 20 | Max number of records to return |
+| `offset` | int | 0 | Number of records to skip |
+| `status` | string | "all" | Filter by status: "all", "success", "failed", "partial" |
+| `from` | timestamp | null | Filter logs after this timestamp (ISO 8601) |
+| `to` | timestamp | null | Filter logs before this timestamp (ISO 8601) |
+
+### Response Format
+```json
+{
+  "logs": [
+    {
+      "update_id": "uuid-v4",
+      "triggered_at": "2026-03-26T10:30:00.123Z",
+      "completed_at": "2026-03-26T10:30:45.456Z",
+      "duration_ms": 45333,
+      "status": "partial",
+      "summary": {
+        "total_instances": 2,
+        "successful": 1,
+        "failed": 1,
+        "skipped": 0
+      },
+      "instances": [ /* ... */ ]
+    }
+  ],
+  "pagination": {
+    "total": 150,
+    "limit": 20,
+    "offset": 0,
+    "has_more": true
+  }
+}
+```
+
+### Authentication
+- Reuse existing Bearer Token authentication from Phase 28
+- Same token used for `/api/v1/trigger-update` and `/api/v1/update-logs`
+- Return 401 Unauthorized if token invalid or missing
+
+## Log Cleanup Strategy
+
+### Retention Policy
+- **Default:** 7 days (as specified in PROJECT.md)
+- **Implementation:** Time-based deletion (logs older than `now() - 7 days`)
+- **Trigger:** Run on application startup + scheduled daily cleanup
+
+### Cleanup Approaches
+Based on research, three main strategies:
+
+1. **Simple file scan (RECOMMENDED for v0.6)**
+   - Scan JSON Lines file on startup
+   - Parse each line's timestamp
+   - Delete entries older than retention period
+   - Rewrite file without old entries
+   - Simple, no external dependencies
+
+2. **Daily partition files (v2 option)**
+   - Create separate log file per day: `update-logs-2026-03-26.jsonl`
+   - Delete entire files older than 7 days
+   - Faster cleanup (no parsing required)
+   - Query must read from multiple files
+
+3. **Database-backed (out of scope)**
+   - Store logs in SQLite/PostgreSQL
+   - Use SQL `DELETE WHERE created_at < now() - interval '7 days'`
+   - Overkill for this use case
+
+### Recommended Approach
+For v0.6: **Simple file scan on startup**
+- Load entire file into memory
+- Parse each JSON line
+- Filter out entries older than retention
+- Write filtered entries back to file
+- Log cleanup statistics (entries removed, file size before/after)
 
 ## Competitor Feature Analysis
 
-| Feature | Grafana Explore | journalctl | Logcat (Android) | Our Approach |
-|---------|-----------------|------------|------------------|--------------|
-| Real-time streaming | ✓ (Live tail) | ✓ (-f flag) | ✓ (Auto-scroll) | ✓ (SSE) |
-| Pause/Resume | ✓ (Pause button) | ✗ (Ctrl+C) | ✓ (Toggle button) | ✓ (Toggle button) |
-| Instance selection | N/A | N/A | N/A | ✓ (Multi-instance context) |
-| Text search | ✓ (Query language) | ✓ (grep) | ✓ (Search box) | ✓ (Simple search; no query language) |
-| Auto-scroll | ✓ | ✓ | ✓ (Default) | ✓ (Default, with toggle) |
-| stdout/stderr distinction | ✓ (Colors) | ✗ | ✓ (Colors) | ✓ (Color coding) |
-| Circular buffer | ✓ (Configurable) | ✗ (Persistent) | ✓ (Ring buffer) | ✓ (5000 lines, configurable) |
-| Web UI | ✓ (Full dashboard) | ✗ (CLI only) | ✓ (Android Studio) | ✓ (Simple embedded UI) |
-| Export logs | ✓ (Download) | ✓ (Redirect to file) | ✓ (Export) | ✗ (Future: v0.5+) |
-| Authentication | ✓ (Full RBAC) | ✗ (Local only) | ✗ (Local only) | ✗ (Rely on localhost/external auth) |
-
-**Our Differentiation:**
-- **Instance-aware:** Built for multi-instance nanobot management (unique context)
-- **Single binary:** No external dependencies; embed UI in Go executable
-- **SSE over WebSocket:** Simpler implementation; firewall-friendly; built-in reconnection
-- **Opinionated simplicity:** Fixed buffer; no query language; focus on real-time viewing, not analysis
+| Feature | Typical Approach | Our Approach | Rationale |
+|---------|------------------|--------------|-----------|
+| Log format | JSON Lines | JSON Lines | Industry standard, easy to parse, append-friendly |
+| Retention | Configurable (7-90 days) | 7 days fixed | Simple default, configurable in v0.6.x |
+| Query API | REST with pagination | REST with pagination | Standard pattern, easy to implement |
+| Authentication | API keys or OAuth | Bearer Token | Reuse existing auth, simple and standard |
+| Cleanup | Background job or cron | Startup + scheduled | Simple implementation, no external dependencies |
+| Storage | Database or files | JSON Lines file | No DB dependency, good for single-tenant |
+| Full output | Link to object storage | Reference ring buffer | Reuse v0.4 log buffer, no separate storage |
 
 ## Sources
 
-**SSE Best Practices & Implementation:**
-- [Real-Time Data Streaming with Server-Sent Events (SSE) - Dev.to](https://dev.to/serifcolakel/real-time-data-streaming-with-server-sent-events-sse-1gb2)
-- [Server-Sent Events: A Practical Guide for the Real World](https://tigerabrodi.blog/server-sent-events-a-practical-guide-for-the-real-world)
-- [Using server-sent events - MDN Web Docs](https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events/Using_server-sent_events)
-- [Server-Sent Events (SSE): A Beginner's Guide - Part II (LinkedIn)](https://www.linkedin.com/pulse/server-sent-events-sse-beginners-guide-part-ii-began-balakrishnan-sxove) — Best practices: limit clients in memory, Redis offload, gzip caution
-- [Mastering SSE with Python and Go - Dev.to](https://dev.to/philip_zhang_854092d88473/mastering-server-sent-events-sse-with-python-and-go-for-real-time-data-streaming-38bf)
-
-**SSE vs WebSocket Comparison:**
-- [Streaming HTTP vs. WebSocket vs. SSE - Dev.to](https://dev.to/mechcloud_academy/streaming-http-vs-websocket-vs-sse-a-comparison-for-real-time-data-1geo)
-- [Ably: WebSockets vs SSE](https://ably.com/blog/websockets-vs-sse)
-- [freeCodeCamp: SSE vs WebSockets](https://www.freecodecamp.org/news/server-sent-events-vs-websockets/)
-- [SoftwareMill: SSE vs WebSockets](https://softwaremill.com/sse-vs-websockets-comparing-real-time-communication-protocols/)
-
-**Log Viewer UI Features:**
-- [Logs in Explore - Grafana](https://grafana.com/docs/grafana/latest/visualizations/explore/logs-integration/) — Pause button, live tailing
-- [How to disable the autoscroll feature in Logcat? - Stack Overflow](https://stackoverflow.com/questions/6788491/how-to-disable-the-autoscroll-feature-in-logcat)
-- [How to Monitor Error Logs in Real-Time - Last9](https://last9.io/blog/how-to-monitor-error-logs-in-real-time/) — Interactive interfaces with scroll, pause, search
-- [24 Open-source Free Log Viewers - Medevel](https://medevel.com/log-viewer-apps-24/) — Compilation of log viewer features
-- [Grafana Logs Table UI](https://grafana.com/whats-new/2023-12-13-logs-table-ui/) — Point-and-click interface design
-
-**Observability & Table Stakes:**
-- [The New Table Stakes of Observability - Observability 360](https://observability-360.com/article/ViewArticle?id=new-table-stakes-of-observability) — Logs, Metrics, Traces as table stakes
-- [2026 Predictions: Unified Observability - Splunk](https://www.splunk.com/en_us/blog/ciso-circle/unified-observability-business-leadership-benefits.html) — Real-time protection as essential
-
-**Circular Buffer & Memory Management:**
-- [When to Consider Using a Circular Buffer - AlgoCademy](https://algocademy.com/blog/when-to-consider-using-a-circular-buffer-a-comprehensive-guide/)
-- [Circular buffer - Wikipedia](https://en.wikipedia.org/wiki/Circular_buffer)
-- [Implement Circular Buffer in ASP.NET Core](https://ssojet.com/data-structures/implement-circular-buffer-in-aspnet-core)
-
-**Go SSE Implementation:**
-- [How to Implement Server-Sent Events in Go - freeCodeCamp](https://www.freecodecamp.org/news/how-to-implement-server-sent-events-in-go/)
-- [How to Implement Server-Sent Events in Go - ITNEXT](https://itnext.io/how-to-implement-server-sent-events-in-go-f9d8a2e7d5ee)
-- [How I Implemented Server Sent Events in GO - Medium](https://medium.com/@kristian15994/how-i-implemented-server-sent-events-in-go-3a55edcf4607)
-- [Build Real-time Applications with Go and SSE - OneUptime](https://oneuptime.com/blog/post/2026-02-01-go-realtime-applications-sse/view)
-- [GoFrame SSE Implementation Guide](https://goframe.org/articles/go-sse-implementation-guide)
-
-**Go stdout/stderr Capture:**
-- [how to properly capture all stdout/stderr - Stack Overflow](https://stackoverflow.com/questions/38229584/how-to-properly-capture-all-stdout-stderr)
-- [Golang: Handling System Calls and Capturing stderr](https://tiagomelo.info/go/syscall/2023/12/15/golang-handling-system-calls-capturing-stderr-tiago-melo-vqgsf.html)
-- [Prefix Streaming stdout & stderr in Go](https://kvz.io/blog/2013-07-12-prefix-streaming-stdout-and-stderr-in-golang)
-- [Capturing console output in Go tests](https://rednafi.com/go/capture-console-output/)
-
-**Security & Authentication:**
-- [What is User Authentication? Best Practices (2026) - Authgear](https://www.authgear.com/post/what-is-user-authentication-guide-2026)
-- [API Security Trends 2026 - Curity.io](https://curity.io/blog/api-security-trends-2026/)
-- [Best Practices for Log Management in 2026 - LogManager](https://logmanager.com/blog/log-management/log-management-best-practices/)
-- [Zero Trust in 2026 - Exabeam](https://www.exabeam.com/explainers/zero-trust/zero-trust-in-2026-principles-technologies-best-practices/)
+- [Best Practices and Key Components of Log Management in 2026](https://logmanager.com/blog/log-management/log-management-best-practices/) — Industry best practices for log management
+- [11 Efficient Log Management Best Practices to Know in 2026](https://www.strongdm.com/blog/log-management-best-practices) — Strategy formulation, retention policies
+- [How to Build Request ID Propagation](https://oneuptime.com/blog/post/2026-01-30-request-id-propagation/view) — Request ID tracking for debugging
+- [Log Retention: Policies, Best Practices & Tools](https://last9.io/blog/log-retention/) — Retention strategies and compliance
+- [Time-based Retention Strategies in Postgres](https://blog.sequinstream.com/time-based-retention-strategies-in-postgres/) — Cleanup implementation patterns (pg_cron, partitions)
+- [Audit Logging Best Practices](https://www.sonarsource.com/resources/library/library/audit-logging/) — What to record in audit logs
+- [Log Format Standards: JSON, XML, and Key-Value Explained](https://last9.io/blog/log-format/) — JSON Lines format advantages
+- [REST API Pagination Best Practices](https://stackoverflow.com/questions/53288275) — No formal RFC standard, but limit/offset is de facto pattern
+- [Golang Log Management Libraries](https://github.com/olegiv/go-logger) — lumberjack for log rotation
+- [Kafka Retention: 7-day default](https://www.automq.com/blog/comprehensive-guide-kafka-retention-best-practices) — Industry standard retention period
 
 ---
 
-*Feature research for: Real-time log viewing via SSE*
-*Researched: 2026-03-16*
+*Feature research for: update log recording and query system*
+*Researched: 2026-03-26*
