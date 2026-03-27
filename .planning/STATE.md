@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v0.6
 milestone_name: Update Log Recording and Query System
-status: SHIPPED 2026-03-24
-stopped_at: Phase 30 context gathered
-last_updated: "2026-03-27T02:38:17.076Z"
-last_activity: 2026-03-26 — Roadmap created, 9 requirements mapped to 4 phases
+status: executing
+stopped_at: Completed 30-01-PLAN.md
+last_updated: "2026-03-27T12:40:21.038Z"
+last_activity: 2026-03-27
 progress:
   total_phases: 4
   completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
+  total_plans: 2
+  completed_plans: 1
   percent: 0
 ---
 
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-26)
 
 **Core value:** 自动保持 nanobot 处于最新版本,无需用户手动干预。
-**Current focus:** v0.6 Update Log Recording and Query System — Phase 30
+**Current focus:** Phase 30 — Log Structure and Recording
 
 ## Current Position
 
-Phase: 30 of 33 (Log Structure and Recording)
-Plan: 0 of 3 in current phase
-Status: Ready to plan
-Last activity: 2026-03-26 — Roadmap created, 9 requirements mapped to 4 phases
+Phase: 30 (Log Structure and Recording) — EXECUTING
+Plan: 2 of 2
+Status: Ready to execute
+Last activity: 2026-03-27
 
 Progress: [░░░░░░░░░░░░░░░░░░░░] 0%
 
@@ -55,6 +55,7 @@ Progress: [░░░░░░░░░░░░░░░░░░░░] 0%
 - Trend: Stable, good velocity
 
 *Updated after each plan completion*
+| Phase 30 P01 | 4min | 2 tasks | 6 files |
 
 ## v0.6 Milestone Overview
 
@@ -86,6 +87,10 @@ Recent decisions for v0.6:
 - [v0.6-roadmap]: Implement 7-day retention policy with automatic cleanup (balance disk space and audit needs)
 - [v0.6-roadmap]: Use bufio.Scanner for streaming read (avoid memory issues with 1000+ records)
 - [v0.6-roadmap]: Non-blocking log recording (recording failures don't affect update operations)
+- [Phase 30]: Deduplicate instance details when both StopFailed and StartFailed reference same instance
+- [Phase 30]: GetAll() returns defensive copy to prevent external modification of internal state
+- [Phase 30]: Record() returns nil error for non-blocking semantics (Phase 31 adds file persistence)
+- [Phase 30]: BuildInstanceDetails uses map-based deduplication for O(n) instance processing
 
 ### Pending Todos
 
@@ -106,15 +111,15 @@ None yet.
 ## Session Continuity
 
 Last activity: 2026-03-26 — Roadmap created, all files written
-Last session: 2026-03-27T02:38:17.072Z
-Stopped at: Phase 30 context gathered
-Resume file: .planning/phases/30-log-structure-and-recording/30-CONTEXT.md
+Last session: 2026-03-27T12:40:21.034Z
+Stopped at: Completed 30-01-PLAN.md
+Resume file: None
 
 ## Previous Milestone: v0.5 Core Monitoring and Automation
 
 **Goal:** 补全核心监控和自动化功能，实现启动时自动启动实例、实例健康监控、Google 连通性监控、HTTP API 触发更新和 HTTP help 接口
 
-**Status:** SHIPPED 2026-03-24
+**Status:** Ready to execute
 
 **Total requirements:** 22+ (4 AUTOSTART + 4 HEALTH + 6 MONITOR + 6 API + 2+ HELP)
 
