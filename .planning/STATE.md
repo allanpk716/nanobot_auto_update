@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v0.6
 milestone_name: Update Log Recording and Query System
-status: executing
-stopped_at: Completed 30-01-PLAN.md
-last_updated: "2026-03-27T12:40:21.038Z"
+status: verifying
+stopped_at: Completed 30-02-PLAN.md
+last_updated: "2026-03-27T12:54:02.923Z"
 last_activity: 2026-03-27
 progress:
   total_phases: 4
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 2
-  completed_plans: 1
+  completed_plans: 2
   percent: 0
 ---
 
@@ -27,7 +27,7 @@ See: .planning/PROJECT.md (updated 2026-03-26)
 
 Phase: 30 (Log Structure and Recording) — EXECUTING
 Plan: 2 of 2
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-03-27
 
 Progress: [░░░░░░░░░░░░░░░░░░░░] 0%
@@ -56,6 +56,7 @@ Progress: [░░░░░░░░░░░░░░░░░░░░] 0%
 
 *Updated after each plan completion*
 | Phase 30 P01 | 4min | 2 tasks | 6 files |
+| Phase 30 P02 | 10min | 1 tasks | 3 files |
 
 ## v0.6 Milestone Overview
 
@@ -91,6 +92,9 @@ Recent decisions for v0.6:
 - [Phase 30]: GetAll() returns defensive copy to prevent external modification of internal state
 - [Phase 30]: Record() returns nil error for non-blocking semantics (Phase 31 adds file persistence)
 - [Phase 30]: BuildInstanceDetails uses map-based deduplication for O(n) instance processing
+- [Phase 30]: TriggerUpdater interface introduced for mock-friendly testing instead of concrete *InstanceManager
+- [Phase 30]: Nil-safe UpdateLogger: handler checks nil before Record(), non-blocking error logging
+- [Phase 30]: UUID v4 generated at handler entry before TriggerUpdate for full lifecycle tracing
 
 ### Pending Todos
 
@@ -111,15 +115,15 @@ None yet.
 ## Session Continuity
 
 Last activity: 2026-03-26 — Roadmap created, all files written
-Last session: 2026-03-27T12:40:21.034Z
-Stopped at: Completed 30-01-PLAN.md
+Last session: 2026-03-27T12:54:02.919Z
+Stopped at: Completed 30-02-PLAN.md
 Resume file: None
 
 ## Previous Milestone: v0.5 Core Monitoring and Automation
 
 **Goal:** 补全核心监控和自动化功能，实现启动时自动启动实例、实例健康监控、Google 连通性监控、HTTP API 触发更新和 HTTP help 接口
 
-**Status:** Ready to execute
+**Status:** Phase complete — ready for verification
 
 **Total requirements:** 22+ (4 AUTOSTART + 4 HEALTH + 6 MONITOR + 6 API + 2+ HELP)
 
