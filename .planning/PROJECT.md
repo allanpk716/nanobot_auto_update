@@ -12,13 +12,19 @@
 
 ### Validated
 
-**v0.5 核心监控和自动化** — 2026-03-24:
-- ✓ 启动时自动启动所有配置的实例 — Phase 24
-- ✓ 实例健康监控（检测实例是否正常运行） — Phase 25
-- ✓ Google 连通性监控服务（定时测试 google.com） — Phase 26
-- ✓ 网络连通性变化通知（Pushover + 1分钟冷却） — Phase 27
-- ✓ HTTP API 触发更新端点 (/api/v1/trigger-update) — Phase 28
-- ✓ HTTP help 接口 (/api/v1/help) — Phase 29
+### Active
+
+- LOG-01: 更新日志数据结构 — Phase 30 ✓
+- LOG-02: 更新触发时记录日志 — Phase 30 ✓
+- LOG-03: 非阻塞日志记录 — Phase 30 ✓
+- LOG-04: 更新 ID 返回给客户端 — Phase 30 ✓
+- STORE-01: JSONL 持久化 — Phase 31 (下一步)
+- STORE-02: 7天自动清理 — Phase 31
+- QUERY-01: 查询 API — Phase 32
+- QUERY-02: 分页参数 — Phase 32
+- QUERY-03: 认证保护 — Phase 32
+
+### Out of Scope
 
 **v0.4 实时日志查看** — 2026-03-20:
 - ✓ 环形缓冲区（5000行容量）和并发读写 — v0.4
@@ -48,11 +54,20 @@
 - ✓ 记录日志到文件，支持日志轮转 — v1.0
 - ✓ --update-now 立即更新模式 (JSON 输出) — v1.0
 
-### Active
+### Validated
 
-No active requirements — v0.5 milestone complete.
+**v0.6 Update Log Recording** — 2026-03-27:
+- ✓ UpdateLog 数据模型 (UUID, 时间戳, 触发方式, 实例详情) — Phase 30
+- ✓ UpdateLogger 组件 (线程安全 Record/GetAll) — Phase 30
+- ✓ TriggerHandler 集成日志记录 (UUID v4, 非阻塞) — Phase 30
 
-### Out of Scope
+**v0.5 核心监控和自动化** — 2026-03-24:
+- ✓ 启动时自动启动所有配置的实例 — Phase 24
+- ✓ 实例健康监控（检测实例是否正常运行） — Phase 25
+- ✓ Google 连通性监控服务（定时测试 google.com） — Phase 26
+- ✓ 网络连通性变化通知（Pushover + 1分钟冷却） — Phase 27
+- ✓ HTTP API 触发更新端点 (/api/v1/trigger-update) — Phase 28
+- ✓ HTTP help 接口 (/api/v1/help) — Phase 29
 
 - GUI 界面 — 命令行工具，无需图形界面
 - 更新历史记录 — 保持简单，不存储历史
@@ -219,4 +234,4 @@ instances:
 
 ---
 
-*Last updated: 2026-03-26 starting v0.6 milestone*
+*Last updated: 2026-03-27 Phase 30 complete*
