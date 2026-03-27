@@ -9,6 +9,7 @@ import (
 
 	"github.com/HQGroup/nanobot-auto-updater/internal/config"
 	"github.com/HQGroup/nanobot-auto-updater/internal/instance"
+	"github.com/HQGroup/nanobot-auto-updater/internal/updatelog"
 	"github.com/HQGroup/nanobot-auto-updater/internal/web"
 )
 
@@ -65,8 +66,11 @@ func NewServer(cfg *config.APIConfig, im *instance.InstanceManager, fullCfg *con
 	mux.HandleFunc("GET /", web.NewHomePageHandler(im, logger))
 	mux.HandleFunc("GET /logs", web.NewHomePageHandler(im, logger))
 
+	// Create update logger (LOG-01: in-memory storage, Phase 31 adds file persistence)
+	updateLogger := updatelog.NewUpdateLogger(logger)
+
 	// Trigger update endpoint with auth (Phase 28: API-01, API-02)
-	triggerHandler := NewTriggerHandler(im, cfg, logger)
+	triggerHandler := NewTriggerHandler(im, cfg, logger, updateLogger)
 	authMiddleware := AuthMiddleware(cfg.BearerToken, logger)
 
 	// Wrap handler with auth middleware
