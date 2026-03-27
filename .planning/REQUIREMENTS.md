@@ -4,7 +4,7 @@
 
 **Goal:** 记录每次 HTTP API 触发的更新操作,并提供查询接口获取更新历史日志
 
-**Status:** Active — Defining requirements
+**Status:** Active — Requirements mapped to phases
 
 ---
 
@@ -141,17 +141,15 @@
 
 | REQ-ID | Phase | Plan | Status |
 |--------|-------|------|--------|
-| LOG-01 | TBD | TBD | Not started |
-| LOG-02 | TBD | TBD | Not started |
-| LOG-03 | TBD | TBD | Not started |
-| LOG-04 | TBD | TBD | Not started |
-| STORE-01 | TBD | TBD | Not started |
-| STORE-02 | TBD | TBD | Not started |
-| QUERY-01 | TBD | TBD | Not started |
-| QUERY-02 | TBD | TBD | Not started |
-| QUERY-03 | TBD | TBD | Not started |
-
-*Traceability will be filled by roadmap creation*
+| LOG-01 | Phase 30 | TBD | Not started |
+| LOG-02 | Phase 30 | TBD | Not started |
+| LOG-03 | Phase 30 | TBD | Not started |
+| LOG-04 | Phase 30 | TBD | Not started |
+| STORE-01 | Phase 31 | TBD | Not started |
+| STORE-02 | Phase 31 | TBD | Not started |
+| QUERY-01 | Phase 32 | TBD | Not started |
+| QUERY-02 | Phase 32 | TBD | Not started |
+| QUERY-03 | Phase 32 | TBD | Not started |
 
 ---
 
