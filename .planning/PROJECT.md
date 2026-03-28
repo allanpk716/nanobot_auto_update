@@ -20,9 +20,9 @@
 - LOG-04: 更新 ID 返回给客户端 — Phase 30 ✓
 - STORE-01: JSONL 持久化 — Phase 31 ✓
 - STORE-02: 7天自动清理 — Phase 31 ✓
-- QUERY-01: 查询 API — Phase 32
-- QUERY-02: 分页参数 — Phase 32
-- QUERY-03: 认证保护 — Phase 32
+- QUERY-01: 查询 API — Phase 32 ✓
+- QUERY-02: 分页参数 — Phase 32 ✓
+- QUERY-03: 认证保护 — Phase 32 ✓
 
 ### Out of Scope
 
@@ -56,13 +56,16 @@
 
 ### Validated
 
-**v0.6 Update Log Recording** — 2026-03-28:
+**v0.6 Update Log Recording** — 2026-03-29:
 - ✓ UpdateLog 数据模型 (UUID, 时间戳, 触发方式, 实例详情) — Phase 30
 - ✓ UpdateLogger 组件 (线程安全 Record/GetAll) — Phase 30
 - ✓ TriggerHandler 集成日志记录 (UUID v4, 非阻塞) — Phase 30
 - ✓ JSONL 文件持久化 (atomic write + fsync) — Phase 31
 - ✓ 7天自动清理 (bufio.Scanner + atomic rename) — Phase 31
 - ✓ UpdateLogger 生命周期集成 (main.go + cron) — Phase 31
+- ✓ 查询 API (GET /api/v1/update-logs, 分页, Bearer Token) — Phase 32
+- ✓ E2E 集成测试 (trigger→file→query, ID一致性, 非阻塞) — Phase 33
+- ✓ 性能基准 (1000+ records < 500ms, 最快 867ns) — Phase 33
 
 **v0.5 核心监控和自动化** — 2026-03-24:
 - ✓ 启动时自动启动所有配置的实例 — Phase 24
@@ -233,8 +236,8 @@ instances:
 - 清理策略: 保留最近7天,自动删除旧日志
 - 认证方式: Bearer Token (与现有 API 一致)
 
-**Last Shipped: v0.5 Core Monitoring and Automation** — Completed 2026-03-24
+**Last Shipped: v0.6 Update Log Recording and Query System** — Completed 2026-03-29
 
 ---
 
-*Last updated: 2026-03-28 Phase 31 complete*
+*Last updated: 2026-03-29 Phase 33 complete — v0.6 milestone complete*
