@@ -92,8 +92,8 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 32-01-PLAN.md — Add GetPage() and LoadFromFile() methods to UpdateLogger with tests
-- [ ] 32-02-PLAN.md — Create QueryHandler, wire route with AuthMiddleware, add LoadFromFile to startup
+- [x] 32-01-PLAN.md — Add GetPage() and LoadFromFile() methods to UpdateLogger with tests
+- [x] 32-02-PLAN.md — Create QueryHandler, wire route with AuthMiddleware, add LoadFromFile to startup
 
 #### Phase 33: Integration and Testing
 **Goal**: 日志记录集成到现有更新流程并通过端到端测试验证
@@ -105,7 +105,11 @@ Plans:
   3. 日志记录失败不影响更新操作本身 (非阻塞记录)
   4. 1000+ 条记录的查询响应时间 < 500ms
   5. 更新 ID 在响应和查询结果中一致
-**Plans**: TBD
+**Plans**: 2 plans
+
+Plans:
+- [x] 33-01-PLAN.md — End-to-end integration tests (trigger → file → query, ID consistency, non-blocking)
+- [ ] 33-02-PLAN.md — Performance benchmark (1000+ records < 500ms) and final validation
 
 ## Progress
 
@@ -116,8 +120,8 @@ Phases execute in numeric order: 30 → 31 → 32 → 33
 |-------|-----------|----------------|--------|-----------|
 | 30. Log Structure and Recording | v0.6 | 2/2 | Complete    | 2026-03-27 |
 | 31. File Persistence | v0.6 | 2/2 | Complete    | 2026-03-28 |
-| 32. Query API | v0.6 | 0/2 | Planned | - |
-| 33. Integration and Testing | v0.6 | 0/3 | Not started | - |
+| 32. Query API | v0.6 | 2/2 | Complete | 2026-03-29 |
+| 33. Integration and Testing | v0.6 | 1/2 | In Progress|  |
 
 ## Coverage Map
 
