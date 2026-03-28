@@ -20,6 +20,8 @@ import (
 	"github.com/HQGroup/nanobot-auto-updater/internal/network"
 	"github.com/HQGroup/nanobot-auto-updater/internal/notification"
 	"github.com/HQGroup/nanobot-auto-updater/internal/notifier"
+	"github.com/HQGroup/nanobot-auto-updater/internal/updatelog"
+	"github.com/robfig/cron/v3"
 )
 
 // Version is set via ldflags at build time.
@@ -93,6 +95,25 @@ func main() {
 		"config", *configFile,
 	)
 
+	// Create UpdateLogger with file persistence (STORE-01, D-04)
+	updateLogger := updatelog.NewUpdateLogger(logger, "./logs/updates.jsonl")
+
+	// Startup cleanup: remove logs older than 7 days (STORE-02, D-06)
+	if err := updateLogger.CleanupOldLogs(); err != nil {
+		logger.Error("Failed to cleanup old update logs", "error", err)
+		// Non-fatal: continue without cleanup
+	}
+
+	// Schedule daily log cleanup at 3 AM (STORE-02, D-06)
+	cleanupCron := cron.New()
+	cleanupCron.AddFunc("0 3 * * *", func() {
+		if err := updateLogger.CleanupOldLogs(); err != nil {
+			logger.Error("Scheduled update log cleanup failed", "error", err)
+		}
+	})
+	cleanupCron.Start()
+	logger.Info("Update log cleanup scheduler started", "schedule", "0 3 * * *")
+
 	// Create InstanceManager
 	instanceManager := instance.NewInstanceManager(cfg, logger)
 
@@ -100,7 +121,7 @@ func main() {
 	var apiServer *api.Server
 	if cfg.API.Port != 0 {
 		var err error
-		apiServer, err = api.NewServer(&cfg.API, instanceManager, cfg, Version, logger)
+		apiServer, err = api.NewServer(&cfg.API, instanceManager, cfg, Version, logger, updateLogger)
 		if err != nil {
 			logger.Error("Failed to create API server", "error", err)
 			os.Exit(1)
@@ -205,6 +226,15 @@ func main() {
 	// Stop health monitor
 	if healthMonitor != nil {
 		healthMonitor.Stop()
+	}
+
+	// Stop cleanup cron scheduler
+	cleanupCron.Stop()
+	logger.Info("Update log cleanup scheduler stopped")
+
+	// Close UpdateLogger file handle (D-05)
+	if err := updateLogger.Close(); err != nil {
+		logger.Error("Failed to close update logger", "error", err)
 	}
 
 	// Shutdown API server

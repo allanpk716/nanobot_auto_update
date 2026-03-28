@@ -41,7 +41,7 @@ func newTestHandler(logger *slog.Logger, ul *updatelog.UpdateLogger, mock *mockT
 // Handle returns update_id in response with valid UUID v4 format
 func TestTriggerHandler_UpdateIDInResponse(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
-	ul := updatelog.NewUpdateLogger(logger)
+	ul := updatelog.NewUpdateLogger(logger, "")
 
 	mock := &mockTriggerUpdater{
 		result: &instance.UpdateResult{
@@ -86,7 +86,7 @@ func TestTriggerHandler_UpdateIDInResponse(t *testing.T) {
 // Handle calls UpdateLogger.Record() with correct UpdateLog data
 func TestTriggerHandler_RecordsUpdateLog(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
-	ul := updatelog.NewUpdateLogger(logger)
+	ul := updatelog.NewUpdateLogger(logger, "")
 
 	mock := &mockTriggerUpdater{
 		result: &instance.UpdateResult{
@@ -176,7 +176,7 @@ func TestTriggerHandler_LogRecordingFailureDoesNotAffectResponse(t *testing.T) {
 // Start time is recorded before TriggerUpdate call
 func TestTriggerHandler_StartTimeRecordedBeforeUpdate(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
-	ul := updatelog.NewUpdateLogger(logger)
+	ul := updatelog.NewUpdateLogger(logger, "")
 
 	mock := &mockTriggerUpdater{
 		result: &instance.UpdateResult{
@@ -217,7 +217,7 @@ func TestTriggerHandler_StartTimeRecordedBeforeUpdate(t *testing.T) {
 // End time is recorded after TriggerUpdate completes
 func TestTriggerHandler_EndTimeRecordedAfterUpdate(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
-	ul := updatelog.NewUpdateLogger(logger)
+	ul := updatelog.NewUpdateLogger(logger, "")
 
 	mock := &mockTriggerUpdater{
 		result: &instance.UpdateResult{
@@ -251,7 +251,7 @@ func TestTriggerHandler_EndTimeRecordedAfterUpdate(t *testing.T) {
 // Duration is calculated correctly in milliseconds
 func TestTriggerHandler_DurationCalculatedInMilliseconds(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
-	ul := updatelog.NewUpdateLogger(logger)
+	ul := updatelog.NewUpdateLogger(logger, "")
 
 	mock := &mockTriggerUpdater{
 		result: &instance.UpdateResult{
@@ -291,7 +291,7 @@ func TestTriggerHandler_DurationCalculatedInMilliseconds(t *testing.T) {
 // Handle returns 405 for GET request
 func TestTriggerHandler_MethodNotAllowed(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
-	ul := updatelog.NewUpdateLogger(logger)
+	ul := updatelog.NewUpdateLogger(logger, "")
 
 	mock := &mockTriggerUpdater{
 		result: &instance.UpdateResult{},
@@ -326,7 +326,7 @@ func TestTriggerHandler_MethodNotAllowed(t *testing.T) {
 // Handle returns 200 with success=true when update succeeds
 func TestTriggerHandler_Success(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
-	ul := updatelog.NewUpdateLogger(logger)
+	ul := updatelog.NewUpdateLogger(logger, "")
 
 	mock := &mockTriggerUpdater{
 		result: &instance.UpdateResult{
@@ -366,7 +366,7 @@ func TestTriggerHandler_Success(t *testing.T) {
 // Handle returns 409 Conflict when ErrUpdateInProgress
 func TestTriggerHandler_Conflict(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
-	ul := updatelog.NewUpdateLogger(logger)
+	ul := updatelog.NewUpdateLogger(logger, "")
 
 	mock := &mockTriggerUpdater{
 		err: instance.ErrUpdateInProgress,
@@ -410,7 +410,7 @@ func TestTriggerHandler_Timeout(t *testing.T) {
 	mock := &mockTriggerUpdater{
 		err: context.DeadlineExceeded,
 	}
-	ul := updatelog.NewUpdateLogger(logger)
+	ul := updatelog.NewUpdateLogger(logger, "")
 	handler := NewTriggerHandler(mock, cfg, logger, ul)
 
 	req := httptest.NewRequest("POST", "/api/v1/trigger-update", nil)
@@ -436,7 +436,7 @@ func TestTriggerHandler_ContextTimeout(t *testing.T) {
 	}
 
 	mock := &mockTriggerUpdater{}
-	ul := updatelog.NewUpdateLogger(logger)
+	ul := updatelog.NewUpdateLogger(logger, "")
 	handler := NewTriggerHandler(mock, cfg, logger, ul)
 
 	if handler.config.Timeout != expectedTimeout {
@@ -448,7 +448,7 @@ func TestTriggerHandler_ContextTimeout(t *testing.T) {
 // JSON response format matches expected structure
 func TestTriggerHandler_JSONFormat(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
-	ul := updatelog.NewUpdateLogger(logger)
+	ul := updatelog.NewUpdateLogger(logger, "")
 
 	mock := &mockTriggerUpdater{
 		result: &instance.UpdateResult{
@@ -503,7 +503,7 @@ func TestTriggerHandler_WithAuth(t *testing.T) {
 			StartFailed: []*instance.InstanceError{},
 		},
 	}
-	ul := updatelog.NewUpdateLogger(logger)
+	ul := updatelog.NewUpdateLogger(logger, "")
 	triggerHandler := NewTriggerHandler(mock, cfg, logger, ul)
 	authMiddleware := AuthMiddleware(cfg.BearerToken, logger)
 
@@ -575,7 +575,7 @@ func TestTriggerHandler_TimeoutScenario(t *testing.T) {
 // TestTriggerHandler_UpdateFailed tests response with failed instances
 func TestTriggerHandler_UpdateFailed(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
-	ul := updatelog.NewUpdateLogger(logger)
+	ul := updatelog.NewUpdateLogger(logger, "")
 
 	mock := &mockTriggerUpdater{
 		result: &instance.UpdateResult{
@@ -626,7 +626,7 @@ func TestTriggerHandler_UpdateFailed(t *testing.T) {
 // TestTriggerHandler_InternalError tests response when TriggerUpdate returns generic error
 func TestTriggerHandler_InternalError(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
-	ul := updatelog.NewUpdateLogger(logger)
+	ul := updatelog.NewUpdateLogger(logger, "")
 
 	mock := &mockTriggerUpdater{
 		err: errors.New("UV update failed: unexpected error"),

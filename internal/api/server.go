@@ -23,7 +23,8 @@ type Server struct {
 // NewServer creates a new HTTP API server
 // SSE-07: Sets WriteTimeout=0 to support SSE long connections
 // HELP-01, HELP-02: Added fullCfg and version parameters for help endpoint
-func NewServer(cfg *config.APIConfig, im *instance.InstanceManager, fullCfg *config.Config, version string, logger *slog.Logger) (*Server, error) {
+// STORE-01, D-04: UpdateLogger created externally in main.go and injected here
+func NewServer(cfg *config.APIConfig, im *instance.InstanceManager, fullCfg *config.Config, version string, logger *slog.Logger, updateLogger *updatelog.UpdateLogger) (*Server, error) {
 	if cfg == nil {
 		return nil, fmt.Errorf("API config is nil")
 	}
@@ -66,8 +67,8 @@ func NewServer(cfg *config.APIConfig, im *instance.InstanceManager, fullCfg *con
 	mux.HandleFunc("GET /", web.NewHomePageHandler(im, logger))
 	mux.HandleFunc("GET /logs", web.NewHomePageHandler(im, logger))
 
-	// Create update logger (LOG-01: in-memory storage, Phase 31 adds file persistence)
-	updateLogger := updatelog.NewUpdateLogger(logger)
+	// UpdateLogger is injected from main.go (D-04: created externally, not inside NewServer)
+	// triggerHandler receives the logger for recording update operations
 
 	// Trigger update endpoint with auth (Phase 28: API-01, API-02)
 	triggerHandler := NewTriggerHandler(im, cfg, logger, updateLogger)
