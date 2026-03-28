@@ -2,6 +2,7 @@ package updatelog
 
 import (
 	"bufio"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"os"
@@ -319,5 +320,231 @@ func TestFileWriteErrorDegradation(t *testing.T) {
 	}
 	if logs[0].ID != "test-degradation-uuid" {
 		t.Errorf("Expected log ID 'test-degradation-uuid', got '%s'", logs[0].ID)
+	}
+}
+
+func TestCleanupOldLogs(t *testing.T) {
+	logger := slog.Default()
+	tmpDir := t.TempDir()
+	filePath := filepath.Join(tmpDir, "updates.jsonl")
+
+	// Pre-populate JSONL file with 3 records of different ages
+	now := time.Now().UTC()
+	records := []UpdateLog{
+		{
+			ID:          "old-record-8days",
+			StartTime:   now.Add(-8 * 24 * time.Hour),
+			EndTime:     now.Add(-8*24*time.Hour + 5*time.Second),
+			Duration:    5000,
+			Status:      StatusSuccess,
+			Instances:   []InstanceUpdateDetail{},
+			TriggeredBy: "api-trigger",
+		},
+		{
+			ID:          "recent-record-6days",
+			StartTime:   now.Add(-6 * 24 * time.Hour),
+			EndTime:     now.Add(-6*24*time.Hour + 3*time.Second),
+			Duration:    3000,
+			Status:      StatusSuccess,
+			Instances:   []InstanceUpdateDetail{},
+			TriggeredBy: "api-trigger",
+		},
+		{
+			ID:          "today-record",
+			StartTime:   now,
+			EndTime:     now.Add(2 * time.Second),
+			Duration:    2000,
+			Status:      StatusSuccess,
+			Instances:   []InstanceUpdateDetail{},
+			TriggeredBy: "api-trigger",
+		},
+	}
+
+	// Write records directly to file
+	dir := filepath.Dir(filePath)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		t.Fatalf("Failed to create directory: %v", err)
+	}
+	f, err := os.Create(filePath)
+	if err != nil {
+		t.Fatalf("Failed to create file: %v", err)
+	}
+	for _, rec := range records {
+		data, _ := json.Marshal(rec)
+		f.Write(append(data, '\n'))
+	}
+	f.Close()
+
+	// Create UpdateLogger pointing to this file
+	ul := NewUpdateLogger(logger, filePath)
+	defer ul.Close()
+
+	// Run cleanup
+	err = ul.CleanupOldLogs()
+	if err != nil {
+		t.Fatalf("CleanupOldLogs() failed: %v", err)
+	}
+
+	// Read the file and verify only 2 lines remain
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		t.Fatalf("Failed to read file after cleanup: %v", err)
+	}
+
+	lines := strings.Split(strings.TrimSpace(string(data)), "\n")
+	if len(lines) != 2 {
+		t.Fatalf("Expected 2 lines after cleanup, got %d", len(lines))
+	}
+
+	// Verify the old record was removed
+	for _, line := range lines {
+		if strings.Contains(line, "old-record-8days") {
+			t.Error("Old record should have been removed")
+		}
+	}
+
+	// Verify recent records remain
+	found6days := false
+	foundToday := false
+	for _, line := range lines {
+		if strings.Contains(line, "recent-record-6days") {
+			found6days = true
+		}
+		if strings.Contains(line, "today-record") {
+			foundToday = true
+		}
+	}
+	if !found6days {
+		t.Error("Expected to find 6-day-old record")
+	}
+	if !foundToday {
+		t.Error("Expected to find today's record")
+	}
+}
+
+func TestCleanupNoBlock(t *testing.T) {
+	logger := slog.Default()
+	tmpDir := t.TempDir()
+	filePath := filepath.Join(tmpDir, "updates.jsonl")
+	ul := NewUpdateLogger(logger, filePath)
+	defer ul.Close()
+
+	now := time.Now().UTC()
+	log := UpdateLog{
+		ID:          "test-noblock-uuid",
+		StartTime:   now.Add(-8 * 24 * time.Hour), // Old record to trigger cleanup work
+		EndTime:     now,
+		Duration:    1000,
+		Status:      StatusSuccess,
+		Instances:   []InstanceUpdateDetail{},
+		TriggeredBy: "api-trigger",
+	}
+	ul.Record(log)
+
+	// Verify GetAll() is not blocked by CleanupOldLogs()
+	done := make(chan struct{})
+	go func() {
+		ul.CleanupOldLogs()
+		close(done)
+	}()
+
+	// GetAll should return within 200ms even while cleanup is running
+	getDone := make(chan []UpdateLog, 1)
+	go func() {
+		getDone <- ul.GetAll()
+	}()
+
+	select {
+	case result := <-getDone:
+		if result == nil {
+			t.Error("GetAll() should not return nil")
+		}
+	case <-time.After(200 * time.Millisecond):
+		t.Error("GetAll() was blocked by CleanupOldLogs() - locks not properly separated")
+	}
+
+	// Wait for cleanup to finish
+	<-done
+}
+
+func TestCleanupNoFile(t *testing.T) {
+	logger := slog.Default()
+	tmpDir := t.TempDir()
+	// Point to a file that does not exist
+	filePath := filepath.Join(tmpDir, "nonexistent.jsonl")
+	ul := NewUpdateLogger(logger, filePath)
+	defer ul.Close()
+
+	err := ul.CleanupOldLogs()
+	if err != nil {
+		t.Errorf("Expected nil error when file does not exist, got %v", err)
+	}
+
+	// Verify file was NOT created
+	if _, err := os.Stat(filePath); !os.IsNotExist(err) {
+		t.Error("Cleanup should not create a file when none exists")
+	}
+}
+
+func TestClose(t *testing.T) {
+	logger := slog.Default()
+	tmpDir := t.TempDir()
+	filePath := filepath.Join(tmpDir, "updates.jsonl")
+	ul := NewUpdateLogger(logger, filePath)
+
+	now := time.Now().UTC()
+	log := UpdateLog{
+		ID:          "test-close-uuid",
+		StartTime:   now,
+		EndTime:     now,
+		Duration:    100,
+		Status:      StatusSuccess,
+		Instances:   []InstanceUpdateDetail{},
+		TriggeredBy: "api-trigger",
+	}
+
+	// Record opens the file
+	ul.Record(log)
+
+	// Close the file handle
+	err := ul.Close()
+	if err != nil {
+		t.Errorf("Close() failed: %v", err)
+	}
+
+	// Verify subsequent Record() still works (should re-open the file)
+	log2 := UpdateLog{
+		ID:          "test-close-uuid-2",
+		StartTime:   now,
+		EndTime:     now,
+		Duration:    200,
+		Status:      StatusSuccess,
+		Instances:   []InstanceUpdateDetail{},
+		TriggeredBy: "api-trigger",
+	}
+	err = ul.Record(log2)
+	if err != nil {
+		t.Errorf("Record() after Close() failed: %v", err)
+	}
+
+	// Verify both records in memory
+	logs := ul.GetAll()
+	if len(logs) != 2 {
+		t.Fatalf("Expected 2 logs after Close() + Record(), got %d", len(logs))
+	}
+
+	// Close again to clean up
+	ul.Close()
+}
+
+func TestCloseWithoutOpen(t *testing.T) {
+	logger := slog.Default()
+	tmpDir := t.TempDir()
+	ul := NewUpdateLogger(logger, filepath.Join(tmpDir, "updates.jsonl"))
+
+	// Close without ever recording (file never opened)
+	err := ul.Close()
+	if err != nil {
+		t.Errorf("Close() without open should return nil, got %v", err)
 	}
 }

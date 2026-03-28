@@ -1,12 +1,14 @@
 package updatelog
 
 import (
+	"bufio"
 	"encoding/json"
 	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
 	"sync"
+	"time"
 )
 
 // UpdateLogger provides thread-safe in-memory storage and JSONL file persistence for update log records.
@@ -107,6 +109,80 @@ func (ul *UpdateLogger) GetAll() []UpdateLog {
 	result := make([]UpdateLog, len(ul.logs))
 	copy(result, ul.logs)
 	return result
+}
+
+// CleanupOldLogs removes records older than 7 days from the JSONL file.
+// Uses temp file + atomic rename pattern for safe cleanup.
+// This method closes the file handle before rename (Windows compatibility).
+func (ul *UpdateLogger) CleanupOldLogs() error {
+	cutoff := time.Now().UTC().Add(-7 * 24 * time.Hour)
+
+	ul.fileMu.Lock()
+	defer ul.fileMu.Unlock()
+
+	// Close file handle (Windows requires this for rename)
+	if ul.file != nil {
+		ul.file.Close()
+		ul.file = nil
+	}
+
+	// File doesn't exist, nothing to clean
+	if _, err := os.Stat(ul.filePath); os.IsNotExist(err) {
+		return nil
+	}
+
+	// Open source file for reading
+	src, err := os.Open(ul.filePath)
+	if err != nil {
+		return fmt.Errorf("failed to open file for cleanup: %w", err)
+	}
+	defer src.Close()
+
+	// Create temp file in same directory (same filesystem for atomic rename)
+	dir := filepath.Dir(ul.filePath)
+	tmp, err := os.CreateTemp(dir, "updates-*.jsonl.tmp")
+	if err != nil {
+		return fmt.Errorf("failed to create temp file: %w", err)
+	}
+	tmpPath := tmp.Name()
+
+	// Stream read + write kept records
+	scanner := bufio.NewScanner(src)
+	kept := 0
+	removed := 0
+	for scanner.Scan() {
+		line := scanner.Text()
+		if line == "" {
+			continue
+		}
+		var log UpdateLog
+		if err := json.Unmarshal([]byte(line), &log); err != nil {
+			continue // skip invalid lines
+		}
+		if log.StartTime.After(cutoff) {
+			tmp.WriteString(line + "\n")
+			kept++
+		} else {
+			removed++
+		}
+	}
+	src.Close()
+	tmp.Close()
+
+	if removed == 0 {
+		os.Remove(tmpPath)
+		return nil
+	}
+
+	// Atomic rename: temp -> target
+	if err := os.Rename(tmpPath, ul.filePath); err != nil {
+		os.Remove(tmpPath)
+		return fmt.Errorf("failed to rename temp file: %w", err)
+	}
+
+	ul.logger.Info("Cleaned up old log records",
+		"kept", kept, "removed", removed)
+	return nil
 }
 
 // Close closes the file handle if it is open.
