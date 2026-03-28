@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v0.6
 milestone_name: Update Log Recording and Query System
-status: executing
-stopped_at: Completed 31-01-PLAN.md
-last_updated: "2026-03-28T08:39:52.720Z"
+status: verifying
+stopped_at: Completed 31-02-PLAN.md
+last_updated: "2026-03-28T08:47:52.354Z"
 last_activity: 2026-03-28
 progress:
   total_phases: 4
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 4
-  completed_plans: 3
+  completed_plans: 4
   percent: 0
 ---
 
@@ -27,7 +27,7 @@ See: .planning/PROJECT.md (updated 2026-03-26)
 
 Phase: 31 (file-persistence) — EXECUTING
 Plan: 2 of 2
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-03-28
 
 Progress: [░░░░░░░░░░░░░░░░░░░░] 0%
@@ -58,6 +58,7 @@ Progress: [░░░░░░░░░░░░░░░░░░░░] 0%
 | Phase 30 P01 | 4min | 2 tasks | 6 files |
 | Phase 30 P02 | 10min | 1 tasks | 3 files |
 | Phase 31 P01 | 9min | 2 tasks | 4 files |
+| Phase 31 P02 | 4min | 1 tasks | 4 files |
 
 ## v0.6 Milestone Overview
 
@@ -100,6 +101,9 @@ Recent decisions for v0.6:
 - [Phase 31]: Lazy file open on first Record() instead of constructor, enabling memory-only mode with empty filePath
 - [Phase 31]: File write failure degrades to memory-only mode silently (D-03 non-blocking semantics)
 - [Phase 31]: Atomic cleanup: close file handle, stream read with bufio.Scanner, write kept to temp file, os.Rename (Windows safe)
+- [Phase 31]: UpdateLogger created in main.go (not NewServer) enabling lifecycle control at application level (D-04)
+- [Phase 31]: Cron cleanup runs at 0 3 * * * matching existing cron convention from v1.0
+- [Phase 31]: Shutdown order: notification -> network -> health -> cron -> UpdateLogger -> API server
 
 ### Pending Todos
 
@@ -120,15 +124,15 @@ None yet.
 ## Session Continuity
 
 Last activity: 2026-03-26 — Roadmap created, all files written
-Last session: 2026-03-28T08:39:52.716Z
-Stopped at: Completed 31-01-PLAN.md
+Last session: 2026-03-28T08:47:52.350Z
+Stopped at: Completed 31-02-PLAN.md
 Resume file: None
 
 ## Previous Milestone: v0.5 Core Monitoring and Automation
 
 **Goal:** 补全核心监控和自动化功能，实现启动时自动启动实例、实例健康监控、Google 连通性监控、HTTP API 触发更新和 HTTP help 接口
 
-**Status:** Ready to execute
+**Status:** Phase complete — ready for verification
 
 **Total requirements:** 22+ (4 AUTOSTART + 4 HEALTH + 6 MONITOR + 6 API + 2+ HELP)
 

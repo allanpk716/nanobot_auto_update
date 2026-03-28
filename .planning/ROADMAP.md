@@ -76,7 +76,7 @@ Plans:
 
 Plans:
 - [x] 31-01-PLAN.md — Extend UpdateLogger with JSONL file persistence, atomic cleanup, and Close()
-- [ ] 31-02-PLAN.md — Integrate UpdateLogger lifecycle into main.go and api.NewServer()
+- [x] 31-02-PLAN.md — Integrate UpdateLogger lifecycle into main.go and api.NewServer()
 
 #### Phase 32: Query API
 **Goal**: 用户能够通过 HTTP API 查询更新历史日志
@@ -111,7 +111,7 @@ Phases execute in numeric order: 30 → 31 → 32 → 33
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
 | 30. Log Structure and Recording | v0.6 | 2/2 | Complete    | 2026-03-27 |
-| 31. File Persistence | v0.6 | 1/2 | In Progress|  |
+| 31. File Persistence | v0.6 | 2/2 | Complete   | 2026-03-28 |
 | 32. Query API | v0.6 | 0/3 | Not started | - |
 | 33. Integration and Testing | v0.6 | 0/3 | Not started | - |
 
