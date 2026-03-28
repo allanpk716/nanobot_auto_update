@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v0.6
 milestone_name: Update Log Recording and Query System
-status: planning
-stopped_at: Phase 31 context gathered
-last_updated: "2026-03-28T02:44:21.465Z"
-last_activity: 2026-03-27
+status: executing
+stopped_at: Completed 31-01-PLAN.md
+last_updated: "2026-03-28T08:39:52.720Z"
+last_activity: 2026-03-28
 progress:
   total_phases: 4
   completed_phases: 1
-  total_plans: 2
-  completed_plans: 2
+  total_plans: 4
+  completed_plans: 3
   percent: 0
 ---
 
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-26)
 
 **Core value:** 自动保持 nanobot 处于最新版本,无需用户手动干预。
-**Current focus:** Phase 30 — Log Structure and Recording
+**Current focus:** Phase 31 — file-persistence
 
 ## Current Position
 
-Phase: 31
-Plan: Not started
-Status: Phase complete — ready for verification
-Last activity: 2026-03-27
+Phase: 31 (file-persistence) — EXECUTING
+Plan: 2 of 2
+Status: Ready to execute
+Last activity: 2026-03-28
 
 Progress: [░░░░░░░░░░░░░░░░░░░░] 0%
 
@@ -57,6 +57,7 @@ Progress: [░░░░░░░░░░░░░░░░░░░░] 0%
 *Updated after each plan completion*
 | Phase 30 P01 | 4min | 2 tasks | 6 files |
 | Phase 30 P02 | 10min | 1 tasks | 3 files |
+| Phase 31 P01 | 9min | 2 tasks | 4 files |
 
 ## v0.6 Milestone Overview
 
@@ -95,6 +96,10 @@ Recent decisions for v0.6:
 - [Phase 30]: TriggerUpdater interface introduced for mock-friendly testing instead of concrete *InstanceManager
 - [Phase 30]: Nil-safe UpdateLogger: handler checks nil before Record(), non-blocking error logging
 - [Phase 30]: UUID v4 generated at handler entry before TriggerUpdate for full lifecycle tracing
+- [Phase 31]: Separate fileMu mutex for file I/O prevents GetAll() blocking during file writes and cleanup
+- [Phase 31]: Lazy file open on first Record() instead of constructor, enabling memory-only mode with empty filePath
+- [Phase 31]: File write failure degrades to memory-only mode silently (D-03 non-blocking semantics)
+- [Phase 31]: Atomic cleanup: close file handle, stream read with bufio.Scanner, write kept to temp file, os.Rename (Windows safe)
 
 ### Pending Todos
 
@@ -115,15 +120,15 @@ None yet.
 ## Session Continuity
 
 Last activity: 2026-03-26 — Roadmap created, all files written
-Last session: 2026-03-28T02:44:21.461Z
-Stopped at: Phase 31 context gathered
-Resume file: .planning/phases/31-file-persistence/31-CONTEXT.md
+Last session: 2026-03-28T08:39:52.716Z
+Stopped at: Completed 31-01-PLAN.md
+Resume file: None
 
 ## Previous Milestone: v0.5 Core Monitoring and Automation
 
 **Goal:** 补全核心监控和自动化功能，实现启动时自动启动实例、实例健康监控、Google 连通性监控、HTTP API 触发更新和 HTTP help 接口
 
-**Status:** Ready to plan
+**Status:** Ready to execute
 
 **Total requirements:** 22+ (4 AUTOSTART + 4 HEALTH + 6 MONITOR + 6 API + 2+ HELP)
 
