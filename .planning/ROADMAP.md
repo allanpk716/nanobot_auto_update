@@ -111,7 +111,7 @@ Phases execute in numeric order: 30 → 31 → 32 → 33
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
 | 30. Log Structure and Recording | v0.6 | 2/2 | Complete    | 2026-03-27 |
-| 31. File Persistence | v0.6 | 2/2 | Complete   | 2026-03-28 |
+| 31. File Persistence | v0.6 | 2/2 | Complete    | 2026-03-28 |
 | 32. Query API | v0.6 | 0/3 | Not started | - |
 | 33. Integration and Testing | v0.6 | 0/3 | Not started | - |
 
