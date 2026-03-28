@@ -89,7 +89,11 @@ Plans:
   4. 用户可以通过 limit 参数控制每页数量 (默认 20,最大 100)
   5. 用户可以通过 offset 参数控制分页偏移 (默认 0,最小 0)
   6. 查询使用流式读取避免内存问题,offset 超出范围时返回空列表
-**Plans**: TBD
+**Plans**: 2 plans
+
+Plans:
+- [ ] 32-01-PLAN.md — Add GetPage() and LoadFromFile() methods to UpdateLogger with tests
+- [ ] 32-02-PLAN.md — Create QueryHandler, wire route with AuthMiddleware, add LoadFromFile to startup
 
 #### Phase 33: Integration and Testing
 **Goal**: 日志记录集成到现有更新流程并通过端到端测试验证
@@ -112,7 +116,7 @@ Phases execute in numeric order: 30 → 31 → 32 → 33
 |-------|-----------|----------------|--------|-----------|
 | 30. Log Structure and Recording | v0.6 | 2/2 | Complete    | 2026-03-27 |
 | 31. File Persistence | v0.6 | 2/2 | Complete    | 2026-03-28 |
-| 32. Query API | v0.6 | 0/3 | Not started | - |
+| 32. Query API | v0.6 | 0/2 | Planned | - |
 | 33. Integration and Testing | v0.6 | 0/3 | Not started | - |
 
 ## Coverage Map
