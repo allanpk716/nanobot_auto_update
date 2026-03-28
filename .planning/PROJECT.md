@@ -18,8 +18,8 @@
 - LOG-02: 更新触发时记录日志 — Phase 30 ✓
 - LOG-03: 非阻塞日志记录 — Phase 30 ✓
 - LOG-04: 更新 ID 返回给客户端 — Phase 30 ✓
-- STORE-01: JSONL 持久化 — Phase 31 (下一步)
-- STORE-02: 7天自动清理 — Phase 31
+- STORE-01: JSONL 持久化 — Phase 31 ✓
+- STORE-02: 7天自动清理 — Phase 31 ✓
 - QUERY-01: 查询 API — Phase 32
 - QUERY-02: 分页参数 — Phase 32
 - QUERY-03: 认证保护 — Phase 32
@@ -56,10 +56,13 @@
 
 ### Validated
 
-**v0.6 Update Log Recording** — 2026-03-27:
+**v0.6 Update Log Recording** — 2026-03-28:
 - ✓ UpdateLog 数据模型 (UUID, 时间戳, 触发方式, 实例详情) — Phase 30
 - ✓ UpdateLogger 组件 (线程安全 Record/GetAll) — Phase 30
 - ✓ TriggerHandler 集成日志记录 (UUID v4, 非阻塞) — Phase 30
+- ✓ JSONL 文件持久化 (atomic write + fsync) — Phase 31
+- ✓ 7天自动清理 (bufio.Scanner + atomic rename) — Phase 31
+- ✓ UpdateLogger 生命周期集成 (main.go + cron) — Phase 31
 
 **v0.5 核心监控和自动化** — 2026-03-24:
 - ✓ 启动时自动启动所有配置的实例 — Phase 24
@@ -234,4 +237,4 @@ instances:
 
 ---
 
-*Last updated: 2026-03-27 Phase 30 complete*
+*Last updated: 2026-03-28 Phase 31 complete*
