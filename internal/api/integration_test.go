@@ -3,12 +3,14 @@ package api
 import (
 	"bufio"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -387,5 +389,288 @@ func TestE2E_LoadFromFile_StartupRecovery(t *testing.T) {
 	}
 	if lineCount != 4 {
 		t.Errorf("JSONL file has %d lines, want 4", lineCount)
+	}
+}
+
+// --- Notification E2E Tests ---
+// Verify the complete notification lifecycle: start notification, completion notification,
+// non-blocking behavior, and graceful degradation.
+
+// NotifyCall records a single notification invocation
+type NotifyCall struct {
+	Title   string
+	Message string
+}
+
+// recordingNotifier is a mock that records all Notify calls with goroutine-safe access.
+// Per D-02: configurable shouldError for failure simulation.
+type recordingNotifier struct {
+	mu          sync.Mutex
+	calls       []NotifyCall
+	shouldError bool
+}
+
+func (r *recordingNotifier) Notify(title, message string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.calls = append(r.calls, NotifyCall{Title: title, Message: message})
+	if r.shouldError {
+		return fmt.Errorf("simulated pushover failure")
+	}
+	return nil
+}
+
+func (r *recordingNotifier) Calls() []NotifyCall {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return append([]NotifyCall(nil), r.calls...)
+}
+
+func (r *recordingNotifier) CallCount() int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return len(r.calls)
+}
+
+// TestE2E_Notification_StartNotification validates UNOTIF-01:
+// Start notification is sent before TriggerUpdate executes with correct trigger source and instance count.
+func TestE2E_Notification_StartNotification(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+	tmpDir := t.TempDir()
+	jsonlPath := filepath.Join(tmpDir, "updates.jsonl")
+
+	ul := updatelog.NewUpdateLogger(logger, jsonlPath)
+	defer ul.Close()
+
+	mock := &mockTriggerUpdater{
+		result: &instance.UpdateResult{
+			Stopped:     []string{"gateway"},
+			Started:     []string{"gateway"},
+			StopFailed:  []*instance.InstanceError{},
+			StartFailed: []*instance.InstanceError{},
+		},
+	}
+	recordingNotif := &recordingNotifier{}
+	handler := newTestHandler(logger, ul, mock, recordingNotif)
+
+	req := httptest.NewRequest("POST", "/api/v1/trigger-update", nil)
+	rec := httptest.NewRecorder()
+
+	handler.Handle(rec, req)
+
+	// Wait for goroutine to complete
+	time.Sleep(50 * time.Millisecond)
+
+	// Verify notification was called at least once
+	if recordingNotif.CallCount() < 1 {
+		t.Fatalf("CallCount() = %d, want >= 1 (start notification should be sent)", recordingNotif.CallCount())
+	}
+
+	calls := recordingNotif.Calls()
+
+	// Verify start notification content
+	if !strings.Contains(calls[0].Title, "更新开始") {
+		t.Errorf("Start notification title = %q, want to contain '更新开始'", calls[0].Title)
+	}
+	if !strings.Contains(calls[0].Message, "api-trigger") {
+		t.Errorf("Start notification message = %q, want to contain 'api-trigger'", calls[0].Message)
+	}
+	if !strings.Contains(calls[0].Message, "3") {
+		t.Errorf("Start notification message = %q, want to contain '3' (instanceCount)", calls[0].Message)
+	}
+
+	// Verify HTTP response is still 200
+	if rec.Code != http.StatusOK {
+		t.Errorf("HTTP status = %d, want %d", rec.Code, http.StatusOK)
+	}
+
+	var response APIUpdateResult
+	if err := json.NewDecoder(rec.Body).Decode(&response); err != nil {
+		t.Fatalf("Failed to decode response: %v", err)
+	}
+	if response.UpdateID == "" {
+		t.Error("Response missing update_id")
+	}
+}
+
+// TestE2E_Notification_CompletionNotification validates UNOTIF-02:
+// Completion notification is sent after update with correct status, elapsed time, and instance details.
+func TestE2E_Notification_CompletionNotification(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+	tmpDir := t.TempDir()
+	jsonlPath := filepath.Join(tmpDir, "updates.jsonl")
+
+	ul := updatelog.NewUpdateLogger(logger, jsonlPath)
+	defer ul.Close()
+
+	mock := &mockTriggerUpdater{
+		result: &instance.UpdateResult{
+			Stopped:     []string{"gateway"},
+			Started:     []string{"gateway"},
+			StopFailed:  []*instance.InstanceError{},
+			StartFailed: []*instance.InstanceError{},
+		},
+	}
+	recordingNotif := &recordingNotifier{}
+	handler := newTestHandler(logger, ul, mock, recordingNotif)
+
+	req := httptest.NewRequest("POST", "/api/v1/trigger-update", nil)
+	rec := httptest.NewRecorder()
+
+	handler.Handle(rec, req)
+
+	// Wait for goroutines to complete
+	time.Sleep(50 * time.Millisecond)
+
+	// Verify 2 notifications: start + completion
+	if recordingNotif.CallCount() != 2 {
+		t.Fatalf("CallCount() = %d, want 2 (start + completion)", recordingNotif.CallCount())
+	}
+
+	calls := recordingNotif.Calls()
+
+	// First is start notification
+	if !strings.Contains(calls[0].Title, "更新开始") {
+		t.Errorf("First notification title = %q, want to contain '更新开始'", calls[0].Title)
+	}
+
+	// Second is completion notification (status=success for this test)
+	if !strings.Contains(calls[1].Title, "更新成功") {
+		t.Errorf("Second notification title = %q, want to contain '更新成功'", calls[1].Title)
+	}
+	if !strings.Contains(calls[1].Message, "耗时:") {
+		t.Errorf("Completion message = %q, want to contain '耗时:'", calls[1].Message)
+	}
+	if !strings.Contains(calls[1].Message, "成功: 1") {
+		t.Errorf("Completion message = %q, want to contain '成功: 1'", calls[1].Message)
+	}
+
+	// Verify HTTP 200 and success
+	if rec.Code != http.StatusOK {
+		t.Errorf("HTTP status = %d, want %d", rec.Code, http.StatusOK)
+	}
+
+	var response APIUpdateResult
+	if err := json.NewDecoder(rec.Body).Decode(&response); err != nil {
+		t.Fatalf("Failed to decode response: %v", err)
+	}
+	if !response.Success {
+		t.Error("Response success = false, want true")
+	}
+}
+
+// TestE2E_Notification_NonBlocking validates UNOTIF-03:
+// Simulated Pushover failure does not affect API response status code, response body, or UpdateLog recording.
+func TestE2E_Notification_NonBlocking(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+	tmpDir := t.TempDir()
+	jsonlPath := filepath.Join(tmpDir, "updates.jsonl")
+
+	ul := updatelog.NewUpdateLogger(logger, jsonlPath)
+	defer ul.Close()
+
+	mock := &mockTriggerUpdater{
+		result: &instance.UpdateResult{
+			Stopped:     []string{"gateway"},
+			Started:     []string{"gateway"},
+			StopFailed:  []*instance.InstanceError{},
+			StartFailed: []*instance.InstanceError{},
+		},
+	}
+	// Create notifier that always fails
+	recordingNotif := &recordingNotifier{shouldError: true}
+	handler := newTestHandler(logger, ul, mock, recordingNotif)
+
+	req := httptest.NewRequest("POST", "/api/v1/trigger-update", nil)
+	rec := httptest.NewRecorder()
+
+	handler.Handle(rec, req)
+
+	// Wait for goroutines to complete
+	time.Sleep(50 * time.Millisecond)
+
+	// Verify HTTP 200 (not affected by notification error)
+	if rec.Code != http.StatusOK {
+		t.Errorf("HTTP status = %d, want %d (notification error should not affect response)", rec.Code, http.StatusOK)
+	}
+
+	var response APIUpdateResult
+	if err := json.NewDecoder(rec.Body).Decode(&response); err != nil {
+		t.Fatalf("Failed to decode response: %v", err)
+	}
+	if response.UpdateID == "" {
+		t.Error("Response missing update_id")
+	}
+	if !response.Success {
+		t.Error("Response success = false, want true (notification error should not affect result)")
+	}
+
+	// Verify UpdateLog was still recorded
+	logs := ul.GetAll()
+	if len(logs) != 1 {
+		t.Fatalf("GetAll() returned %d logs, want 1 (log should still be recorded)", len(logs))
+	}
+
+	// Verify JSONL file has the record
+	data, err := os.ReadFile(jsonlPath)
+	if err != nil {
+		t.Fatalf("Failed to read JSONL file: %v", err)
+	}
+	if !strings.Contains(string(data), response.UpdateID) {
+		t.Errorf("JSONL file does not contain update_id %q", response.UpdateID)
+	}
+
+	// Verify both start and completion notifications were attempted despite errors
+	if recordingNotif.CallCount() != 2 {
+		t.Errorf("CallCount() = %d, want 2 (both start and completion should be attempted)", recordingNotif.CallCount())
+	}
+}
+
+// TestE2E_Notification_GracefulDegradation validates UNOTIF-04:
+// Nil notifier results in zero notification attempts and no errors in the update flow.
+func TestE2E_Notification_GracefulDegradation(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+	tmpDir := t.TempDir()
+	jsonlPath := filepath.Join(tmpDir, "updates.jsonl")
+
+	ul := updatelog.NewUpdateLogger(logger, jsonlPath)
+	defer ul.Close()
+
+	mock := &mockTriggerUpdater{
+		result: &instance.UpdateResult{
+			Stopped:     []string{"gateway"},
+			Started:     []string{"gateway"},
+			StopFailed:  []*instance.InstanceError{},
+			StartFailed: []*instance.InstanceError{},
+		},
+	}
+	// Pass nil notifier directly
+	handler := newTestHandler(logger, ul, mock, nil)
+
+	req := httptest.NewRequest("POST", "/api/v1/trigger-update", nil)
+	rec := httptest.NewRecorder()
+
+	handler.Handle(rec, req)
+
+	// Verify HTTP 200
+	if rec.Code != http.StatusOK {
+		t.Errorf("HTTP status = %d, want %d", rec.Code, http.StatusOK)
+	}
+
+	var response APIUpdateResult
+	if err := json.NewDecoder(rec.Body).Decode(&response); err != nil {
+		t.Fatalf("Failed to decode response: %v", err)
+	}
+	if response.UpdateID == "" {
+		t.Error("Response missing update_id")
+	}
+	if !response.Success {
+		t.Error("Response success = false, want true")
+	}
+
+	// Verify UpdateLog was recorded normally
+	logs := ul.GetAll()
+	if len(logs) != 1 {
+		t.Fatalf("GetAll() returned %d logs, want 1", len(logs))
 	}
 }
