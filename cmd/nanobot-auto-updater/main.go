@@ -124,11 +124,21 @@ func main() {
 	// Create InstanceManager
 	instanceManager := instance.NewInstanceManager(cfg, logger)
 
+	// Create Notifier (MONITOR-04, MONITOR-05, UNOTIF-01, UNOTIF-02)
+	// Created before API server so it can be injected into TriggerHandler
+	notif := notifier.NewWithConfig(
+		notifier.Config{
+			ApiToken: cfg.Pushover.ApiToken,
+			UserKey:  cfg.Pushover.UserKey,
+		},
+		logger,
+	)
+
 	// Create API server (SSE-07: WriteTimeout=0)
 	var apiServer *api.Server
 	if cfg.API.Port != 0 {
 		var err error
-		apiServer, err = api.NewServer(&cfg.API, instanceManager, cfg, Version, logger, updateLogger)
+		apiServer, err = api.NewServer(&cfg.API, instanceManager, cfg, Version, logger, updateLogger, notif)
 		if err != nil {
 			logger.Error("Failed to create API server", "error", err)
 			os.Exit(1)
@@ -164,15 +174,6 @@ func main() {
 	)
 	go networkMonitor.Start()
 	logger.Info("网络监控已启动", "interval", cfg.Monitor.Interval)
-
-	// Create Notifier (MONITOR-04, MONITOR-05)
-	notif := notifier.NewWithConfig(
-		notifier.Config{
-			ApiToken: cfg.Pushover.ApiToken,
-			UserKey:  cfg.Pushover.UserKey,
-		},
-		logger,
-	)
 
 	// Start notification manager (MONITOR-04, MONITOR-05)
 	notificationManager := notification.NewNotificationManager(

@@ -9,6 +9,7 @@ import (
 
 	"github.com/HQGroup/nanobot-auto-updater/internal/config"
 	"github.com/HQGroup/nanobot-auto-updater/internal/instance"
+	"github.com/HQGroup/nanobot-auto-updater/internal/notifier"
 	"github.com/HQGroup/nanobot-auto-updater/internal/updatelog"
 	"github.com/HQGroup/nanobot-auto-updater/internal/web"
 )
@@ -24,7 +25,7 @@ type Server struct {
 // SSE-07: Sets WriteTimeout=0 to support SSE long connections
 // HELP-01, HELP-02: Added fullCfg and version parameters for help endpoint
 // STORE-01, D-04: UpdateLogger created externally in main.go and injected here
-func NewServer(cfg *config.APIConfig, im *instance.InstanceManager, fullCfg *config.Config, version string, logger *slog.Logger, updateLogger *updatelog.UpdateLogger) (*Server, error) {
+func NewServer(cfg *config.APIConfig, im *instance.InstanceManager, fullCfg *config.Config, version string, logger *slog.Logger, updateLogger *updatelog.UpdateLogger, notif *notifier.Notifier) (*Server, error) {
 	if cfg == nil {
 		return nil, fmt.Errorf("API config is nil")
 	}
@@ -71,7 +72,8 @@ func NewServer(cfg *config.APIConfig, im *instance.InstanceManager, fullCfg *con
 	// triggerHandler receives the logger for recording update operations
 
 	// Trigger update endpoint with auth (Phase 28: API-01, API-02)
-	triggerHandler := NewTriggerHandler(im, cfg, logger, updateLogger)
+	instanceCount := len(im.GetInstanceNames())
+	triggerHandler := NewTriggerHandler(im, cfg, logger, updateLogger, notif, instanceCount)
 	authMiddleware := AuthMiddleware(cfg.BearerToken, logger)
 
 	// Wrap handler with auth middleware
