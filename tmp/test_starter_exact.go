@@ -1,3 +1,5 @@
+//go:build ignore
+
 // Test program to reproduce the exact startup conditions as starter.go
 // This will help identify if CREATE_NO_WINDOW or pipe handling causes the issue
 package main

@@ -1,3 +1,5 @@
+//go:build ignore
+
 // Test program to capture nanobot process output synchronously
 // This helps debug why nanobot exits immediately when started by nanobot-auto-updater
 package main
