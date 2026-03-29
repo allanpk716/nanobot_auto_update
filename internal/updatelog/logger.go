@@ -185,6 +185,78 @@ func (ul *UpdateLogger) CleanupOldLogs() error {
 	return nil
 }
 
+// GetPage returns a paginated slice of logs in newest-first order.
+// offset=0 returns the most recent logs. limit controls page size.
+// Returns the page of logs and the total count of all logs.
+// offset beyond range returns an empty (non-nil) slice.
+func (ul *UpdateLogger) GetPage(limit, offset int) ([]UpdateLog, int) {
+	ul.mu.RLock()
+	defer ul.mu.RUnlock()
+
+	total := len(ul.logs)
+	if offset >= total || limit <= 0 {
+		return []UpdateLog{}, total
+	}
+
+	end := total - offset
+	start := end - limit
+	if start < 0 {
+		start = 0
+	}
+
+	result := make([]UpdateLog, end-start)
+	copy(result, ul.logs[start:end])
+
+	// Reverse so index 0 = newest
+	for i, j := 0, len(result)-1; i < j; i, j = i+1, j-1 {
+		result[i], result[j] = result[j], result[i]
+	}
+
+	return result, total
+}
+
+// LoadFromFile reads the JSONL file and loads all records into memory.
+// Called at startup after CleanupOldLogs(), before HTTP server starts.
+// If filePath is empty (memory-only mode) or file does not exist, returns nil.
+// Invalid JSON lines are skipped with a warning log.
+func (ul *UpdateLogger) LoadFromFile() error {
+	if ul.filePath == "" {
+		return nil
+	}
+
+	if _, err := os.Stat(ul.filePath); os.IsNotExist(err) {
+		return nil
+	}
+
+	ul.mu.Lock()
+	defer ul.mu.Unlock()
+
+	f, err := os.Open(ul.filePath)
+	if err != nil {
+		return fmt.Errorf("failed to open file for loading: %w", err)
+	}
+	defer f.Close()
+
+	scanner := bufio.NewScanner(f)
+	loaded := 0
+	for scanner.Scan() {
+		line := scanner.Text()
+		if line == "" {
+			continue
+		}
+		var log UpdateLog
+		if err := json.Unmarshal([]byte(line), &log); err != nil {
+			ul.logger.Warn("Skipping invalid JSON line during LoadFromFile", "error", err)
+			continue
+		}
+		ul.logs = append(ul.logs, log)
+		loaded++
+	}
+
+	ul.logger.Info("Loaded update logs from file", "count", loaded)
+	return scanner.Err()
+}
+
 // Close closes the file handle if it is open.
 // It is safe to call Close() even if the file was never opened.
 func (ul *UpdateLogger) Close() error {

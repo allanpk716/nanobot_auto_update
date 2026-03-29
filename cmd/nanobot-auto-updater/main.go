@@ -104,6 +104,13 @@ func main() {
 		// Non-fatal: continue without cleanup
 	}
 
+	// Load history from JSONL file into memory (Phase 32: D-01)
+	// Must run after CleanupOldLogs to ensure only valid records are loaded
+	if err := updateLogger.LoadFromFile(); err != nil {
+		logger.Error("Failed to load update logs from file", "error", err)
+		// Non-fatal: continue with empty logs
+	}
+
 	// Schedule daily log cleanup at 3 AM (STORE-02, D-06)
 	cleanupCron := cron.New()
 	cleanupCron.AddFunc("0 3 * * *", func() {

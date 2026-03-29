@@ -548,3 +548,494 @@ func TestCloseWithoutOpen(t *testing.T) {
 		t.Errorf("Close() without open should return nil, got %v", err)
 	}
 }
+
+// --- GetPage Tests ---
+
+// newPageTestLogs creates n UpdateLog entries with sequential IDs and incrementing StartTime.
+// Entry i has ID "page-uuid-(i+1)" and StartTime = baseTime + i*minute.
+func newPageTestLogs(n int, baseTime time.Time) []UpdateLog {
+	logs := make([]UpdateLog, n)
+	for i := 0; i < n; i++ {
+		logs[i] = UpdateLog{
+			ID:          fmt.Sprintf("page-uuid-%d", i+1),
+			StartTime:   baseTime.Add(time.Duration(i) * time.Minute),
+			EndTime:     baseTime.Add(time.Duration(i)*time.Minute + 5*time.Second),
+			Duration:    5000,
+			Status:      StatusSuccess,
+			Instances:   []InstanceUpdateDetail{},
+			TriggeredBy: "api-trigger",
+		}
+	}
+	return logs
+}
+
+func seedLogs(t *testing.T, ul *UpdateLogger, logs []UpdateLog) {
+	t.Helper()
+	for _, l := range logs {
+		if err := ul.Record(l); err != nil {
+			t.Fatalf("Failed to seed log %s: %v", l.ID, err)
+		}
+	}
+}
+
+func TestGetPage_BasicPagination(t *testing.T) {
+	logger := slog.Default()
+	tmpDir := t.TempDir()
+	ul := NewUpdateLogger(logger, filepath.Join(tmpDir, "updates.jsonl"))
+	defer ul.Close()
+
+	baseTime := time.Now().UTC()
+	seedLogs(t, ul, newPageTestLogs(5, baseTime))
+
+	// Test 1: limit=2, offset=0 returns 2 most recent logs and total=5
+	result, total := ul.GetPage(2, 0)
+	if total != 5 {
+		t.Errorf("Expected total=5, got %d", total)
+	}
+	if len(result) != 2 {
+		t.Fatalf("Expected 2 results, got %d", len(result))
+	}
+	// Newest first: page-uuid-5 is the newest (highest StartTime)
+	if result[0].ID != "page-uuid-5" {
+		t.Errorf("Expected result[0].ID='page-uuid-5', got '%s'", result[0].ID)
+	}
+	if result[1].ID != "page-uuid-4" {
+		t.Errorf("Expected result[1].ID='page-uuid-4', got '%s'", result[1].ID)
+	}
+}
+
+func TestGetPage_SecondPage(t *testing.T) {
+	logger := slog.Default()
+	tmpDir := t.TempDir()
+	ul := NewUpdateLogger(logger, filepath.Join(tmpDir, "updates.jsonl"))
+	defer ul.Close()
+
+	baseTime := time.Now().UTC()
+	seedLogs(t, ul, newPageTestLogs(5, baseTime))
+
+	// Test 2: limit=2, offset=2 returns 2 older logs (skipping 2 newest) and total=5
+	result, total := ul.GetPage(2, 2)
+	if total != 5 {
+		t.Errorf("Expected total=5, got %d", total)
+	}
+	if len(result) != 2 {
+		t.Fatalf("Expected 2 results, got %d", len(result))
+	}
+	// After skipping 2 newest (page-uuid-5, page-uuid-4), next 2 are page-uuid-3, page-uuid-2
+	if result[0].ID != "page-uuid-3" {
+		t.Errorf("Expected result[0].ID='page-uuid-3', got '%s'", result[0].ID)
+	}
+	if result[1].ID != "page-uuid-2" {
+		t.Errorf("Expected result[1].ID='page-uuid-2', got '%s'", result[1].ID)
+	}
+}
+
+func TestGetPage_OffsetExceedsTotal(t *testing.T) {
+	logger := slog.Default()
+	tmpDir := t.TempDir()
+	ul := NewUpdateLogger(logger, filepath.Join(tmpDir, "updates.jsonl"))
+	defer ul.Close()
+
+	baseTime := time.Now().UTC()
+	seedLogs(t, ul, newPageTestLogs(5, baseTime))
+
+	// Test 3: offset >= total returns empty non-nil slice and correct total
+	result, total := ul.GetPage(2, 10)
+	if total != 5 {
+		t.Errorf("Expected total=5, got %d", total)
+	}
+	if result == nil {
+		t.Fatal("Expected non-nil result slice")
+	}
+	if len(result) != 0 {
+		t.Errorf("Expected 0 results, got %d", len(result))
+	}
+}
+
+func TestGetPage_LimitExceedsRemaining(t *testing.T) {
+	logger := slog.Default()
+	tmpDir := t.TempDir()
+	ul := NewUpdateLogger(logger, filepath.Join(tmpDir, "updates.jsonl"))
+	defer ul.Close()
+
+	baseTime := time.Now().UTC()
+	seedLogs(t, ul, newPageTestLogs(5, baseTime))
+
+	// Test 4: limit > remaining logs returns only available count
+	result, total := ul.GetPage(10, 3)
+	if total != 5 {
+		t.Errorf("Expected total=5, got %d", total)
+	}
+	if len(result) != 2 {
+		t.Fatalf("Expected 2 results (5 total - 3 offset), got %d", len(result))
+	}
+	if result[0].ID != "page-uuid-2" {
+		t.Errorf("Expected result[0].ID='page-uuid-2', got '%s'", result[0].ID)
+	}
+	if result[1].ID != "page-uuid-1" {
+		t.Errorf("Expected result[1].ID='page-uuid-1', got '%s'", result[1].ID)
+	}
+}
+
+func TestGetPage_EmptyLogs(t *testing.T) {
+	logger := slog.Default()
+	tmpDir := t.TempDir()
+	ul := NewUpdateLogger(logger, filepath.Join(tmpDir, "updates.jsonl"))
+	defer ul.Close()
+
+	// Test 5: empty logs returns empty slice and total=0
+	result, total := ul.GetPage(10, 0)
+	if total != 0 {
+		t.Errorf("Expected total=0, got %d", total)
+	}
+	if result == nil {
+		t.Fatal("Expected non-nil result slice")
+	}
+	if len(result) != 0 {
+		t.Errorf("Expected 0 results, got %d", len(result))
+	}
+}
+
+func TestGetPage_ZeroLimit(t *testing.T) {
+	logger := slog.Default()
+	tmpDir := t.TempDir()
+	ul := NewUpdateLogger(logger, filepath.Join(tmpDir, "updates.jsonl"))
+	defer ul.Close()
+
+	baseTime := time.Now().UTC()
+	seedLogs(t, ul, newPageTestLogs(5, baseTime))
+
+	// Test 6: limit=0 returns empty slice
+	result, total := ul.GetPage(0, 0)
+	if total != 5 {
+		t.Errorf("Expected total=5, got %d", total)
+	}
+	if len(result) != 0 {
+		t.Errorf("Expected 0 results for limit=0, got %d", len(result))
+	}
+}
+
+func TestGetPage_DefensiveCopy(t *testing.T) {
+	logger := slog.Default()
+	tmpDir := t.TempDir()
+	ul := NewUpdateLogger(logger, filepath.Join(tmpDir, "updates.jsonl"))
+	defer ul.Close()
+
+	baseTime := time.Now().UTC()
+	seedLogs(t, ul, newPageTestLogs(3, baseTime))
+
+	// Test 7: modifying returned slice does not affect internal state
+	result, _ := ul.GetPage(2, 0)
+	if len(result) != 2 {
+		t.Fatalf("Expected 2 results, got %d", len(result))
+	}
+	result[0].ID = "hacked-id"
+
+	// Fetch again and verify original is unchanged
+	fresh, _ := ul.GetPage(2, 0)
+	if fresh[0].ID == "hacked-id" {
+		t.Error("GetPage() should return a defensive copy, but modification affected internal state")
+	}
+	if fresh[0].ID != "page-uuid-3" {
+		t.Errorf("Expected fresh result[0].ID='page-uuid-3', got '%s'", fresh[0].ID)
+	}
+}
+
+func TestGetPage_ConcurrentWithRecord(t *testing.T) {
+	logger := slog.Default()
+	tmpDir := t.TempDir()
+	ul := NewUpdateLogger(logger, filepath.Join(tmpDir, "updates.jsonl"))
+	defer ul.Close()
+
+	baseTime := time.Now().UTC()
+	seedLogs(t, ul, newPageTestLogs(10, baseTime))
+
+	// Test 8: concurrent GetPage + Record should not race or panic
+	var wg sync.WaitGroup
+	wg.Add(2)
+
+	// Continuous Record goroutine
+	go func() {
+		defer wg.Done()
+		for i := 0; i < 50; i++ {
+			ul.Record(UpdateLog{
+				ID:          fmt.Sprintf("concurrent-page-%d", i),
+				StartTime:   time.Now().UTC(),
+				EndTime:     time.Now().UTC(),
+				Duration:    100,
+				Status:      StatusSuccess,
+				Instances:   []InstanceUpdateDetail{},
+				TriggeredBy: "api-trigger",
+			})
+		}
+	}()
+
+	// Continuous GetPage goroutine
+	go func() {
+		defer wg.Done()
+		for i := 0; i < 50; i++ {
+			result, total := ul.GetPage(5, 0)
+			if result == nil {
+				t.Error("GetPage returned nil result during concurrent access")
+			}
+			if total < 10 {
+				t.Errorf("Expected total >= 10 during concurrent access, got %d", total)
+			}
+		}
+	}()
+
+	wg.Wait()
+}
+
+// --- LoadFromFile Tests ---
+
+func TestLoadFromFile_ValidFile(t *testing.T) {
+	logger := slog.Default()
+	tmpDir := t.TempDir()
+	filePath := filepath.Join(tmpDir, "updates.jsonl")
+
+	// Create a valid JSONL file with 3 records
+	now := time.Now().UTC()
+	records := []UpdateLog{
+		{
+			ID: "load-uuid-1", StartTime: now, EndTime: now.Add(5 * time.Second),
+			Duration: 5000, Status: StatusSuccess, Instances: []InstanceUpdateDetail{},
+			TriggeredBy: "api-trigger",
+		},
+		{
+			ID: "load-uuid-2", StartTime: now.Add(1 * time.Minute), EndTime: now.Add(1*time.Minute + 3*time.Second),
+			Duration: 3000, Status: StatusFailed, Instances: []InstanceUpdateDetail{},
+			TriggeredBy: "api-trigger",
+		},
+		{
+			ID: "load-uuid-3", StartTime: now.Add(2 * time.Minute), EndTime: now.Add(2*time.Minute + 2*time.Second),
+			Duration: 2000, Status: StatusPartialSuccess, Instances: []InstanceUpdateDetail{},
+			TriggeredBy: "api-trigger",
+		},
+	}
+
+	dir := filepath.Dir(filePath)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		t.Fatalf("Failed to create directory: %v", err)
+	}
+	f, err := os.Create(filePath)
+	if err != nil {
+		t.Fatalf("Failed to create file: %v", err)
+	}
+	for _, rec := range records {
+		data, _ := json.Marshal(rec)
+		f.Write(append(data, '\n'))
+	}
+	f.Close()
+
+	// Test 1: LoadFromFile loads all 3 records
+	ul := NewUpdateLogger(logger, filePath)
+	defer ul.Close()
+
+	err = ul.LoadFromFile()
+	if err != nil {
+		t.Fatalf("LoadFromFile() failed: %v", err)
+	}
+
+	logs := ul.GetAll()
+	if len(logs) != 3 {
+		t.Fatalf("Expected 3 loaded logs, got %d", len(logs))
+	}
+
+	// Verify IDs are loaded correctly
+	ids := make(map[string]bool)
+	for _, l := range logs {
+		ids[l.ID] = true
+	}
+	for _, rec := range records {
+		if !ids[rec.ID] {
+			t.Errorf("Expected to find ID '%s' in loaded logs", rec.ID)
+		}
+	}
+}
+
+func TestLoadFromFile_NonExistentFile(t *testing.T) {
+	logger := slog.Default()
+	tmpDir := t.TempDir()
+	filePath := filepath.Join(tmpDir, "nonexistent.jsonl")
+
+	// Test 2: non-existent file returns nil error (no-op)
+	ul := NewUpdateLogger(logger, filePath)
+	defer ul.Close()
+
+	err := ul.LoadFromFile()
+	if err != nil {
+		t.Errorf("Expected nil error for non-existent file, got %v", err)
+	}
+
+	logs := ul.GetAll()
+	if len(logs) != 0 {
+		t.Errorf("Expected 0 logs, got %d", len(logs))
+	}
+}
+
+func TestLoadFromFile_MemoryOnlyMode(t *testing.T) {
+	logger := slog.Default()
+
+	// Test 3: memory-only mode (empty filePath) returns nil error
+	ul := NewUpdateLogger(logger, "")
+	defer ul.Close()
+
+	err := ul.LoadFromFile()
+	if err != nil {
+		t.Errorf("Expected nil error for memory-only mode, got %v", err)
+	}
+}
+
+func TestLoadFromFile_SkipsInvalidJSON(t *testing.T) {
+	logger := slog.Default()
+	tmpDir := t.TempDir()
+	filePath := filepath.Join(tmpDir, "updates.jsonl")
+
+	// Create JSONL file with mix of valid and invalid lines
+	now := time.Now().UTC()
+	validRec := UpdateLog{
+		ID: "valid-load-uuid", StartTime: now, EndTime: now.Add(5 * time.Second),
+		Duration: 5000, Status: StatusSuccess, Instances: []InstanceUpdateDetail{},
+		TriggeredBy: "api-trigger",
+	}
+
+	dir := filepath.Dir(filePath)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		t.Fatalf("Failed to create directory: %v", err)
+	}
+	f, err := os.Create(filePath)
+	if err != nil {
+		t.Fatalf("Failed to create file: %v", err)
+	}
+	// Write: invalid, valid, invalid, empty line
+	f.WriteString("this is not json\n")
+	data, _ := json.Marshal(validRec)
+	f.Write(append(data, '\n'))
+	f.WriteString("{bad json\n")
+	f.WriteString("\n") // empty line
+	f.Close()
+
+	// Test 4: only the valid record is loaded
+	ul := NewUpdateLogger(logger, filePath)
+	defer ul.Close()
+
+	err = ul.LoadFromFile()
+	if err != nil {
+		t.Fatalf("LoadFromFile() failed: %v", err)
+	}
+
+	logs := ul.GetAll()
+	if len(logs) != 1 {
+		t.Fatalf("Expected 1 valid log loaded, got %d", len(logs))
+	}
+	if logs[0].ID != "valid-load-uuid" {
+		t.Errorf("Expected ID 'valid-load-uuid', got '%s'", logs[0].ID)
+	}
+}
+
+func TestLoadFromFile_AppendsToExisting(t *testing.T) {
+	logger := slog.Default()
+	tmpDir := t.TempDir()
+	filePath := filepath.Join(tmpDir, "updates.jsonl")
+
+	// Create JSONL file with 2 records (without using UpdateLogger to avoid file write side effects)
+	now := time.Now().UTC()
+	fileRecords := []UpdateLog{
+		{
+			ID: "file-uuid-1", StartTime: now, EndTime: now,
+			Duration: 200, Status: StatusSuccess, Instances: []InstanceUpdateDetail{},
+			TriggeredBy: "api-trigger",
+		},
+		{
+			ID: "file-uuid-2", StartTime: now, EndTime: now,
+			Duration: 300, Status: StatusFailed, Instances: []InstanceUpdateDetail{},
+			TriggeredBy: "api-trigger",
+		},
+	}
+
+	dir := filepath.Dir(filePath)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		t.Fatalf("Failed to create directory: %v", err)
+	}
+	f, err := os.Create(filePath)
+	if err != nil {
+		t.Fatalf("Failed to create file: %v", err)
+	}
+	for _, rec := range fileRecords {
+		data, _ := json.Marshal(rec)
+		f.Write(append(data, '\n'))
+	}
+	f.Close()
+
+	// Create logger and add a pre-existing in-memory log directly (not via Record to avoid file write)
+	existingLog := UpdateLog{
+		ID: "existing-uuid", StartTime: time.Now().UTC(), EndTime: time.Now().UTC(),
+		Duration: 100, Status: StatusSuccess, Instances: []InstanceUpdateDetail{},
+		TriggeredBy: "api-trigger",
+	}
+	ul := NewUpdateLogger(logger, filePath)
+	defer ul.Close()
+
+	// Directly add to internal slice to simulate pre-existing in-memory state
+	ul.mu.Lock()
+	ul.logs = append(ul.logs, existingLog)
+	ul.mu.Unlock()
+
+	// Test 5: LoadFromFile appends to existing in-memory logs
+	err = ul.LoadFromFile()
+	if err != nil {
+		t.Fatalf("LoadFromFile() failed: %v", err)
+	}
+
+	// Test 6: GetAll returns both pre-existing and loaded logs
+	logs := ul.GetAll()
+	if len(logs) != 3 {
+		t.Fatalf("Expected 3 logs (1 existing + 2 loaded), got %d", len(logs))
+	}
+
+	ids := make(map[string]bool)
+	for _, l := range logs {
+		ids[l.ID] = true
+	}
+	if !ids["existing-uuid"] {
+		t.Error("Expected to find 'existing-uuid' in combined logs")
+	}
+	if !ids["file-uuid-1"] {
+		t.Error("Expected to find 'file-uuid-1' in combined logs")
+	}
+	if !ids["file-uuid-2"] {
+		t.Error("Expected to find 'file-uuid-2' in combined logs")
+	}
+}
+
+func TestLoadFromFile_EmptyFile(t *testing.T) {
+	logger := slog.Default()
+	tmpDir := t.TempDir()
+	filePath := filepath.Join(tmpDir, "updates.jsonl")
+
+	// Create empty file
+	dir := filepath.Dir(filePath)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		t.Fatalf("Failed to create directory: %v", err)
+	}
+	f, err := os.Create(filePath)
+	if err != nil {
+		t.Fatalf("Failed to create file: %v", err)
+	}
+	f.Close()
+
+	// Test 7: empty file returns nil error with no records loaded
+	ul := NewUpdateLogger(logger, filePath)
+	defer ul.Close()
+
+	err = ul.LoadFromFile()
+	if err != nil {
+		t.Fatalf("LoadFromFile() failed: %v", err)
+	}
+
+	logs := ul.GetAll()
+	if len(logs) != 0 {
+		t.Errorf("Expected 0 logs from empty file, got %d", len(logs))
+	}
+}

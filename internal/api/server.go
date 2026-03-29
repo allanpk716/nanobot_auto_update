@@ -81,6 +81,11 @@ func NewServer(cfg *config.APIConfig, im *instance.InstanceManager, fullCfg *con
 	mux.Handle("POST /api/v1/trigger-update",
 		authMiddleware(http.HandlerFunc(triggerHandler.Handle)))
 
+	// Query update logs endpoint with auth (Phase 32: QUERY-01, QUERY-02)
+	queryHandler := NewQueryHandler(updateLogger, logger)
+	mux.Handle("GET /api/v1/update-logs",
+		authMiddleware(http.HandlerFunc(queryHandler.Handle)))
+
 	// Create HTTP server
 	// SSE-07: WriteTimeout=0 to support SSE long connections
 	httpServer := &http.Server{

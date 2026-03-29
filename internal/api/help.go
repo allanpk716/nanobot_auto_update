@@ -65,6 +65,12 @@ func (h *HelpHandler) getEndpoints() map[string]EndpointInfo {
 			Auth:        "required",
 			Description: "触发更新流程（需要 Bearer Token 认证）",
 		},
+		"update_logs": {
+			Method:      "GET",
+			Path:        "/api/v1/update-logs",
+			Auth:        "required",
+			Description: "Query update log history (supports limit and offset parameters)",
+		},
 		"help": {
 			Method:      "GET",
 			Path:        "/api/v1/help",
