@@ -174,7 +174,14 @@ instances:
 
 ---
 
-## Current Milestone: Planning Next Milestone
+## Current Milestone: v0.7 Update Lifecycle Notifications
+
+**Goal:** 在 HTTP API 触发的 nanobot 更新流程中，发送 Pushover 通知告知用户更新状态
+
+**Target features:**
+- 更新开始通知：收到更新触发请求后，立即发送 Pushover 通知告知更新已开始
+- 更新完成通知：更新完成后，发送 Pushover 通知告知简要结果（成功/失败/部分成功 + 各实例状态）
+- 非阻塞通知：通知发送失败不影响更新流程本身
 
 **Last Shipped: v0.6 Update Log Recording and Query System** — Completed 2026-03-29
 
