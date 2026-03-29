@@ -1,0 +1,37 @@
+# GoReleaser configuration for nanobot-auto-updater
+# Builds Windows amd64 GUI binary and publishes to GitHub Releases
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - main: ./cmd/nanobot-auto-updater
+    binary: nanobot-auto-updater
+    goos:
+      - windows
+    goarch:
+      - amd64
+    # IMPORTANT: Must fully override GoReleaser default ldflags.
+    # Default uses lowercase main.version, project uses uppercase main.Version.
+    # -H=windowsgui matches Makefile LDFLAGS_RELEASE (per D-02: GUI-only build).
+    ldflags:
+      - -H=windowsgui -X main.Version={{.Version}}
+    env:
+      - CGO_ENABLED=0
+
+archives:
+  - format: zip
+    # Output: nanobot-auto-updater_1.0.0_windows_amd64.zip
+    # Per D-01: ZIP format for Phase 38 self-update to download and extract exe.
+    name_template: >-
+      {{ .ProjectName }}_
+      {{- .Version }}_
+      {{- .Os }}_
+      {{- .Arch }}
+
+checksum:
+  # Output: nanobot-auto-updater_1.0.0_checksums.txt
+  # SHA256 checksums needed by Phase 38 UPDATE-03 integrity verification.
+  name_template: "{{ .ProjectName }}_{{ .Version }}_checksums.txt"
+  algorithm: sha256
