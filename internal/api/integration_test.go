@@ -41,7 +41,7 @@ func TestE2E_TriggerUpdate_RecordsTo_QueryReturns(t *testing.T) {
 			StartFailed: []*instance.InstanceError{},
 		},
 	}
-	triggerHandler := newTestHandler(logger, ul, mock)
+	triggerHandler := newTestHandler(logger, ul, mock, nil)
 
 	// Create QueryHandler sharing the same UpdateLogger
 	queryHandler := NewQueryHandler(ul, logger)
@@ -128,7 +128,7 @@ func TestE2E_UpdateID_Consistency(t *testing.T) {
 		BearerToken: "test-token-12345678901234567890",
 		Timeout:     30 * time.Second,
 	}
-	triggerHandler := NewTriggerHandler(mock, cfg, logger, ul)
+	triggerHandler := NewTriggerHandler(mock, cfg, logger, ul, nil, 3)
 	queryHandler := NewQueryHandler(ul, logger)
 
 	// Trigger 3 sequential updates and collect update_ids
@@ -213,7 +213,7 @@ func TestE2E_NonBlocking_FileWriteFailure(t *testing.T) {
 			StartFailed: []*instance.InstanceError{},
 		},
 	}
-	triggerHandler := newTestHandler(logger, ul, mock)
+	triggerHandler := newTestHandler(logger, ul, mock, nil)
 
 	// Trigger an update
 	req := httptest.NewRequest("POST", "/api/v1/trigger-update", nil)
@@ -310,7 +310,7 @@ func TestE2E_LoadFromFile_StartupRecovery(t *testing.T) {
 			StartFailed: []*instance.InstanceError{},
 		},
 	}
-	triggerHandler := newTestHandler(logger, ul, mock)
+	triggerHandler := newTestHandler(logger, ul, mock, nil)
 	queryHandler := NewQueryHandler(ul, logger)
 
 	// Step 1: Query should return all 3 loaded records
