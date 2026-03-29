@@ -1,9 +1,9 @@
 ---
 gsd_state_version: 1.0
 milestone: v0.8
-milestone_name: TBD
+milestone_name: Self-Update
 status: idle
-last_updated: "2026-03-29T07:40:00.000Z"
+last_updated: "2026-03-29T15:42:00.000+08:00"
 last_activity: 2026-03-29
 progress:
   total_phases: 0
@@ -24,10 +24,10 @@ See: .planning/PROJECT.md (updated 2026-03-29)
 
 ## Current Position
 
-Phase: None
-Plan: Not started
-Status: v0.7 shipped — awaiting next milestone
-Last activity: 2026-03-29
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-03-29 — Milestone v0.8 Self-Update started
 
 Progress: [░░░░░░░░░░░░░░░░░░░░] 0%
 

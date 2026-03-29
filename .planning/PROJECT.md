@@ -189,12 +189,35 @@ instances:
 
 ---
 
-## Current Milestone: None (v0.7 shipped)
+## Current Milestone: v0.8 Self-Update
+
+**Goal:** 让 nanobot-auto-updater 程序自身支持通过 GitHub Releases 自动检测、下载并替换更新
+
+**Target features:**
+- GitHub Actions CI/CD：打 tag 推送后自动编译 Windows amd64 并发布 GitHub Release
+- 自更新 HTTP API：新增 API 端点检查 GitHub 最新 Release 并触发更新
+- go-update 库实现运行中 exe 安全替换
+- 备份回滚：更新前备份当前 exe，新版本启动失败可恢复
 
 **Last Shipped: v0.7 Update Lifecycle Notifications** — Completed 2026-03-29
 
-Use `/gsd:new-milestone` to start the next milestone.
-
 ---
 
-*Last updated: 2026-03-29 after v0.7 milestone archival*
+*Last updated: 2026-03-29 — Milestone v0.8 Self-Update started*
+
+## Evolution
+
+This document evolves at phase transitions and milestone boundaries.
+
+**After each phase transition** (via `/gsd:transition`):
+1. Requirements invalidated? → Move to Out of Scope with reason
+2. Requirements validated? → Move to Validated with phase reference
+3. New requirements emerged? → Add to Active
+4. Decisions to log? → Add to Key Decisions
+5. "What This Is" still accurate? → Update if drifted
+
+**After each milestone** (via `/gsd:complete-milestone`):
+1. Full review of all sections
+2. Core Value check — still the right priority?
+3. Audit Out of Scope — reasons still valid?
+4. Update Context with current state
