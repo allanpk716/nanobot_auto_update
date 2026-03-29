@@ -187,4 +187,4 @@ instances:
 
 ---
 
-*Last updated: 2026-03-29 after v0.6 milestone*
+*Last updated: 2026-03-29 after Phase 34 completion*
