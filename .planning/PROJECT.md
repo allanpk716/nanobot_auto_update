@@ -2,7 +2,7 @@
 
 ## What This Is
 
-一个 Windows 后台监控服务，使用 Golang 开发，用于监控网络连通性并通过 HTTP API 触发 nanobot 工具的更新。**v0.3 重大架构变更**：从定时更新工具转变为监控服务 + HTTP API 触发更新模式。**v0.4 实时日志查看**：通过 SSE 流式传输和嵌入式 Web UI 实时查看 nanobot 实例的 stdout/stderr 输出。**v0.5 核心监控和自动化**：启动时自动启动实例、实例健康监控、Google 连通性监控、HTTP API 触发更新。多实例管理保持不变。通过配置文件和 HTTP API 控制行为。
+一个 Windows 后台监控服务，使用 Golang 开发，用于监控网络连通性并通过 HTTP API 触发 nanobot 工具的更新。**v0.6 更新日志记录和查询**：持久化记录每次更新操作的详细日志，提供分页查询 API 和 7 天自动清理。**v0.5 核心监控和自动化**：启动时自动启动实例、实例健康监控、Google 连通性监控、HTTP API 触发更新和 help 接口。**v0.4 实时日志查看**：通过 SSE 流式传输和嵌入式 Web UI 实时查看 nanobot 实例的 stdout/stderr 输出。多实例管理保持不变。通过配置文件和 HTTP API 控制行为。
 
 ## Core Value
 
@@ -12,60 +12,16 @@
 
 ### Validated
 
-### Active
-
-- LOG-01: 更新日志数据结构 — Phase 30 ✓
-- LOG-02: 更新触发时记录日志 — Phase 30 ✓
-- LOG-03: 非阻塞日志记录 — Phase 30 ✓
-- LOG-04: 更新 ID 返回给客户端 — Phase 30 ✓
-- STORE-01: JSONL 持久化 — Phase 31 ✓
-- STORE-02: 7天自动清理 — Phase 31 ✓
-- QUERY-01: 查询 API — Phase 32 ✓
-- QUERY-02: 分页参数 — Phase 32 ✓
-- QUERY-03: 认证保护 — Phase 32 ✓
-
-### Out of Scope
-
-**v0.4 实时日志查看** — 2026-03-20:
-- ✓ 环形缓冲区（5000行容量）和并发读写 — v0.4
-- ✓ Stdout/stderr 捕获和并发管道读取 — v0.4
-- ✓ 实例生命周期集成（独立缓冲） — v0.4
-- ✓ SSE 流式传输 API 和历史日志 — v0.4
-- ✓ 嵌入式 Web UI 和实例选择器 — v0.4
-- ✓ 优雅降级错误处理 — v0.4
-
-**v0.2 多实例支持** — 2026-03-16:
-- ✓ 多实例配置 (YAML) — v0.2
-- ✓ 实例名称和端口唯一性验证 — v0.2
-- ✓ 停止/启动所有实例的生命周期管理 — v0.2
-- ✓ 优雅降级 (某实例失败不影响其他实例) — v0.2
-- ✓ 多实例失败通知 (包含详细错误信息) — v0.2
-- ✓ 错误聚合和结构化报告 — v0.2
-
-**v1.0 单实例自动更新** — 2026-02-18:
-- ✓ 检测系统是否安装 uv 包管理器 — v1.0
-- ✓ 按 cron 表达式定时执行更新任务 — v1.0
-- ✓ 使用 uv 安装 nanobot GitHub 最新代码 — v1.0
-- ✓ 更新失败时回退到 uv tool install nanobot-ai 稳定版 — v1.0
-- ✓ 更新失败时通过 Pushover 通知用户 — v1.0
-- ✓ 支持配置文件 (YAML) 配置运行参数 — v1.0
-- ✓ 支持命令行参数覆盖配置 — v1.0
-- ✓ 后台运行，隐藏控制台窗口 — v1.0
-- ✓ 记录日志到文件，支持日志轮转 — v1.0
-- ✓ --update-now 立即更新模式 (JSON 输出) — v1.0
-
-### Validated
-
-**v0.6 Update Log Recording** — 2026-03-29:
-- ✓ UpdateLog 数据模型 (UUID, 时间戳, 触发方式, 实例详情) — Phase 30
-- ✓ UpdateLogger 组件 (线程安全 Record/GetAll) — Phase 30
-- ✓ TriggerHandler 集成日志记录 (UUID v4, 非阻塞) — Phase 30
-- ✓ JSONL 文件持久化 (atomic write + fsync) — Phase 31
-- ✓ 7天自动清理 (bufio.Scanner + atomic rename) — Phase 31
-- ✓ UpdateLogger 生命周期集成 (main.go + cron) — Phase 31
-- ✓ 查询 API (GET /api/v1/update-logs, 分页, Bearer Token) — Phase 32
-- ✓ E2E 集成测试 (trigger→file→query, ID一致性, 非阻塞) — Phase 33
-- ✓ 性能基准 (1000+ records < 500ms, 最快 867ns) — Phase 33
+**v0.6 Update Log Recording and Query System** — 2026-03-29:
+- ✓ LOG-01: UpdateLog 数据模型 (UUID, 时间戳, 触发方式, 实例详情)
+- ✓ LOG-02: 更新触发时记录日志 (TriggerHandler 集成)
+- ✓ LOG-03: 非阻塞日志记录 (文件写入失败不影响更新)
+- ✓ LOG-04: 更新 ID (UUID v4) 返回给客户端
+- ✓ STORE-01: JSONL 文件持久化 (atomic write + fsync)
+- ✓ STORE-02: 7天自动清理 (bufio.Scanner + atomic rename)
+- ✓ QUERY-01: 查询 API (GET /api/v1/update-logs)
+- ✓ QUERY-02: 分页参数 (limit/offset, 默认20/最大100)
+- ✓ QUERY-03: 认证保护 (Bearer Token, 复用 Phase 28)
 
 **v0.5 核心监控和自动化** — 2026-03-24:
 - ✓ 启动时自动启动所有配置的实例 — Phase 24
@@ -75,14 +31,7 @@
 - ✓ HTTP API 触发更新端点 (/api/v1/trigger-update) — Phase 28
 - ✓ HTTP help 接口 (/api/v1/help) — Phase 29
 
-- GUI 界面 — 命令行工具，无需图形界面
-- 更新历史记录 — 保持简单，不存储历史
-- 开机自启动 — 用户手动启动
-- 跨平台支持 — 仅支持 Windows
-- 日志文本搜索和正则表达式过滤 — v2 功能
-- 日志导出功能 — v2 功能
-- 暗色主题 UI — v2 功能
-- 可配置缓冲区大小 — v2 功能
+**v0.4 实时日志查看** — 2026-03-20:
 
 ## Context
 
@@ -91,6 +40,8 @@
 **uv**: Python 包管理器，用于安装和管理 Python 工具。
 
 **Pushover**: 推送通知服务，用于在更新失败时通知用户。
+
+**v0.6 Shipped:** 2026-03-29 — 更新日志记录和查询系统里程碑完成，4 个阶段 (30-33)，8 个计划，16 个任务。Phase 30: UpdateLog 数据模型 + UpdateLogger 组件。Phase 31: JSONL 文件持久化 + 7天自动清理。Phase 32: 查询 API + 分页 + Bearer Token 认证。Phase 33: E2E 集成测试 + 性能基准 (867ns-87us)。验证: 5/5 成功标准通过，50+ 测试全部通过。
 
 **v0.5 Shipped:** 2026-03-24 — 核心监控和自动化里程碑完成，6 个阶段 (24-29)，16 个计划，22 个任务，~2,400 行新增代码。Phase 24: 启动时自动启动实例。Phase 25: 实例健康监控。Phase 26: Google 连通性监控。Phase 27: Pushover 通知（1 分钟冷却）。Phase 28: HTTP API 触发更新 (Bearer Token + 并发控制)。Phase 29: HTTP help 接口。审计结果: 20/20 需求满足，6/6 阶段通过，15/15 集成点连接，5/5 E2E 流程完整，2 技术债（非阻塞文档缺口）。
 
@@ -174,6 +125,17 @@
 | HTTP 状态码策略 (200/401/409/504) | 清晰的错误分类 | ✓ Good — Phase 28-03 |
 | Help 接口无认证 (公开访问) | 第三方程序智能查询 | ✓ Good — Phase 29-02 |
 | Version 注入 (main → server → handler) | 未来扩展性 | ✓ Good — Phase 29-02 |
+| JSON Lines 日志格式 | 简单追加,无需全文件解析 | ✓ Good — Phase 30 |
+| 三态分类 (success/partial_success/failed) | 精确表达多实例更新结果 | ✓ Good — Phase 30 |
+| TriggerUpdater 接口 | mock 友好测试,解耦具体依赖 | ✓ Good — Phase 30 |
+| Nil-safe UpdateLogger | handler 检查 nil,非阻塞错误日志 | ✓ Good — Phase 30 |
+| UUID v4 入口生成 | 完整生命周期追踪 | ✓ Good — Phase 30 |
+| Separate fileMu mutex | 文件 I/O 不阻塞 GetAll() | ✓ Good — Phase 31 |
+| Lazy file open | 首次 Record() 时打开,支持纯内存模式 | ✓ Good — Phase 31 |
+| Atomic cleanup (temp + rename) | Windows 安全的文件清理 | ✓ Good — Phase 31 |
+| Non-blocking file write failure | 静默降级到纯内存模式 | ✓ Good — Phase 31 |
+| UpdateLogger in main.go | 应用级生命周期控制 | ✓ Good — Phase 31 |
+| bufio.Scanner 流式分页 | 避免 1000+ 记录内存问题 | ✓ Good — Phase 32 |
 
 ## Configuration
 
@@ -212,32 +174,10 @@ instances:
 
 ---
 
-## Current Milestone: v0.6 Update Log Recording and Query System
-
-**Goal:** 记录每次 HTTP API 触发的更新操作,并提供查询接口获取更新历史日志
-
-**Target features:**
-- 更新日志记录:每次 trigger-update 调用时自动记录详细日志
-- 日志持久化:使用 JSON Lines 格式保存到文件(保留7天)
-- 日志查询 API:通过 /api/v1/update-logs 查询最近N次更新
-- 分页支持:支持 limit/offset 参数
-- 认证保护:与 trigger-update 使用相同的 Bearer Token 认证
-
-**Log content:**
-- 更新ID(唯一标识符)
-- 时间戳(开始/结束时间)
-- 触发来源
-- 实例更新结果(每个实例的成功/失败状态和详细消息)
-- 完整输出日志(每个实例的 stdout/stderr)
-
-**Key context:**
-- 文件格式: JSON Lines (每行一个JSON对象,便于追加)
-- 存储位置: 文件持久化
-- 清理策略: 保留最近7天,自动删除旧日志
-- 认证方式: Bearer Token (与现有 API 一致)
+## Current Milestone: Planning Next Milestone
 
 **Last Shipped: v0.6 Update Log Recording and Query System** — Completed 2026-03-29
 
 ---
 
-*Last updated: 2026-03-29 Phase 33 complete — v0.6 milestone complete*
+*Last updated: 2026-03-29 after v0.6 milestone*

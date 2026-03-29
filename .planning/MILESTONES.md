@@ -1,5 +1,20 @@
 # Milestones
 
+## v0.6 Update Log Recording and Query System (Shipped: 2026-03-29)
+
+**Phases completed:** 4 phases, 8 plans, 16 tasks
+
+**Key accomplishments:**
+
+- UpdateLog/InstanceUpdateDetail data structures with three-state status classification and thread-safe UpdateLogger using sync.RWMutex
+- UUID v4 generation, timing metadata, and UpdateLogger integration in TriggerHandler with mock-based test coverage
+- JSONL file persistence with sync.Mutex-protected atomic append, 7-day auto-cleanup via temp file + atomic rename, and non-blocking GetAll() using separate locks
+- UpdateLogger wired into main.go with startup cleanup, daily cron at 3 AM, and graceful Close() in shutdown; NewServer() accepts external injection
+- E2E integration tests covering trigger->JSONL persistence->query retrieval, update ID consistency, non-blocking file failure, and startup recovery
+- 4 Go benchmarks confirming sub-millisecond query performance (867ns-87us), all 50+ tests passing, and all 5 Phase 33 success criteria verified
+
+---
+
 ## v0.5 Core Monitoring and Automation (Shipped: 2026-03-24)
 
 **Phases completed:** 6 phases (24-29), 16 plans, 22 tasks
@@ -14,6 +29,7 @@
 - ✅ HTTP Help Endpoint: 提供 GET /api/v1/help 接口供第三方程序智能查询程序使用说明，避免 CLI 命令冲突
 
 **Tech additions:**
+
 - Context-based timeout control
 - Atomic.Bool for concurrent update control
 - Bearer Token authentication (RFC 6750)
