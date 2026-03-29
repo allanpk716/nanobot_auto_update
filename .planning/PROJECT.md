@@ -12,6 +12,11 @@
 
 ### Validated
 
+**v0.8 CI/CD Pipeline** — 2026-03-29 (Phase 37):
+- ✓ CICD-01: v* tag 触发 GitHub Actions 自动构建
+- ✓ CICD-02: GoReleaser 编译 Windows amd64 + checksums 发布到 GitHub Releases
+- ✓ CICD-03: ldflags 注入版本号 (-version 输出正确)
+
 **v0.8 PoC Validation** — 2026-03-29 (Phase 36):
 - ✓ VALID-01: minio/selfupdate v0.6.0 成功替换运行中 Windows exe
 - ✓ VALID-02: 旧版本保存为 .old 备份文件
