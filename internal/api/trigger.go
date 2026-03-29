@@ -15,7 +15,6 @@ import (
 
 	"github.com/HQGroup/nanobot-auto-updater/internal/config"
 	"github.com/HQGroup/nanobot-auto-updater/internal/instance"
-	"github.com/HQGroup/nanobot-auto-updater/internal/notifier"
 	"github.com/HQGroup/nanobot-auto-updater/internal/updatelog"
 )
 
@@ -25,6 +24,13 @@ type TriggerUpdater interface {
 	TriggerUpdate(ctx context.Context) (*instance.UpdateResult, error)
 }
 
+// Notifier is the interface for sending update notifications.
+// Defined here to enable mock injection for testing.
+// The concrete notifier.Notifier satisfies this interface via duck typing.
+type Notifier interface {
+	Notify(title, message string) error
+}
+
 // TriggerHandler handles POST /api/v1/trigger-update requests
 // API-01: HTTP endpoint for triggering updates
 type TriggerHandler struct {
@@ -32,12 +38,12 @@ type TriggerHandler struct {
 	config          *config.APIConfig
 	logger          *slog.Logger
 	updateLogger    *updatelog.UpdateLogger // LOG-01, LOG-02: Update log recorder
-	notifier        *notifier.Notifier      // UNOTIF-01, UNOTIF-02: Pushover notification sender
+	notifier        Notifier                // UNOTIF-01, UNOTIF-02: Pushover notification sender
 	instanceCount   int                     // UNOTIF-01: instance count for start notification
 }
 
 // NewTriggerHandler creates a new trigger update handler
-func NewTriggerHandler(im TriggerUpdater, cfg *config.APIConfig, logger *slog.Logger, ul *updatelog.UpdateLogger, notif *notifier.Notifier, instanceCount int) *TriggerHandler {
+func NewTriggerHandler(im TriggerUpdater, cfg *config.APIConfig, logger *slog.Logger, ul *updatelog.UpdateLogger, notif Notifier, instanceCount int) *TriggerHandler {
 	return &TriggerHandler{
 		instanceManager: im,
 		config:          cfg,

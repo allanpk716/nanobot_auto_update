@@ -29,7 +29,7 @@ func (m *mockTriggerUpdater) TriggerUpdate(ctx context.Context) (*instance.Updat
 }
 
 // newTestHandler creates a TriggerHandler with mock InstanceManager for testing.
-func newTestHandler(logger *slog.Logger, ul *updatelog.UpdateLogger, mock *mockTriggerUpdater, notif *notifier.Notifier) *TriggerHandler {
+func newTestHandler(logger *slog.Logger, ul *updatelog.UpdateLogger, mock *mockTriggerUpdater, notif Notifier) *TriggerHandler {
 	cfg := &config.APIConfig{
 		Port:        8080,
 		BearerToken: "test-token-12345678901234567890",
