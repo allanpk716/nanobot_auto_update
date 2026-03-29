@@ -1,8 +1,8 @@
 # Stack Research
 
-**Domain:** 更新日志记录和查询系统 (Update Log Recording and Query System)
-**Researched:** 2026-03-26
-**Confidence:** HIGH (基于 Go 标准库和成熟生态实践)
+**Domain:** Self-Update via GitHub Releases (v0.8 milestone)
+**Researched:** 2026-03-29
+**Confidence:** HIGH (verified with source code analysis, official docs, and go.mod inspection)
 
 ## Recommended Stack
 
@@ -10,153 +10,178 @@
 
 | Technology | Version | Purpose | Why Recommended |
 |------------|---------|---------|-----------------|
-| **Go 标准库 encoding/json** | Go 1.24+ | JSON Lines 读写 | 无需额外依赖,性能足够,支持流式解码器避免内存问题。Go 1.24+ 已优化 JSON 性能。 |
-| **Go 标准库 bufio** | Go 1.24+ | 文件流式读取 | 高性能缓冲读取,Scanner 自动处理行边界,支持大文件分页查询而不加载全部到内存。 |
-| **Go 标准库 os** | Go 1.24+ | 文件追加写入 | `os.OpenFile` + `os.O_APPEND\|os.O_CREATE\|os.O_WRONLY` 实现原子追加,避免竞争条件。 |
-| **Go 标准库 time** | Go 1.24+ | 时间戳和保留策略 | 标准时间处理,配合 `time.Since()` 实现基于时间的清理逻辑。 |
-| **github.com/google/uuid** | v1.6+ | 唯一更新ID生成 | 业界标准,符合 RFC 9562,生成 UUID v4 作为更新操作唯一标识符。 |
+| **github.com/minio/selfupdate** | v0.6.0 | Running exe binary replacement | Fork of inconshreveable/go-update maintained by MinIO. Handles Windows running-exe replacement via rename trick (`app.exe` -> `.app.exe.old`, `.app.exe.new` -> `app.exe`). Built-in rollback. Windows-specific `hideFile()` via kernel32.dll for `.old` cleanup. v0.6.0 released Jan 2023, 812 stars, 945+ downstream users. |
+| **github.com/google/go-github/v74** | v74.0.0 | GitHub Releases API client | Official Google-maintained Go client for GitHub API v3. `Repositories.GetLatestRelease()` fetches latest release info including assets, tag names, and download URLs. Minimal dependency: only `go-querystring` + `oauth2`. v74 is current as of 2025. |
+| **GoReleaser** | v2.x | CI/CD release automation | Industry standard for Go binary releases. Produces GitHub Releases with tagged binaries, checksums, and changelogs. Single `.goreleaser.yaml` config. Trigger on tag push (`v*` pattern). Produces `nanobot-auto-updater_windows_amd64.exe` asset matching go-selfupdate naming conventions. |
 
 ### Supporting Libraries
 
 | Library | Version | Purpose | When to Use |
 |---------|---------|---------|-------------|
-| **os.OpenFile** | Go 1.24+ | JSONL 文件追加写入 | 每次更新操作完成时追加一行 JSON 记录。使用 `os.O_APPEND\|os.O_CREATE\|os.O_WRONLY, 0644` 确保原子追加。 |
-| **bufio.Scanner** | Go 1.24+ | JSONL 流式分页读取 | 查询接口读取文件时,逐行扫描到指定 offset,避免加载整个文件到内存。对于大行(>64KB)需要增加缓冲区大小。 |
-| **json.Decoder** | Go 1.24+ | JSON Lines 流式解码 | 配合 bufio.Scanner 逐行解码 JSON 对象,避免内存爆炸。比 `json.Unmarshal` 更高效。 |
-| **json.Encoder** | Go 1.24+ | JSON Lines 流式编码 | 写入日志时使用 `json.NewEncoder(file).Encode(record)` 确保每行一个完整 JSON 对象。 |
+| **crypto/sha256** (stdlib) | Go 1.24+ | Binary checksum verification | Verify downloaded binary integrity against checksums from GitHub Release. `minio/selfupdate` supports `Options.Checksum` for this. |
+| **encoding/hex** (stdlib) | Go 1.24+ | Checksum string decoding | Decode hex-encoded SHA256 checksums from GitHub Release assets for verification. |
+| **archive/zip** (stdlib) | Go 1.24+ | Unzip release assets | If GoReleaser produces `.zip` archives instead of raw binaries, extract the exe from the zip. |
+| **net/http** (stdlib) | Go 1.24+ | Download release binary | Download the new exe from GitHub Release asset URL. Pass `resp.Body` directly to `selfupdate.Apply()`. |
+| **golang.org/x/sys** | v0.41.0 | Windows service management | Already in go.mod. Needed for potential service stop/restart during update if running as Windows service. |
 
 ### Development Tools
 
 | Tool | Purpose | Notes |
 |------|---------|-------|
-| **Go 1.24+ 内置工具** | 编译、测试、性能分析 | 无需额外工具链,标准 `go test -bench` 即可验证 JSONL 性能。 |
-| **stdlib log/slog** | 调试日志 | 复用现有 logger (已集成 `github.com/WQGroup/logger`),为更新日志系统添加组件标识。 |
+| **GoReleaser CLI + GitHub Action** | Build + publish releases on tag push | Use `goreleaser/goreleaser-action@v6` in workflow. Config in `.goreleaser.yaml`. |
+| **GitHub Actions** | CI/CD pipeline | Workflow `.github/workflows/release.yml` triggers on tag push `v*`. Runs `goreleaser` to build Windows amd64 binary and publish GitHub Release. |
+| **git tag** | Version trigger | Push `v0.8.0` tag to trigger release pipeline. Matches semver pattern expected by self-update logic. |
 
 ## Installation
 
 ```bash
-# 唯一新增依赖: UUID 生成库
-go get github.com/google/uuid@v1.6.0
+# Core self-update dependencies
+go get github.com/minio/selfupdate@v0.6.0
+go get github.com/google/go-github/v74@v74.0.0
 
-# 其他功能全部使用 Go 标准库,无需额外安装
-# - encoding/json (JSON Lines 处理)
-# - bufio (流式文件读取)
-# - os (文件追加写入)
-# - time (时间处理和保留策略)
+# No other new dependencies needed - crypto/sha256, encoding/hex,
+# archive/zip, net/http are all Go standard library
 ```
 
 ## Integration with Existing Stack
 
-### 现有栈复用
+### Existing Stack Reuse
 
-| 现有组件 | 复用方式 | 理由 |
-|---------|---------|------|
-| **internal/logging** | 复用现有 `./logs` 目录结构 | 统一日志管理,更新日志文件可放在 `./logs/updates.jsonl`,无需额外配置。 |
-| **internal/config** | 扩展 Config 结构体 | 在现有 `config.Config` 添加 `UpdateLogConfig` 子配置,包含文件路径和保留天数。 |
-| **internal/api/auth** | 复用 Bearer Token 认证 | 查询 API `/api/v1/update-logs` 使用与 `trigger-update` 相同的认证中间件。 |
-| **slog.Logger** | 复用现有 logger 实例 | 更新日志系统内部错误记录到主日志,使用 `logger.With("component", "updatelog")` 标识。 |
+| Existing Component | Reuse Pattern | Rationale |
+|-------------------|---------------|-----------|
+| **internal/api/server.go** | Add new self-update handler | Follow existing handler registration pattern. New `SelfUpdateHandler` alongside `TriggerHandler`. |
+| **internal/api/auth** | Bearer Token on self-update endpoint | Self-update is destructive, must be authenticated. Reuse existing middleware. |
+| **internal/api/trigger.go patterns** | Atomic update control (`sync.AtomicBool`) | Self-update needs same concurrency guard to prevent overlapping updates. |
+| **internal/config** | Add `SelfUpdateConfig` section | GitHub owner/repo, update channel, backup path. Extends existing YAML config. |
+| **internal/notifier** | Pushover notification on self-update | Notify user when self-update starts/completes. Reuse existing Notifier interface. |
+| **internal/updatelog** | Log self-update operation | Record self-update in UpdateLog alongside nanobot updates. Same JSONL persistence. |
+| **Version injection** (main -> server -> handler) | Inject build version for comparison | Already exists from Phase 29. Use `ldflags` in GoReleaser to set version at build time. |
 
-### 集成点说明
+### Integration Architecture
 
-**1. Trigger Handler 集成 (internal/api/trigger.go)**
-```go
-// 在 TriggerHandler.Handle 中添加日志记录调用
-result, err := h.instanceManager.TriggerUpdate(ctx)
-if err == nil || result != nil {
-    // 记录更新日志(成功或部分失败都记录)
-    h.updateLogger.Record(ctx, result, r.RemoteAddr)
-}
+```
+HTTP Request -> SelfUpdateHandler
+                    |
+                    v
+            1. GetLatestRelease() via go-github
+                    |
+                    v
+            2. Compare versions (tag vs current)
+                    |
+                    v
+            3. Download asset binary
+                    |
+                    v
+            4. selfupdate.Apply(binary, opts)
+                    |
+                    v
+            5. Process exits (or service restarts)
 ```
 
-**2. 文件路径策略**
-- 主日志文件: `./logs/app-YYYY-MM-DD.log` (现有)
-- 更新日志: `./logs/updates.jsonl` (新增,单一文件持续追加)
-- 理由: 单文件便于分页查询,通过 ModTime 实现基于时间的清理。
+### Critical Integration Detail: Windows Running Exe
 
-**3. 清理策略集成**
-```go
-// 在应用启动时或定期调度器中执行清理
-func cleanupOldLogs(logPath string, retentionDays int) error {
-    // 读取文件,过滤保留最近 N 天的记录
-    // 使用临时文件 + rename 确保原子性
-}
-```
+The `minio/selfupdate` library handles the core Windows challenge:
+
+1. Writes new binary to `.nanobot-auto-updater.exe.new`
+2. Renames running exe to `.nanobot-auto-updater.exe.old` (Windows allows rename of running exe)
+3. Renames new binary to `nanobot-auto-updater.exe`
+4. On Windows, cannot delete `.old` file (still locked), so hides it via `kernel32.dll SetFileAttributesW`
+5. On next restart, `.old` file can be cleaned up
+
+This means the update takes effect on **next process restart**. The handler should:
+- Apply the update (binary replacement)
+- Return success response to client
+- The running process continues serving with old binary
+- Next restart (manual or service restart) loads new version
+
+## Alternatives Considered
+
+| Recommended | Alternative | Why Not |
+|-------------|-------------|---------|
+| **minio/selfupdate** | inconshreveable/go-update | Original is unmaintained (last release 2015, no v0.6.0 fixes). MinIO fork is actively maintained, adds Windows hide file support, minisign verification. Same API surface. |
+| **minio/selfupdate** | creativeprojects/go-selfupdate | Too opinionated: enforces strict asset naming (`{cmd}_{goos}_{goarch}.zip`), pulls in heavy dependency tree (go-github/v74 + gitea + gitlab + semver + xz). We need fine-grained control over download/verification. Use minio/selfupdate for the hard part (exe replacement) + go-github directly for release discovery. |
+| **minio/selfupdate** | Manual implementation (rename + download) | Would need to reimplement: Windows rename trick, rollback on failure, hide `.old` file via kernel32.dll, checksum verification, signature verification. All solved by minio/selfupdate in ~400 lines of battle-tested code. |
+| **GoReleaser** | Manual GitHub Actions (go build + gh release) | GoReleaser is simpler to configure, generates checksums automatically, handles changelogs, and produces asset naming compatible with self-update discovery. Manual approach requires more YAML and error-prone scripting. |
+| **go-github/v74** | Direct HTTP to api.github.com | go-github handles pagination, rate limiting, authentication, error parsing, and type safety. Direct HTTP requires manual JSON parsing and header management. |
+| **go-github/v74** | creativeprojects/go-selfupdate (includes GitHub client) | creativeprojects pulls in go-github/v74 anyway, plus gitea, gitlab, semver, xz libraries we do not need. Using go-github directly gives us only what we need. |
 
 ## What NOT to Use
 
 | Avoid | Why | Use Instead |
 |-------|-----|-------------|
-| **第三方 JSONL 库** (如 jsonl-go) | 标准库已足够,引入不必要依赖 | `encoding/json` + `bufio.Scanner` |
-| **数据库** (SQLite/BoltDB) | JSONL 文件满足需求,部署简单,无需 schema 迁移 | JSONL 文件 + 分页读取 |
-| **json.Unmarshal (全量加载)** | 大文件导致内存问题 | `json.Decoder` 流式解码 |
-| **os.WriteFile** | 不支持原子追加,每次重写整个文件 | `os.OpenFile` + `os.O_APPEND` |
-| **ioutil.ReadFile (已废弃)** | Go 1.16+ 废弃,性能差 | `os.Open` + `bufio.Scanner` |
-| **UUID v7** | 时间排序依赖外部库,项目需求无需 DB 索引优化 | UUID v4 (`github.com/google/uuid`) |
-| **第三方清理库** (如 dir-janitor) | 逻辑简单,自行实现更灵活 | 自实现清理函数 (见 ARCHITECTURE.md) |
+| **creativeprojects/go-selfupdate** | Enforces naming conventions (`{cmd}_{goos}_{goarch}.ext`), heavy dependency tree (gitea + gitlab + xz + semver), no GitHub Release releases (uses tags but no formal releases published). Opinionated for generic self-update, not suited for service-level control. | minio/selfupdate + go-github directly |
+| **rhysd/go-github-selfupdate** | Unmaintained since ~2021. Fork of original creativeprojects but stale. | minio/selfupdate |
+| **sanbornm/go-selfupdate** | Abandonware. Original 2014-era library, no Windows support. | minio/selfupdate |
+| **inconshreveable/go-update** | Original library, unmaintained since 2015. No Windows `.old` file handling. No `PrepareAndCheckBinary`/`CommitBinary` split. | minio/selfupdate (maintained fork) |
+| **goservice/svc** or similar service wrappers | Unnecessary abstraction. Project already runs as a Windows background process with `ShowWindow(SW_HIDE)`. | Keep existing startup pattern, add service restart if needed |
+| **go-bindata or go:embed for config** | Config file should be external (YAML). Embedding would prevent runtime config changes. | Keep external config.yaml, embed only static web UI (existing pattern) |
+| **Checksum file from GitHub Release** (optional) | GoReleaser can generate checksums.txt, but adds download complexity. Can verify binary hash inline. | SHA256 hash comparison against expected value from Release metadata |
 
 ## Stack Patterns by Variant
 
-**If 文件大小 < 10MB (预估 7 天内):**
-- 使用单文件 `updates.jsonl`,直接追加写入
-- 分页查询时全量扫描到 offset (性能可接受)
-- Because: 实现简单,无并发竞争问题
+**If running as background process (current):**
+- Use `minio/selfupdate.Apply()` directly
+- After apply, notify user that restart is needed
+- Process continues running old version until manual restart
+- Because: No service manager integration needed, simplest approach
 
-**If 文件大小 > 10MB (超过 7 天未清理):**
-- 定期清理任务每天运行,删除 7 天前的记录
-- 考虑按日期分片 (updates-2026-03-26.jsonl),每天一个文件
-- Because: 单文件过大影响查询性能,分片按日期自然对齐清理逻辑
+**If running as Windows Service (future consideration):**
+- Stop service -> apply update -> start service
+- Use `os/exec` to run `net stop <service>` / `net start <service>`
+- Because: Windows Service Control Manager must coordinate restart
 
-**If 并发写入压力大 (>100 req/s):**
-- 当前设计: `os.O_APPEND` 已保证写入原子性 (操作系统保证)
-- 无需额外锁机制 (文件系统层面的追加已经是原子的)
-- Because: Go 的文件追加在 Windows/Linux 都是原子操作
+**If checksum verification needed (recommended):**
+- GoReleaser generates `checksums.txt` asset
+- Download checksums.txt, extract expected hash for `nanobot-auto-updater_windows_amd64.exe`
+- Pass hash to `selfupdate.Options{Checksum: hashBytes}`
+- Because: Defense-in-depth against corrupted or tampered downloads
+
+**If private GitHub repository:**
+- Set `GITHUB_TOKEN` env var (go-github reads it automatically)
+- Or pass `http.Client` with OAuth2 token transport to `github.NewClient()`
+- Because: GitHub API rate limits unauthenticated requests (60/hr vs 5000/hr)
 
 ## Version Compatibility
 
 | Package A | Compatible With | Notes |
 |-----------|-----------------|-------|
-| github.com/google/uuid@v1.6.0 | Go 1.24+ | 无 CGO 依赖,纯 Go 实现,兼容 Windows。 |
-| encoding/json (stdlib) | Go 1.24+ | Go 1.24 已包含性能优化,无需 json v2 (实验性)。 |
-| bufio.Scanner (stdlib) | Go 1.24+ | 默认 64KB 缓冲区,对于大 JSON 行需手动调整 `bufio.Scanner.Buffer()`。 |
-| os.OpenFile (stdlib) | Go 1.24+ | Windows 平台追加写入需使用 `os.O_APPEND`,已验证兼容。 |
+| minio/selfupdate@v0.6.0 | Go 1.24+ | go.mod specifies `go 1.24.0`. Minimal deps: only `aead.dev/minisign` + `golang.org/x/crypto` + `golang.org/x/sys`. |
+| google/go-github/v74@v74.0.0 | Go 1.24+ | go.mod in creativeprojects/go-selfupdate confirms v74 works with Go 1.24.11. |
+| golang.org/x/sys@v0.41.0 (existing) | Both new libraries | minio/selfupdate needs `x/sys` (already in go.mod at v0.41.0). No conflict. |
+| github.com/stretchr/testify@v1.11.1 (existing) | go-github/v74 | No overlap. go-github only depends on `go-querystring` + `oauth2`. |
 
-## Performance Considerations
+### Dependency Tree Impact
 
-### JSONL 文件性能
+```
+NEW dependencies added to go.mod:
+  github.com/minio/selfupdate v0.6.0
+    -> aead.dev/minisign v0.2.0        (signature verification, optional)
+    -> golang.org/x/crypto v0.43.0     (may upgrade existing v0.x)
+    -> golang.org/x/sys v0.37.0        (already have v0.41.0, no downgrade)
 
-| 场景 | 预估性能 | 优化策略 |
-|------|---------|---------|
-| **写入** (追加单行) | ~0.1ms/次 | 使用 `json.Encoder` 直接编码,无需序列化到内存。 |
-| **查询** (1000 条,offset=500) | ~5-10ms | bufio.Scanner 逐行跳过前 500 行,性能足够。 |
-| **清理** (删除旧记录) | ~50-100ms (10MB 文件) | 使用临时文件 + rename,避免阻塞读写。 |
+  github.com/google/go-github/v74 v74.0.0
+    -> github.com/google/go-querystring v1.1.0  (small HTTP helper)
+    -> golang.org/x/oauth2 v0.34.0              (for private repo auth)
+```
 
-### 内存占用
-
-| 场景 | 内存占用 | 说明 |
-|------|---------|------|
-| **写入** | < 1KB | 单个 LogRecord 序列化到缓冲区。 |
-| **查询** (limit=50) | < 100KB | 最多缓存 50 条记录返回给客户端。 |
-| **清理** | ~文件大小 | 需要临时加载文件到内存过滤,10MB 文件可接受。 |
-
-### 并发控制
-
-| 操作 | 并发策略 | 说明 |
-|------|---------|------|
-| **写入** | 操作系统保证原子性 | `os.O_APPEND` 写入是原子的,无需应用层锁。 |
-| **读取** | 无锁读取 | 文件系统允许多进程并发读。 |
-| **清理** | 排他执行 | 使用 `sync.Mutex` 或调度器确保清理期间无写入。 |
+Total new transitive dependencies: ~5 small packages. Acceptable.
 
 ## Sources
 
-- **Go 标准库文档** — `encoding/json`, `bufio`, `os` 官方文档 (HIGH confidence)
-- **[JSON Lines 格式规范](https://jsonlines.org/)** — 官方格式定义和最佳实践 (HIGH confidence)
-- **[How to append consecutively to a JSON file in Go?](https://stackoverflow.com/questions/72456088)** — Stack Overflow 社区讨论 JSONL 追加写入 (MEDIUM confidence)
-- **[os: document that WriteFile is not atomic](https://github.com/golang/go/issues/56173)** — Go 官方 Issue 说明原子性注意事项 (HIGH confidence)
-- **[Which UUID package do you use?](https://www.reddit.com/r/golang/comments/10bg0rn/)** — Reddit 社区讨论 UUID 库选择 (MEDIUM confidence)
-- **[github.com/google/uuid](https://github.com/google/uuid)** — Google UUID 库官方文档和示例 (HIGH confidence)
-- **[Optimize JSON Serialization in Go with sonic](https://oneuptime.com/blog/optimize-json-serialization-in-go-with-sonic-or-easyjson)** — JSON 性能优化指南,确认标准库已足够 (MEDIUM confidence)
-- **现有代码库分析** — `internal/logging`, `internal/api/trigger.go`, `internal/instance/result.go` 集成点识别 (HIGH confidence)
+- **[minio/selfupdate GitHub](https://github.com/minio/selfupdate)** -- Source code analysis of apply.go, hide_windows.go, go.mod. Verified v0.6.0 Windows exe rename pattern. (HIGH confidence)
+- **[minio/selfupdate apply.go](https://github.com/minio/selfupdate/blob/master/apply.go)** -- CommitBinary function: rename trick, rollback, Windows hide file fallback. (HIGH confidence)
+- **[minio/selfupdate hide_windows.go](https://github.com/minio/selfupdate/blob/master/hide_windows.go)** -- kernel32.dll SetFileAttributesW call for hiding `.old` files on Windows. (HIGH confidence)
+- **[minio/selfupdate go.mod](https://github.com/minio/selfupdate/blob/master/go.mod)** -- Go 1.24.0, minimal dependency tree. (HIGH confidence)
+- **[creativeprojects/go-selfupdate GitHub](https://github.com/creativeprojects/go-selfupdate)** -- Evaluated and rejected due to naming enforcement and heavy deps. No formal releases published. go.mod inspected. (HIGH confidence)
+- **[creativeprojects/go-selfupdate go.mod](https://github.com/creativeprojects/go-selfupdate/blob/main/go.mod)** -- go-github/v74 + gitea + gitlab + semver + xz dependencies confirmed. (HIGH confidence)
+- **[google/go-github v68 pkg.go.dev](https://pkg.go.dev/github.com/google/go-github/v68/github)** -- Releases API: GetLatestRelease, ListReleases. API pattern verified. (HIGH confidence)
+- **[GoReleaser Official Docs](https://goreleaser.com/customization/builds/)** -- Build configuration for Windows amd64. (HIGH confidence)
+- **[GoReleaser GitHub Action](https://github.com/goreleaser/goreleaser-action)** -- CI/CD integration. (HIGH confidence)
+- **[inconshreveable/go-update GitHub](https://github.com/inconshreveable/go-update)** -- Original library, evaluated and rejected (unmaintained since 2015). (HIGH confidence)
+- **[Stack Overflow: How to self-update application while running](https://stackoverflow.com/questions/55247194/how-to-self-update-application-while-running)** -- Windows rename pattern confirmation. (MEDIUM confidence)
+- **[Reddit: Self-updating binaries current stage](https://www.reddit.com/r/golang/comments/1poccfb/selfupdating_binaries_what_is_current_stage_and/)** -- Community consensus on minio/selfupdate for production use. (LOW confidence)
+- **Existing project go.mod** -- Current dependency baseline: golang.org/x/sys v0.41.0, google/uuid v1.6.0, testify v1.11.1. (HIGH confidence)
 
 ---
-*Stack research for: 更新日志记录和查询系统*
-*Researched: 2026-03-26*
+*Stack research for: Self-Update via GitHub Releases*
+*Researched: 2026-03-29*

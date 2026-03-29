@@ -1,565 +1,613 @@
-# Architecture Research: Update Log Recording and Query System
+# Architecture Patterns: Self-Update Integration (v0.8)
 
-**Domain:** HTTP API integration for update log persistence and query
-**Researched:** 2026-03-26
-**Confidence:** HIGH
+**Domain:** Self-updating Go Windows service (nanobot-auto-updater)
+**Researched:** 2026-03-29
+**Overall confidence:** HIGH
 
-## Existing Architecture Overview
+## Executive Summary
 
-### Current System Structure
+The self-update feature requires adding one new internal package (`internal/selfupdate/`) and modifying four existing files (`main.go`, `server.go`, `help.go`, `config.go`). The `creativeprojects/go-selfupdate` library handles the core binary replacement with built-in rollback support. The integration follows the same dependency-injection pattern already used by TriggerHandler and UpdateLogger: create the component in `main.go`, inject into the API handler, test via interface mocking.
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                        HTTP API Layer                           │
-├─────────────────────────────────────────────────────────────────┤
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐          │
-│  │ trigger-     │  │ SSE Handler  │  │ Help Handler │          │
-│  │ update       │  │              │  │              │          │
-│  │ (w/ Auth)    │  │              │  │ (no auth)    │          │
-│  └──────┬───────┘  └──────────────┘  └──────────────┘          │
-│         │                                                       │
-│  ┌──────▼──────────────────────────────────────────────┐       │
-│  │           AuthMiddleware (Bearer Token)             │       │
-│  └─────────────────────────────────────────────────────┘       │
-├─────────────────────────────────────────────────────────────────┤
-│                    Instance Management                          │
-├─────────────────────────────────────────────────────────────────┤
-│  ┌──────────────────────────────────────────────────────┐      │
-│  │          InstanceManager (concurrent control)        │      │
-│  │  - TriggerUpdate() → UpdateAll()                     │      │
-│  │  - atomic.Bool isUpdating                            │      │
-│  └──────┬───────────────────────────────────────┬──────┘      │
-│         │                                       │              │
-│  ┌──────▼──────────┐                   ┌───────▼──────────┐   │
-│  │ InstanceLifecycle│                   │   Updater (UV)   │   │
-│  │  - StopForUpdate │                   │  - Update()      │   │
-│  │  - StartAfter... │                   └──────────────────┘   │
-│  │  - LogBuffer     │                                          │
-│  └──────────────────┘                                          │
-├─────────────────────────────────────────────────────────────────┤
-│                      Data Persistence                           │
-├─────────────────────────────────────────────────────────────────┤
-│  ┌──────────────────┐  ┌──────────────────────────────────┐    │
-│  │  LogBuffer (mem) │  │  File Logger (daily rotation)    │    │
-│  │  - 5000 lines    │  │  - ./logs/app-YYYY-MM-DD.log     │    │
-│  │  - stdout/stderr │  │  - 7 day retention               │    │
-│  └──────────────────┘  └──────────────────────────────────┘    │
-└─────────────────────────────────────────────────────────────────┘
-```
-
-### Current Component Responsibilities
-
-| Component | Responsibility | Integration Point |
-|-----------|----------------|-------------------|
-| TriggerHandler | HTTP endpoint for update triggering | `internal/api/trigger.go` |
-| InstanceManager | Orchestrates stop→update→start flow | `internal/instance/manager.go` |
-| InstanceLifecycle | Per-instance lifecycle management | `internal/instance/lifecycle.go` |
-| LogBuffer | In-memory circular buffer (5000 lines) | `internal/logbuffer/buffer.go` |
-| Updater | UV package manager update logic | `internal/updater/updater.go` |
-| File Logger | Application logs with rotation | `internal/logging/logging.go` |
-| AuthMiddleware | Bearer token validation | `internal/api/auth.go` |
-
-## Proposed Architecture for Update Log Recording
-
-### Integration Points
-
-**Primary Integration: TriggerHandler**
-
-The update log recording system integrates at the `TriggerHandler.Handle()` level:
-
-```go
-// File: internal/api/trigger.go
-func (h *TriggerHandler) Handle(w http.ResponseWriter, r *http.Request) {
-    // 1. Existing: Validate method
-    // 2. Existing: Create context with timeout
-
-    // 3. NEW: Create UpdateLogRecorder
-    recorder := NewUpdateLogRecorder(h.logger)
-
-    // 4. Existing: Execute update
-    result, err := h.instanceManager.TriggerUpdate(ctx)
-
-    // 5. NEW: Record update result
-    logEntry := recorder.Record(ctx, result, err, r.Header.Get("X-Trigger-Source"))
-
-    // 6. NEW: Persist log entry
-    if persistErr := h.logStore.Append(logEntry); persistErr != nil {
-        h.logger.Error("Failed to persist update log", "error", persistErr)
-    }
-
-    // 7. Existing: Return JSON response
-    // ...
-}
-```
-
-**Rationale:**
-- TriggerHandler already has access to UpdateResult and errors
-- Context timeout management already in place
-- Authentication already validated by middleware
-- Single integration point minimizes changes to existing code
-
-### New Component Structure
-
-```
-internal/
-├── updatelog/               # NEW: Update log domain
-│   ├── types.go             # UpdateLogEntry, UpdateLogResult structures
-│   ├── recorder.go          # UpdateLogRecorder (business logic)
-│   ├── store.go             # File-based log persistence (JSON Lines)
-│   ├── store_test.go        # Unit tests for store
-│   ├── cleanup.go           # 7-day retention cleanup logic
-│   └── cleanup_test.go      # Unit tests for cleanup
-├── api/
-│   ├── trigger.go           # MODIFY: Integrate recorder
-│   ├── updatelog_handler.go # NEW: Query API handler
-│   └── auth.go              # REUSE: Existing middleware
-└── config/
-    └── config.go            # MODIFY: Add update log config
-```
-
-## Data Flow
-
-### Update Log Recording Flow
-
-```
-HTTP POST /api/v1/trigger-update
-    ↓
-AuthMiddleware validates Bearer token
-    ↓
-TriggerHandler.Handle()
-    ↓
-    ├─→ Create UpdateLogRecorder (new)
-    ├─→ InstanceManager.TriggerUpdate()
-    │       ↓
-    │   Stop all instances → UV Update → Start all instances
-    │       ↓
-    │   Return UpdateResult + error
-    ├─→ recorder.Record(result, error) → UpdateLogEntry (new)
-    │       ↓
-    │   Extract instance logs from LogBuffer (new)
-    │       ↓
-    │   Build complete log entry
-    ├─→ UpdateLogStore.Append(entry) → File write (new)
-    │       ↓
-    │   Write JSON Lines to ./logs/update-logs.jsonl
-    │       ↓
-    │   Trigger cleanup if needed
-    └─→ Return JSON response (existing)
-```
-
-### Update Log Query Flow
-
-```
-HTTP GET /api/v1/update-logs?limit=10&offset=0
-    ↓
-AuthMiddleware validates Bearer token
-    ↓
-UpdateLogHandler.Handle()
-    ↓
-    ├─→ Parse limit/offset query params
-    ├─→ UpdateLogStore.Query(limit, offset)
-    │       ↓
-    │   Read ./logs/update-logs.jsonl
-    │       ↓
-    │   Parse JSON Lines
-    │       ↓
-    │   Apply pagination
-    │       ↓
-    │   Return []UpdateLogEntry
-    └─→ Return JSON response (200 OK)
-```
-
-### Data Transformation Flow
-
-```
-UpdateResult (instance package)
-    ↓
-UpdateLogRecorder.Record()
-    ├─ Extract instance names (Stopped, Started)
-    ├─ Extract errors (StopFailed, StartFailed)
-    ├─ Capture instance logs from LogBuffer.GetHistory()
-    ├─ Build InstanceUpdateResult for each instance
-    └─ Build UpdateLogEntry
-        ↓
-UpdateLogStore.Append()
-    ├─ Serialize to JSON
-    ├─ Append to JSON Lines file
-    └─ Trigger cleanup if file size threshold exceeded
-```
-
-## Architectural Patterns
-
-### Pattern 1: Domain-Driven Package Structure
-
-**What:** Separate package `internal/updatelog` for all update log concerns
-
-**When to use:** When adding a new bounded context to existing application
-
-**Trade-offs:**
-- **Pros:** Clear separation of concerns, testable in isolation, reusable
-- **Cons:** Additional package, more files to maintain
-
-**Example:**
-```go
-// internal/updatelog/recorder.go
-package updatelog
-
-type UpdateLogRecorder struct {
-    logger *slog.Logger
-}
-
-func (r *UpdateLogRecorder) Record(
-    ctx context.Context,
-    result *instance.UpdateResult,
-    updateErr error,
-    triggerSource string,
-    instanceLogs map[string][]logbuffer.LogEntry,
-) *UpdateLogEntry {
-    // Transform UpdateResult to UpdateLogEntry
-    entry := &UpdateLogEntry{
-        ID:              generateID(),
-        Timestamp:       time.Now(),
-        TriggerSource:   triggerSource,
-        Success:         updateErr == nil && !result.HasErrors(),
-    }
-
-    // Build instance results with logs
-    for _, name := range result.Stopped {
-        entry.Instances = append(entry.Instances, InstanceUpdateResult{
-            InstanceName: name,
-            Status:       "stopped_success",
-            Logs:         instanceLogs[name],
-        })
-    }
-    // ... similar for other results
-
-    return entry
-}
-```
-
-### Pattern 2: File-Based JSON Lines Storage
-
-**What:** Append-only log file with JSON Lines format
-
-**When to use:** When query requirements are simple (recent N entries) and append performance is critical
-
-**Trade-offs:**
-- **Pros:** Simple implementation, efficient append, no external dependencies
-- **Cons:** O(n) read for pagination, requires full file scan for queries
-
-**Example:**
-```go
-// internal/updatelog/store.go
-type UpdateLogStore struct {
-    filePath string
-    logger   *slog.Logger
-}
-
-func (s *UpdateLogStore) Append(entry *UpdateLogEntry) error {
-    // Open file in append mode
-    f, err := os.OpenFile(s.filePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-    if err != nil {
-        return err
-    }
-    defer f.Close()
-
-    // Write JSON line
-    encoder := json.NewEncoder(f)
-    return encoder.Encode(entry)
-}
-
-func (s *UpdateLogStore) Query(limit, offset int) ([]*UpdateLogEntry, error) {
-    // Read file line by line
-    f, err := os.Open(s.filePath)
-    if err != nil {
-        return nil, err
-    }
-    defer f.Close()
-
-    var entries []*UpdateLogEntry
-    scanner := bufio.NewScanner(f)
-    lineNum := 0
-
-    for scanner.Scan() {
-        lineNum++
-        if lineNum <= offset {
-            continue
-        }
-        if lineNum > offset+limit {
-            break
-        }
-
-        var entry UpdateLogEntry
-        if err := json.Unmarshal(scanner.Bytes(), &entry); err != nil {
-            s.logger.Warn("Failed to parse log entry", "line", lineNum, "error", err)
-            continue
-        }
-        entries = append(entries, &entry)
-    }
-
-    return entries, scanner.Err()
-}
-```
-
-### Pattern 3: Lazy Log Capture
-
-**What:** Capture instance logs only when recording an update log (not during normal operation)
-
-**When to use:** When log capture is expensive and only needed for specific operations
-
-**Trade-offs:**
-- **Pros:** No performance overhead during normal instance operation
-- **Cons:** Requires access to LogBuffer at recording time
-
-**Example:**
-```go
-// In TriggerHandler.Handle()
-func (h *TriggerHandler) Handle(w http.ResponseWriter, r *http.Request) {
-    // ... execute update ...
-
-    // Capture instance logs AFTER update completes
-    instanceLogs := make(map[string][]logbuffer.LogEntry)
-    for _, name := range getAllInstanceNames(result) {
-        buffer, err := h.instanceManager.GetLogBuffer(name)
-        if err != nil {
-            h.logger.Warn("Failed to get log buffer", "instance", name, "error", err)
-            continue
-        }
-        instanceLogs[name] = buffer.GetHistory()
-    }
-
-    // Record with logs
-    logEntry := recorder.Record(ctx, result, err, triggerSource, instanceLogs)
-}
-```
-
-## Component Integration Details
-
-### Integration Point 1: TriggerHandler Modification
-
-**File:** `internal/api/trigger.go`
-
-**Changes:**
-1. Add `UpdateLogRecorder` and `UpdateLogStore` to TriggerHandler struct
-2. Initialize in `NewTriggerHandler()`
-3. Call `recorder.Record()` after `TriggerUpdate()` completes
-4. Call `store.Append()` to persist log entry
-
-**Why this integration point:**
-- Minimal changes to existing code
-- Access to complete UpdateResult
-- Error context available
-- HTTP request context (trigger source) available
-
-### Integration Point 2: Server Registration
-
-**File:** `internal/api/server.go`
-
-**Changes:**
-1. Create new `UpdateLogHandler` instance
-2. Register new route: `GET /api/v1/update-logs`
-3. Wrap with existing `AuthMiddleware` (reuse Bearer token validation)
-
-**Why this integration point:**
-- Consistent with existing route registration pattern
-- Reuses existing authentication infrastructure
-- Centralized route management
-
-### Integration Point 3: Configuration Extension
-
-**File:** `internal/config/config.go`
-
-**Changes:**
-1. Add `UpdateLogConfig` struct with retention settings
-2. Add to main `Config` struct
-3. Add validation for retention days (minimum 1, maximum 365)
-4. Set default: 7 days retention
-
-**Why this integration point:**
-- Follows existing configuration pattern
-- Allows future extensibility (log path, retention policy)
-- Consistent with other feature configurations (API, Monitor)
-
-## Scaling Considerations
-
-| Scale | Log Volume | Architecture Adjustments |
-|-------|------------|--------------------------|
-| 0-100 updates/day | < 100 KB/day | Current architecture sufficient |
-| 100-1000 updates/day | ~1 MB/day | Add index file for O(1) seeks |
-| 1000+ updates/day | > 10 MB/day | Consider SQLite or database |
-
-### First Bottleneck: File Read Performance
-
-**What breaks first:** Query API response time degrades as log file grows (O(n) read)
-
-**How to fix:**
-1. Add in-memory cache of recent N log entries (e.g., 100 entries)
-2. Serve queries from cache when possible
-3. Fall back to file read only for historical queries
-
-### Second Bottleneck: Disk Space
-
-**What breaks next:** Log files consume too much disk space
-
-**How to fix:**
-1. Implement more aggressive cleanup (3-day retention)
-2. Add compression for old log files
-3. Add log rotation by file size (not just by date)
-
-## Anti-Patterns to Avoid
-
-### Anti-Pattern 1: Storing Logs in Memory Only
-
-**What people do:** Keep update logs only in memory for fast access
-
-**Why it's wrong:** Logs lost on application restart, defeats audit purpose
-
-**Do this instead:** Persist to file immediately after each update, use memory only for optional caching
-
-### Anti-Pattern 2: Capturing Logs During Instance Operation
-
-**What people do:** Continuously capture logs to update log storage while instance is running
-
-**Why it's wrong:** Massive performance overhead, LogBuffer already handles real-time logs
-
-**Do this instead:** Capture logs only when recording update results (lazy capture pattern)
-
-### Anti-Pattern 3: Complex Query Support
-
-**What people do:** Add search, filtering, aggregation to log query API
-
-**Why it's wrong:** Over-engineering for simple requirement (recent N updates), performance issues
-
-**Do this instead:** Keep query simple (limit/offset only), accept O(n) read performance for reasonable file sizes
-
-### Anti-Pattern 4: Separate Authentication for Query API
-
-**What people do:** Create new authentication mechanism for update log query endpoint
-
-**Why it's wrong:** Duplicate logic, inconsistent security model, maintenance burden
-
-**Do this instead:** Reuse existing `AuthMiddleware` with same Bearer token
-
-## Build Order Recommendation
-
-Based on dependency analysis, recommended build order:
-
-### Phase 1: Core Data Structures (no dependencies)
-1. **Create `internal/updatelog/types.go`**
-   - Define `UpdateLogEntry` struct
-   - Define `InstanceUpdateResult` struct
-   - Define JSON tags for serialization
-
-2. **Create `internal/updatelog/recorder.go`**
-   - Implement `UpdateLogRecorder.Record()` method
-   - Transform `instance.UpdateResult` to `UpdateLogEntry`
-   - Unit tests for transformation logic
-
-### Phase 2: Persistence Layer (depends on Phase 1)
-3. **Create `internal/updatelog/store.go`**
-   - Implement `UpdateLogStore.Append()` method
-   - Implement `UpdateLogStore.Query()` method
-   - Handle JSON Lines file operations
-   - Unit tests with temporary files
-
-4. **Create `internal/updatelog/cleanup.go`**
-   - Implement 7-day retention cleanup logic
-   - Parse timestamp from log entries
-   - Delete old entries
-   - Unit tests for date calculations
-
-### Phase 3: Integration (depends on Phase 1 & 2)
-5. **Modify `internal/api/trigger.go`**
-   - Add recorder and store to TriggerHandler
-   - Integrate log recording after update completes
-   - Capture instance logs from LogBuffer
-   - Integration tests
-
-6. **Modify `internal/config/config.go`**
-   - Add UpdateLogConfig struct
-   - Add validation
-   - Set defaults
-
-### Phase 4: Query API (depends on Phase 2)
-7. **Create `internal/api/updatelog_handler.go`**
-   - Implement query handler
-   - Parse limit/offset parameters
-   - Call store.Query()
-   - Return JSON response
-   - Unit tests
-
-8. **Modify `internal/api/server.go`**
-   - Register new route
-   - Apply AuthMiddleware
-   - Integration tests
-
-### Rationale for Build Order
-
-**Why recorder before persistence:**
-- Recorder has no dependencies, can be tested in isolation
-- Defines the data contract (UpdateLogEntry) that persistence uses
-- Allows parallel development of transformation logic
-
-**Why persistence before integration:**
-- Integration tests require working persistence layer
-- File operations are independent of HTTP layer
-- Allows testing persistence with mock recorder
-
-**Why integration before query API:**
-- Query API depends on having data to query
-- Integration tests validate end-to-end recording flow
-- Ensures query API has realistic data to work with
-
-## Testing Strategy
-
-### Unit Tests (isolated, fast)
-- **recorder_test.go:** Verify UpdateResult → UpdateLogEntry transformation
-- **store_test.go:** Verify file append/read with temp files
-- **cleanup_test.go:** Verify retention logic with mock timestamps
-
-### Integration Tests (with dependencies)
-- **trigger_test.go:** Verify log recording during trigger-update flow
-- **updatelog_handler_test.go:** Verify query API with real store
-
-### End-to-End Tests (full system)
-- Start server → Trigger update → Query logs → Verify result
-
-## Configuration Schema
-
-```yaml
-# config.yaml
-update_log:
-  enabled: true              # Enable/disable log recording
-  retention_days: 7          # Keep logs for 7 days
-  max_file_size_mb: 100      # Rotate file if exceeds 100MB
-  log_path: "./logs/update-logs.jsonl"  # Log file path
-```
-
-## Error Handling Strategy
-
-| Error Location | Handling | Response |
-|----------------|----------|----------|
-| Log recording fails | Log error, continue | Return success (update succeeded) |
-| Log persistence fails | Log error, continue | Return success (non-critical) |
-| Log cleanup fails | Log error, continue | Continue operation |
-| Query file read fails | Log error, return error | Return 500 Internal Server Error |
-| Invalid query params | Return error | Return 400 Bad Request |
-
-**Rationale:**
-- Update log recording is non-critical (audit trail, not core functionality)
-- Failed logging should not block successful updates
-- Query errors should be reported to user (expected data unavailable)
-
-## Sources
-
-- **Existing Code:** `internal/api/trigger.go` (Phase 28 implementation)
-- **Existing Code:** `internal/instance/manager.go` (UpdateResult structure)
-- **Existing Code:** `internal/logbuffer/buffer.go` (log capture mechanism)
-- **Existing Code:** `internal/api/auth.go` (authentication middleware)
-- **Existing Code:** `internal/logging/daily_rotate.go` (file rotation pattern)
-- **PROJECT.md:** v0.6 milestone requirements (update log recording and query)
+The most significant architectural decision is the restart-after-update strategy. Since this is a long-running Windows service (not a CLI tool), the update handler must respond to the client first, then initiate graceful shutdown. A self-spawned child process starts the new binary after the old one exits. A separate CI/CD pipeline (GitHub Actions + GoReleaser) handles the build-and-release side, producing correctly-named release assets that `go-selfupdate` can discover.
 
 ---
 
-*Architecture research for: Update Log Recording and Query System*
-*Researched: 2026-03-26*
+## Current Architecture (Integration Points)
+
+### Existing Component Inventory
+
+```
+cmd/nanobot-auto-updater/main.go     -- Entry point, wires all components
+internal/api/server.go               -- HTTP mux, handler registration
+internal/api/trigger.go              -- POST /api/v1/trigger-update handler
+internal/api/query.go                -- GET /api/v1/update-logs handler
+internal/api/help.go                 -- GET /api/v1/help handler
+internal/api/auth.go                 -- Bearer token middleware
+internal/config/config.go            -- Main config struct + Load()
+internal/config/api.go               -- APIConfig struct
+internal/notifier/notifier.go        -- Pushover notification sender
+internal/updater/updater.go          -- nanobot updater (uv tool install)
+internal/updatelog/updatelog.go      -- JSONL log persistence
+```
+
+### Existing Dependency Injection Pattern
+
+The project follows a consistent wiring pattern in `main.go`:
+
+```
+main.go creates:
+  -> logger (slog.Logger)
+  -> config (*config.Config) via config.Load()
+  -> updateLogger (*updatelog.UpdateLogger) via updatelog.NewUpdateLogger()
+  -> instanceManager (*instance.InstanceManager) via instance.NewInstanceManager()
+  -> notif (*notifier.Notifier) via notifier.NewWithConfig()
+  -> apiServer (*api.Server) via api.NewServer(cfg, im, cfg, Version, logger, updateLogger, notif)
+```
+
+All components receive `*slog.Logger` as the first argument. Handlers receive dependencies through constructor injection. Testing uses interface-based mocking (e.g., `TriggerUpdater` interface, `Notifier` interface defined locally in `trigger.go`).
+
+### Key Existing Patterns to Reuse
+
+| Pattern | Where Used | How to Apply |
+|---------|-----------|--------------|
+| Interface in handler file | `trigger.go` defines `TriggerUpdater`, `Notifier` | Define `SelfUpdateChecker`/`SelfUpdateExecutor` in handler file |
+| Nil-safe component | `healthMonitor`, `updateLogger` checked for nil | Check `selfUpdater != nil` before registering routes |
+| Constructor with `logger.With("source", ...)` | All handlers | Same for SelfUpdateHandler |
+| Async notification + panic recovery | TriggerHandler start/complete notifications | Same for self-update start/complete |
+| `atomic.Bool` concurrency control | TriggerHandler update-in-progress | Same for self-update-in-progress |
+| Bearer token middleware reuse | All auth-protected routes | Wrap self-update routes with `authMiddleware` |
+
+---
+
+## Recommended Architecture for Self-Update
+
+### New Components
+
+| Component | Package | Responsibility |
+|-----------|---------|---------------|
+| `SelfUpdater` | `internal/selfupdate/` | Check GitHub latest release, download, replace exe, signal restart |
+| `SelfUpdateHandler` | `internal/api/` | HTTP handler for check/update endpoints |
+| GitHub Actions Workflow | `.github/workflows/release.yml` | Build + publish release on tag push |
+| GoReleaser Config | `.goreleaser.yaml` | Build configuration for Windows amd64 binary |
+
+### Modified Components
+
+| Component | Change | Why |
+|-----------|--------|-----|
+| `main.go` | Create SelfUpdater, pass to api.NewServer; add restart channel to shutdown logic | Wire new component; enable restart-after-update |
+| `api/server.go` | Accept SelfUpdater interface, register new routes | Add self-update API endpoints |
+| `api/help.go` | Add self-update endpoints to help response | Document new API endpoints |
+| `config/config.go` | Add `SelfUpdateConfig` to Config struct | Self-update settings (repo slug, enabled) |
+| `go.mod` | Add `creativeprojects/go-selfupdate` dependency | Core self-update library |
+
+### Component Boundaries
+
+```
+                              main.go
+                                 |
+                    +------------+------------+------------+
+                    |            |            |            |
+              SelfUpdater   apiServer    notif (exist)  restartCh
+                    |            |
+                    |     +------+------+
+                    |     |      |      |
+                    |  SelfUpdate  TriggerHandler (exist)
+                    |  Handler     QueryHandler (exist)
+                    |     |
+            +-------+-------+
+            |               |
+     go-selfupdate     notifier.Notifier
+     (external lib)    (update notifications)
+```
+
+### Data Flow: Version Check (GET /api/v1/self-update/check)
+
+```
+1. Client -> GET /api/v1/self-update/check
+2. AuthMiddleware validates Bearer token
+3. SelfUpdateCheckHandler.Handle()
+   a. Call SelfUpdater.CheckLatest(ctx)
+4. SelfUpdater.CheckLatest()
+   a. selfupdate.DetectLatest(ctx, repository) -> latest release info
+   b. Compare latest.Version() with current Version (from ldflags)
+   c. Return CheckResult{CurrentVersion, LatestVersion, UpdateAvailable, ReleaseNotes}
+5. Handler returns JSON response
+```
+
+### Data Flow: Self-Update (POST /api/v1/self-update)
+
+```
+1. Client -> POST /api/v1/self-update
+2. AuthMiddleware validates Bearer token
+3. SelfUpdateHandler.Handle()
+   a. Check update not already in progress (atomic.Bool)
+   b. Send start notification (async goroutine + panic recovery)
+   c. Call SelfUpdater.CheckAndUpdate(ctx)
+4. SelfUpdater.CheckAndUpdate()
+   a. selfupdate.DetectLatest(ctx, repository) -> get latest release info
+   b. Compare versions -> if no update needed, return status "up_to_date"
+   c. If update available:
+      i.   Log update start (logger.Info)
+      ii.  Call selfupdate.UpdateTo(ctx, release, exePath)
+           - Library creates .new file with new binary
+           - Library renames current exe to .old (backup)
+           - Library renames .new to original name
+           - On failure: library rolls back (.old -> original)
+      iii. Return UpdateResult{PreviousVersion, NewVersion, Success}
+5. Handler receives result:
+   a. Send completion notification (async goroutine + panic recovery)
+   b. Write JSON response to client
+   c. If update succeeded: signal restartCh to trigger graceful shutdown
+6. main.go receives restartCh signal:
+   a. Run existing shutdown sequence (stop all components)
+   b. Self-spawn new process: exec.Command(exePath, os.Args[1:]...).Start()
+   c. os.Exit(0)
+```
+
+---
+
+## New Internal Package: `internal/selfupdate/`
+
+### File Structure
+
+```
+internal/selfupdate/
+  selfupdate.go        -- SelfUpdater struct, CheckLatest(), CheckAndUpdate()
+  selfupdate_test.go   -- Unit tests with mock source
+```
+
+### Core Types
+
+```go
+// selfupdate.go
+
+// CheckResult holds the result of a version check
+type CheckResult struct {
+    CurrentVersion  string
+    LatestVersion   string
+    UpdateAvailable bool
+    ReleaseNotes    string
+}
+
+// UpdateResult holds the result of an update attempt
+type UpdateResult struct {
+    PreviousVersion string
+    NewVersion      string
+    Success         bool
+    Error           error
+}
+
+// SelfUpdater handles self-update operations
+type SelfUpdater struct {
+    logger      *slog.Logger
+    repository  selfupdate.Repository
+    current     string            // current version (from ldflags)
+    exePath     string            // path to current executable
+    updating    atomic.Bool       // prevent concurrent updates
+    notifier    Notifier          // update notifications (interface)
+    shutdownCh  chan struct{}     // signal main goroutine to restart
+}
+
+// Notifier interface for dependency injection (matches api.Notifier pattern)
+type Notifier interface {
+    Notify(title, message string) error
+}
+```
+
+### Key Design Decisions
+
+**1. Use `creativeprojects/go-selfupdate` directly.**
+
+The library handles: GitHub Release API interaction, platform-specific binary detection (expects `nanobot-auto-updater_windows_amd64.zip`), archive decompression, atomic binary replacement with built-in rollback, and checksum validation. Rolling a custom solution would require reimplementing all of this with the same edge cases.
+
+**2. Separate check and update endpoints.**
+
+`GET /api/v1/self-update/check` is read-only and safe (no side effects). `POST /api/v1/self-update` triggers the actual replacement. This lets callers preview before committing, and matches the RESTful pattern of the existing API.
+
+**3. Shutdown channel pattern for restart signaling.**
+
+The SelfUpdater receives a `chan struct{}` that signals `main.go` to begin graceful shutdown. The main goroutine's `<-sigChan` block expands to also listen on this channel via `select`. This keeps OS-specific signal logic in `main.go` where it belongs, not in the selfupdate package.
+
+```go
+// In main.go, replace:
+<-sigChan
+
+// With:
+select {
+case <-sigChan:
+    logger.Info("Shutdown signal received")
+case <-restartCh:
+    logger.Info("Restart signal received (self-update)")
+    // Self-spawn before exit
+    restartProcess(exePath, os.Args[1:])
+}
+```
+
+**4. Self-spawn restart strategy.**
+
+After successful binary replacement, before calling `os.Exit`:
+```go
+func restartProcess(exePath string, args []string) error {
+    cmd := exec.Command(exePath, args...)
+    cmd.Stdout = os.Stdout
+    cmd.Stderr = os.Stderr
+    cmd.SysProcAttr = &windows.SysProcAttr{
+        HideWindow:    true,
+        CreationFlags: windows.CREATE_NO_WINDOW,
+    }
+    return cmd.Start()
+}
+```
+
+This uses the existing `windows.SysProcAttr` pattern already present in `internal/updater/updater.go`. The old process exits cleanly, the new process starts with the same arguments.
+
+**5. Backup file management by the library.**
+
+`go-selfupdate/update.Apply()` creates `.old` files. On Windows, it cannot delete `.old` files (running process lock), so it hides them instead. On next startup, the application should check for and clean up `.old` files as a startup task in `main.go`.
+
+---
+
+## New HTTP API Endpoints
+
+### GET /api/v1/self-update/check
+
+```
+Auth: Bearer Token (required)
+Response: {
+  "current_version": "v0.7.0",
+  "latest_version": "v0.8.0",
+  "update_available": true,
+  "release_notes": "## What's Changed\n..."
+}
+```
+
+### POST /api/v1/self-update
+
+```
+Auth: Bearer Token (required)
+Response (success): {
+  "status": "update_scheduled",
+  "previous_version": "v0.7.0",
+  "new_version": "v0.8.0",
+  "message": "Update downloaded. Server will restart shortly."
+}
+Response (up to date): {
+  "status": "up_to_date",
+  "current_version": "v0.7.0"
+}
+Response (conflict): {
+  "status": "update_in_progress",
+  "error": "An update is already in progress"
+}
+```
+
+### Route Registration (in server.go)
+
+```go
+// Self-update endpoints (auth-protected, nil-safe)
+if selfUpdater != nil {
+    checkHandler := NewSelfUpdateCheckHandler(selfUpdater, logger)
+    updateHandler := NewSelfUpdateHandler(selfUpdater, logger)
+    mux.Handle("GET /api/v1/self-update/check",
+        authMiddleware(http.HandlerFunc(checkHandler.Handle)))
+    mux.Handle("POST /api/v1/self-update",
+        authMiddleware(http.HandlerFunc(updateHandler.Handle)))
+}
+```
+
+Following the existing nil-safe pattern: if SelfUpdater is nil (self-update disabled in config), routes are not registered.
+
+---
+
+## CI/CD: GitHub Actions + GoReleaser
+
+### Why GoReleaser Over Raw Build Steps
+
+GoReleaser handles: cross-compilation, naming conventions, checksum generation, and release creation automatically. It produces the exact archive naming format `go-selfupdate` requires (`{cmd}_{goos}_{goarch}.zip`). The alternative -- manual build steps in the workflow YAML -- requires more code and is error-prone for asset naming.
+
+### .goreleaser.yaml (minimal)
+
+```yaml
+builds:
+  - main: ./cmd/nanobot-auto-updater
+    binary: nanobot-auto-updater
+    goos:
+      - windows
+    goarch:
+      - amd64
+    ldflags:
+      - -s -w -X main.Version={{.Version}}
+    env:
+      - CGO_ENABLED=0
+
+archives:
+  - format: zip
+    name_template: >-
+      {{ .ProjectName }}_
+      {{- tolower .Os }}_
+      {{- .Arch }}
+
+checksum:
+  name_template: "checksums.txt"
+
+release:
+  github:
+    owner: HQGroup
+    name: nanobot-auto-updater
+```
+
+This produces: `nanobot-auto-updater_windows_amd64.zip` containing `nanobot-auto-updater.exe`, which matches the naming convention `go-selfupdate` expects.
+
+### .github/workflows/release.yml
+
+```yaml
+name: Release
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+      - uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser
+          version: latest
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+```
+
+### Release Process
+
+```bash
+git tag v0.8.0
+git push origin v0.8.0
+# GitHub Actions automatically builds, packages, creates release with assets
+```
+
+---
+
+## Patterns to Follow
+
+### Pattern 1: Interface-Based Handler Injection
+
+**What:** Define a local interface in the handler file for the SelfUpdater dependency.
+**When:** Always (matches existing `TriggerUpdater` and `Notifier` patterns in `trigger.go`).
+
+```go
+// In api/selfupdate.go
+type SelfUpdateChecker interface {
+    CheckLatest(ctx context.Context) (*selfupdate.CheckResult, error)
+}
+
+type SelfUpdateExecutor interface {
+    CheckAndUpdate(ctx context.Context) (*selfupdate.UpdateResult, error)
+}
+```
+
+### Pattern 2: Nil-Safe Component Registration
+
+**What:** Only register routes if the SelfUpdater component is non-nil.
+**When:** When self-update may be disabled via config.
+**Why:** Matches existing nil-safe patterns (healthMonitor, updateLogger).
+
+### Pattern 3: Async Notification with Panic Recovery
+
+**What:** Send update start/completion notifications in a goroutine with defer/recover.
+**When:** After triggering update and after update completes.
+**Why:** Matches existing TriggerHandler pattern exactly -- notification failure must not block the update flow.
+
+### Pattern 4: Atomic Bool for Concurrency Control
+
+**What:** Use `sync/atomic.Bool` to prevent concurrent self-updates.
+**When:** At the start of the update handler.
+**Why:** Self-update is a single-instance operation. Matches existing `atomic.Bool` pattern in `instance/manager.go`.
+
+### Pattern 5: Context-Aware Logging
+
+**What:** Pre-inject component name via `logger.With("source", "selfupdate")`.
+**When:** In every constructor.
+**Why:** All log output includes the source automatically. Matches existing pattern.
+
+---
+
+## Anti-Patterns to Avoid
+
+### Anti-Pattern 1: Using inconshreveable/go-update Directly
+
+**What:** Using the original `go-update` library instead of `creativeprojects/go-selfupdate`.
+**Why bad:** `go-update` is unmaintained (last update 2016). It only handles binary replacement, not GitHub Release discovery, asset selection, or decompression.
+**Instead:** Use `creativeprojects/go-selfupdate` which wraps `go-update` and adds GitHub Release API integration, asset matching, decompression, and proper naming conventions.
+
+### Anti-Pattern 2: Downloading exe via Raw HTTP
+
+**What:** Implementing your own HTTP download + file write for the update.
+**Why bad:** Misses edge cases (atomic replacement, Windows file locking, checksum validation, archive decompression, rollback on failure).
+**Instead:** Let `selfupdate.UpdateTo()` handle download + decompression + replacement with rollback.
+
+### Anti-Pattern 3: Blocking the HTTP Handler During Restart
+
+**What:** Calling `os.Exit(0)` directly in the handler goroutine.
+**Why bad:** The HTTP response never reaches the client. The connection is abruptly terminated.
+**Instead:** Send the HTTP response first, then signal shutdown via channel. A separate goroutine in `main.go` initiates the restart sequence.
+
+### Anti-Pattern 4: Mixing CI/CD and Go Code in Same Phase
+
+**What:** Implementing GoReleaser config, GitHub Actions workflow, and Go self-update code all in one phase.
+**Why bad:** CI/CD pipeline can be tested independently (push a tag). Self-update Go code is tested with mocks. Mixing them creates a phase that is harder to validate incrementally.
+**Instead:** Separate into distinct phases. CI/CD first (can be tested with a dummy tag), then Go code (tested with mocks), then E2E integration.
+
+---
+
+## Configuration Extension
+
+### New Config Section
+
+```yaml
+# config.yaml addition
+self_update:
+  enabled: true                                # Enable/disable self-update API
+  repository: "HQGroup/nanobot-auto-updater"   # GitHub owner/repo slug
+```
+
+### Config Struct Extension
+
+```go
+// In config/config.go or new file config/selfupdate.go
+
+type SelfUpdateConfig struct {
+    Enabled    bool   `yaml:"enabled" mapstructure:"enabled"`
+    Repository string `yaml:"repository" mapstructure:"repository"`
+}
+
+// Add to Config struct
+type Config struct {
+    Instances  []InstanceConfig   `yaml:"instances" mapstructure:"instances"`
+    Pushover   PushoverConfig     `yaml:"pushover" mapstructure:"pushover"`
+    API        APIConfig          `yaml:"api" mapstructure:"api"`
+    Monitor    MonitorConfig      `yaml:"monitor" mapstructure:"monitor"`
+    HealthCheck HealthCheckConfig `yaml:"health_check" mapstructure:"health_check"`
+    SelfUpdate SelfUpdateConfig   `yaml:"self_update" mapstructure:"self_update"` // NEW
+}
+```
+
+Defaults in `defaults()`: `enabled: true`, `repository: "HQGroup/nanobot-auto-updater"`.
+
+---
+
+## Restart Strategy Detail
+
+Three options for restart-after-update, in order of preference:
+
+### Option A: Self-Spawn (Recommended)
+
+After graceful shutdown completes, spawn the new binary:
+```go
+cmd := exec.Command(exePath, os.Args[1:]...)
+cmd.SysProcAttr = &windows.SysProcAttr{
+    HideWindow:    true,
+    CreationFlags: windows.CREATE_NO_WINDOW,
+}
+cmd.Start()
+os.Exit(0)
+```
+
+**Pros:** No external dependency. Uses existing `windows.SysProcAttr` pattern.
+**Cons:** Brief overlap where old and new process coexist. Old process must fully exit before new binds to the same port.
+
+**Mitigation for port conflict:** Add retry logic in `main.go` for HTTP server port binding. If port is in use (old process still shutting down), retry with backoff (100ms, 200ms, 400ms) up to 3 attempts. This is a startup concern, not a self-update concern -- it just happens to be triggered by self-update.
+
+### Option B: External Process Manager
+
+If the application runs under NSSM or Windows Service, the process manager restarts automatically after `os.Exit(0)`.
+
+**Pros:** Clean. No process management code.
+**Cons:** Requires external setup. Not portable.
+
+### Option C: Delayed Restart Script
+
+Write a temporary batch script that waits for the old process to exit, then starts the new exe.
+
+**Pros:** Guaranteed no port conflict.
+**Cons:** Fragile. Requires managing temp script files. Violates project convention of avoiding new scripts.
+
+**Recommendation:** Option A with port-binding retry in `main.go`.
+
+---
+
+## Suggested Build Order (Phase Dependencies)
+
+```
+Phase 1: CI/CD Pipeline (NO Go code changes)
+  .goreleaser.yaml
+  .github/workflows/release.yml
+  Test: push v0.7.1-test tag, verify release appears with correct assets
+  Dependencies: NONE
+  Rationale: Establish the release pipeline first so there is something
+             to update from. Independent of all Go code changes.
+
+Phase 2: SelfUpdater Core Component + Config
+  internal/selfupdate/selfupdate.go
+  internal/selfupdate/selfupdate_test.go
+  internal/config/selfupdate.go (or extend config.go)
+  Test: unit tests with mock source
+  Dependencies: go.mod update (add go-selfupdate dependency)
+  Rationale: Core logic first, then wire into existing system.
+             Config can be combined since it is small.
+
+Phase 3: HTTP API Integration
+  internal/api/selfupdate.go (new handler file)
+  internal/api/server.go (route registration, add selfUpdater param)
+  internal/api/help.go (add endpoint docs)
+  cmd/nanobot-auto-updater/main.go (wire SelfUpdater)
+  Test: handler unit tests with mock SelfUpdater
+  Dependencies: Phase 2
+  Rationale: Wire everything together. Follows the exact pattern of
+             how TriggerHandler was integrated (Phase 28).
+
+Phase 4: Restart Mechanism + Notification Integration
+  Extend main.go shutdown logic (add restartCh to select)
+  Add self-update notifications (via existing Notifier)
+  Add .old file cleanup on startup
+  Test: E2E test with test-updater.exe pattern
+  Dependencies: Phase 3
+  Rationale: Restart mechanism is the riskiest part; isolate it so
+             it can be tested thoroughly.
+
+Phase 5: E2E Validation
+  Full integration test: trigger self-update via API, verify restart
+  Test: manual + automated E2E
+  Dependencies: ALL previous phases
+  Rationale: Final validation after all pieces are in place.
+```
+
+### Phase Ordering Rationale
+
+1. **CI/CD first** because it produces no code changes and can be validated independently. If the pipeline has issues (naming, permissions), fix them before writing any self-update code.
+2. **Core component second** because the API handler and main.go wiring both depend on the SelfUpdater type existing.
+3. **HTTP API third** because it is pure integration glue following well-established project patterns. Low risk.
+4. **Restart mechanism fourth** because it touches the shutdown sequence and is the only part that could break the running service. Isolated for focused testing.
+5. **E2E last** because it validates the complete flow end-to-end.
+
+---
+
+## Scalability Considerations
+
+| Concern | Behavior | Notes |
+|---------|----------|-------|
+| Concurrent self-update requests | `atomic.Bool` prevents; only one at a time | Single-instance operation by nature |
+| Release asset download size | ~15MB (Go binary) | One-time download per update |
+| Restart downtime | ~2-5 seconds | Process restart + port binding retry |
+| GitHub API rate limits | 60 requests/hour (unauthenticated) | Only one check per API call; not a concern |
+
+Self-update is inherently a single-instance operation. There is no "scale" concern -- the updater updates itself, not multiple copies.
+
+---
+
+## Sources
+
+- [creativeprojects/go-selfupdate](https://github.com/creativeprojects/go-selfupdate) -- Primary library, actively maintained, Windows-tested, rollback support (HIGH confidence)
+- [go-selfupdate/update package docs](https://pkg.go.dev/github.com/creativeprojects/go-selfupdate/update) -- Apply() step-by-step including Windows .old file handling (HIGH confidence)
+- [go-selfupdate package docs](https://pkg.go.dev/github.com/creativeprojects/go-selfupdate) -- Full API reference for DetectLatest, UpdateSelf, UpdateTo (HIGH confidence)
+- [softprops/action-gh-release](https://github.com/softprops/action-gh-release) -- GitHub Action for creating releases (HIGH confidence)
+- [GoReleaser GitHub Actions docs](https://goreleaser.com/ci/actions/) -- Official workflow integration guide (HIGH confidence)
+- [GoReleaser goreleaser-action](https://github.com/goreleaser/goreleaser-action) -- Official GitHub Action (HIGH confidence)
+- [Stack Overflow: Self-update while running](https://stackoverflow.com/questions/55247194/how-to-self-update-application-while-running) -- Windows rename-running-exe pattern (MEDIUM confidence)
+- [inconshreveable/go-update](https://github.com/inconshreveable/go-update) -- Original library, unmaintained since 2016; NOT recommended, listed for comparison only (LOW confidence)
+
+---
+
+*Architecture research for: v0.8 Self-Update milestone*
+*Researched: 2026-03-29*
