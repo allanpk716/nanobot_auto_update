@@ -87,7 +87,7 @@ Plans:
 **Plans**: 1 plan
 
 Plans:
-- [ ] 35-01-PLAN.md — Refactor Notifier to interface, add recordingNotifier mock and 4 E2E notification tests
+- [x] 35-01-PLAN.md — Refactor Notifier to interface, add recordingNotifier mock and 4 E2E notification tests
 
 ---
 
@@ -96,7 +96,7 @@ Plans:
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 34. Update Notification Integration | 1/1 | Complete    | 2026-03-29 |
-| 35. Notification Integration Testing | 0/1 | Planned | - |
+| 35. Notification Integration Testing | 1/1 | Complete   | 2026-03-29 |
 
 ---
 
