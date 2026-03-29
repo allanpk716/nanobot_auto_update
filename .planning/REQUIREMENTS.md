@@ -15,9 +15,9 @@ Requirements for v0.8 Self-Update milestone. Each maps to roadmap phases.
 
 ### CI/CD (构建发布)
 
-- [ ] **CICD-01**: GitHub Actions workflow 在 v* tag 推送时自动触发构建
-- [ ] **CICD-02**: GoReleaser 构建 Windows amd64 二进制并发布到 GitHub Releases
-- [ ] **CICD-03**: 通过 ldflags 注入版本号到编译产物（-X main.Version）
+- [x] **CICD-01**: GitHub Actions workflow 在 v* tag 推送时自动触发构建
+- [x] **CICD-02**: GoReleaser 构建 Windows amd64 二进制并发布到 GitHub Releases
+- [x] **CICD-03**: 通过 ldflags 注入版本号到编译产物（-X main.Version）
 
 ### UPDATE (自更新核心)
 
@@ -74,9 +74,9 @@ Confirmed by roadmapper. All 21 v1 requirements mapped to 5 phases (36-40).
 | VALID-01 | Phase 36 | Complete |
 | VALID-02 | Phase 36 | Complete |
 | VALID-03 | Phase 36 | Complete |
-| CICD-01 | Phase 37 | Pending |
-| CICD-02 | Phase 37 | Pending |
-| CICD-03 | Phase 37 | Pending |
+| CICD-01 | Phase 37 | Complete |
+| CICD-02 | Phase 37 | Complete |
+| CICD-03 | Phase 37 | Complete |
 | UPDATE-01 | Phase 38 | Pending |
 | UPDATE-02 | Phase 38 | Pending |
 | UPDATE-03 | Phase 38 | Pending |

@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v0.8
 milestone_name: Self-Update
 status: verifying
-last_updated: "2026-03-29T11:37:59.464Z"
+last_updated: "2026-03-29T12:20:33.580Z"
 last_activity: 2026-03-29
 progress:
   total_phases: 5
-  completed_phases: 1
-  total_plans: 1
-  completed_plans: 1
+  completed_phases: 2
+  total_plans: 2
+  completed_plans: 2
   percent: 0
 ---
 
@@ -20,12 +20,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-29)
 
 **Core value:** 自动保持 nanobot 处于最新版本,无需用户手动干预。
-**Current focus:** Phase 36 — poc-validation
+**Current focus:** Phase 37 — ci-cd-pipeline
 
 ## Current Position
 
-Phase: 37
-Plan: Not started
+Phase: 37 (ci-cd-pipeline) — EXECUTING
+Plan: 1 of 1
 Status: Phase complete — ready for verification
 Last activity: 2026-03-29
 
@@ -53,6 +53,9 @@ Recent decisions affecting current work:
 - [v0.8]: PoC-first approach to validate Windows self-update feasibility before implementation
 - [Phase 36]: minio/selfupdate v0.6.0 validated on Windows: exe replacement, .old backup, self-spawn all work in under 3 seconds
 - [Phase 36]: Added //go:build ignore to 10 old tmp test files to prevent package main conflicts with PoC files
+- [Phase 37-ci-cd-pipeline]: GoReleaser ZIP archive format for Phase 38 self-update to download and extract exe
+- [Phase 37-ci-cd-pipeline]: Single platform windows/amd64 with -H=windowsgui matching Makefile LDFLAGS_RELEASE
+- [Phase 37-ci-cd-pipeline]: GoReleaser manages entire release (single job, no separate test step)
 
 ### Pending Todos
 
@@ -65,4 +68,4 @@ None.
 ## Session Continuity
 
 Last activity: 2026-03-29 — v0.8 roadmap created, 5 phases (36-40), 21 requirements mapped
-Resume file: .planning/phases/37-ci-cd-pipeline/37-CONTEXT.md
+Resume file: None

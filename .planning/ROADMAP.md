@@ -63,7 +63,7 @@
 **Milestone Goal:** 让 nanobot-auto-updater 程序自身支持通过 GitHub Releases 自动检测、下载并替换更新
 
 - [x] **Phase 36: PoC Validation** - 独立测试程序验证 minio/selfupdate 在 Windows 上的可行性 (completed 2026-03-29)
-- [ ] **Phase 37: CI/CD Pipeline** - GoReleaser + GitHub Actions 自动构建发布
+- [x] **Phase 37: CI/CD Pipeline** - GoReleaser + GitHub Actions 自动构建发布 (completed 2026-03-29)
 - [ ] **Phase 38: Self-Update Core** - internal/selfupdate/ 包实现自更新核心逻辑
 - [ ] **Phase 39: HTTP API Integration** - 自更新 API 端点 + Help 接口更新
 - [ ] **Phase 40: Safety & Recovery** - 重启机制、通知、备份清理与验证
@@ -94,7 +94,7 @@ Plans:
 **Plans**: 1 plan
 
 Plans:
-- [ ] 37-01-PLAN.md — Create .goreleaser.yaml and .github/workflows/release.yml for automated Windows binary releases
+- [x] 37-01-PLAN.md — Create .goreleaser.yaml and .github/workflows/release.yml for automated Windows binary releases
 
 ### Phase 38: Self-Update Core
 **Goal**: internal/selfupdate/ 包能独立检查 GitHub 最新 Release、比较版本、下载并安全替换运行中的 exe
@@ -147,7 +147,7 @@ Phases execute in numeric order: 36 → 37 → 38 → 39 → 40
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 36. PoC Validation | 1/1 | Complete    | 2026-03-29 |
-| 37. CI/CD Pipeline | 0/1 | Not started | - |
+| 37. CI/CD Pipeline | 1/1 | Complete   | 2026-03-29 |
 | 38. Self-Update Core | 0/? | Not started | - |
 | 39. HTTP API Integration | 0/? | Not started | - |
 | 40. Safety & Recovery | 0/? | Not started | - |
