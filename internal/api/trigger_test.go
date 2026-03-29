@@ -14,6 +14,7 @@ import (
 
 	"github.com/HQGroup/nanobot-auto-updater/internal/config"
 	"github.com/HQGroup/nanobot-auto-updater/internal/instance"
+	"github.com/HQGroup/nanobot-auto-updater/internal/notifier"
 	"github.com/HQGroup/nanobot-auto-updater/internal/updatelog"
 )
 
@@ -28,13 +29,13 @@ func (m *mockTriggerUpdater) TriggerUpdate(ctx context.Context) (*instance.Updat
 }
 
 // newTestHandler creates a TriggerHandler with mock InstanceManager for testing.
-func newTestHandler(logger *slog.Logger, ul *updatelog.UpdateLogger, mock *mockTriggerUpdater) *TriggerHandler {
+func newTestHandler(logger *slog.Logger, ul *updatelog.UpdateLogger, mock *mockTriggerUpdater, notif *notifier.Notifier) *TriggerHandler {
 	cfg := &config.APIConfig{
 		Port:        8080,
 		BearerToken: "test-token-12345678901234567890",
 		Timeout:     30 * time.Second,
 	}
-	return NewTriggerHandler(mock, cfg, logger, ul)
+	return NewTriggerHandler(mock, cfg, logger, ul, notif, 3)
 }
 
 // TestTriggerHandler_UpdateIDInResponse tests LOG-02:
@@ -51,7 +52,7 @@ func TestTriggerHandler_UpdateIDInResponse(t *testing.T) {
 			StartFailed: []*instance.InstanceError{},
 		},
 	}
-	handler := newTestHandler(logger, ul, mock)
+	handler := newTestHandler(logger, ul, mock, nil)
 
 	req := httptest.NewRequest("POST", "/api/v1/trigger-update", nil)
 	rec := httptest.NewRecorder()
@@ -96,7 +97,7 @@ func TestTriggerHandler_RecordsUpdateLog(t *testing.T) {
 			StartFailed: []*instance.InstanceError{},
 		},
 	}
-	handler := newTestHandler(logger, ul, mock)
+	handler := newTestHandler(logger, ul, mock, nil)
 
 	req := httptest.NewRequest("POST", "/api/v1/trigger-update", nil)
 	rec := httptest.NewRecorder()
@@ -145,7 +146,7 @@ func TestTriggerHandler_LogRecordingFailureDoesNotAffectResponse(t *testing.T) {
 		},
 	}
 	// Use nil UpdateLogger to test non-blocking behavior
-	handler := newTestHandler(logger, nil, mock)
+	handler := newTestHandler(logger, nil, mock, nil)
 
 	req := httptest.NewRequest("POST", "/api/v1/trigger-update", nil)
 	rec := httptest.NewRecorder()
@@ -186,7 +187,7 @@ func TestTriggerHandler_StartTimeRecordedBeforeUpdate(t *testing.T) {
 			StartFailed: []*instance.InstanceError{},
 		},
 	}
-	handler := newTestHandler(logger, ul, mock)
+	handler := newTestHandler(logger, ul, mock, nil)
 
 	beforeCall := time.Now().UTC()
 
@@ -227,7 +228,7 @@ func TestTriggerHandler_EndTimeRecordedAfterUpdate(t *testing.T) {
 			StartFailed: []*instance.InstanceError{},
 		},
 	}
-	handler := newTestHandler(logger, ul, mock)
+	handler := newTestHandler(logger, ul, mock, nil)
 
 	req := httptest.NewRequest("POST", "/api/v1/trigger-update", nil)
 	rec := httptest.NewRecorder()
@@ -261,7 +262,7 @@ func TestTriggerHandler_DurationCalculatedInMilliseconds(t *testing.T) {
 			StartFailed: []*instance.InstanceError{},
 		},
 	}
-	handler := newTestHandler(logger, ul, mock)
+	handler := newTestHandler(logger, ul, mock, nil)
 
 	req := httptest.NewRequest("POST", "/api/v1/trigger-update", nil)
 	rec := httptest.NewRecorder()
@@ -296,7 +297,7 @@ func TestTriggerHandler_MethodNotAllowed(t *testing.T) {
 	mock := &mockTriggerUpdater{
 		result: &instance.UpdateResult{},
 	}
-	handler := newTestHandler(logger, ul, mock)
+	handler := newTestHandler(logger, ul, mock, nil)
 
 	req := httptest.NewRequest("GET", "/api/v1/trigger-update", nil)
 	rec := httptest.NewRecorder()
@@ -336,7 +337,7 @@ func TestTriggerHandler_Success(t *testing.T) {
 			StartFailed: []*instance.InstanceError{},
 		},
 	}
-	handler := newTestHandler(logger, ul, mock)
+	handler := newTestHandler(logger, ul, mock, nil)
 
 	req := httptest.NewRequest("POST", "/api/v1/trigger-update", nil)
 	rec := httptest.NewRecorder()
@@ -371,7 +372,7 @@ func TestTriggerHandler_Conflict(t *testing.T) {
 	mock := &mockTriggerUpdater{
 		err: instance.ErrUpdateInProgress,
 	}
-	handler := newTestHandler(logger, ul, mock)
+	handler := newTestHandler(logger, ul, mock, nil)
 
 	req := httptest.NewRequest("POST", "/api/v1/trigger-update", nil)
 	rec := httptest.NewRecorder()
@@ -411,7 +412,7 @@ func TestTriggerHandler_Timeout(t *testing.T) {
 		err: context.DeadlineExceeded,
 	}
 	ul := updatelog.NewUpdateLogger(logger, "")
-	handler := NewTriggerHandler(mock, cfg, logger, ul)
+	handler := NewTriggerHandler(mock, cfg, logger, ul, nil, 3)
 
 	req := httptest.NewRequest("POST", "/api/v1/trigger-update", nil)
 	rec := httptest.NewRecorder()
@@ -437,7 +438,7 @@ func TestTriggerHandler_ContextTimeout(t *testing.T) {
 
 	mock := &mockTriggerUpdater{}
 	ul := updatelog.NewUpdateLogger(logger, "")
-	handler := NewTriggerHandler(mock, cfg, logger, ul)
+	handler := NewTriggerHandler(mock, cfg, logger, ul, nil, 3)
 
 	if handler.config.Timeout != expectedTimeout {
 		t.Errorf("Handler timeout = %v, want %v", handler.config.Timeout, expectedTimeout)
@@ -458,7 +459,7 @@ func TestTriggerHandler_JSONFormat(t *testing.T) {
 			StartFailed: []*instance.InstanceError{},
 		},
 	}
-	handler := newTestHandler(logger, ul, mock)
+	handler := newTestHandler(logger, ul, mock, nil)
 
 	req := httptest.NewRequest("POST", "/api/v1/trigger-update", nil)
 	rec := httptest.NewRecorder()
@@ -504,7 +505,7 @@ func TestTriggerHandler_WithAuth(t *testing.T) {
 		},
 	}
 	ul := updatelog.NewUpdateLogger(logger, "")
-	triggerHandler := NewTriggerHandler(mock, cfg, logger, ul)
+	triggerHandler := NewTriggerHandler(mock, cfg, logger, ul, nil, 3)
 	authMiddleware := AuthMiddleware(cfg.BearerToken, logger)
 
 	handler := authMiddleware(http.HandlerFunc(triggerHandler.Handle))
@@ -587,7 +588,7 @@ func TestTriggerHandler_UpdateFailed(t *testing.T) {
 			StartFailed: []*instance.InstanceError{},
 		},
 	}
-	handler := newTestHandler(logger, ul, mock)
+	handler := newTestHandler(logger, ul, mock, nil)
 
 	req := httptest.NewRequest("POST", "/api/v1/trigger-update", nil)
 	rec := httptest.NewRecorder()
@@ -631,7 +632,7 @@ func TestTriggerHandler_InternalError(t *testing.T) {
 	mock := &mockTriggerUpdater{
 		err: errors.New("UV update failed: unexpected error"),
 	}
-	handler := newTestHandler(logger, ul, mock)
+	handler := newTestHandler(logger, ul, mock, nil)
 
 	req := httptest.NewRequest("POST", "/api/v1/trigger-update", nil)
 	rec := httptest.NewRecorder()
@@ -649,5 +650,114 @@ func TestTriggerHandler_InternalError(t *testing.T) {
 
 	if response["error"] != "internal_error" {
 		t.Errorf("error = %q, want %q", response["error"], "internal_error")
+	}
+}
+
+// TestTriggerHandler_NotifierNil_NilSafe verifies UNOTIF-03, UNOTIF-04:
+// When notifier is nil, Handle() does not panic and returns normal response
+func TestTriggerHandler_NotifierNil_NilSafe(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+	ul := updatelog.NewUpdateLogger(logger, "")
+
+	mock := &mockTriggerUpdater{
+		result: &instance.UpdateResult{
+			Stopped:     []string{"gateway"},
+			Started:     []string{"gateway"},
+			StopFailed:  []*instance.InstanceError{},
+			StartFailed: []*instance.InstanceError{},
+		},
+	}
+	// Pass nil notifier -- should not panic
+	handler := newTestHandler(logger, ul, mock, nil)
+
+	req := httptest.NewRequest("POST", "/api/v1/trigger-update", nil)
+	rec := httptest.NewRecorder()
+
+	handler.Handle(rec, req)
+
+	// Response should be 200 OK (UNOTIF-03: notification failure/non-existence does not affect response)
+	if rec.Code != http.StatusOK {
+		t.Errorf("Status code = %d, want %d (nil notifier should not affect response)", rec.Code, http.StatusOK)
+	}
+
+	var response APIUpdateResult
+	if err := json.NewDecoder(rec.Body).Decode(&response); err != nil {
+		t.Fatalf("Failed to decode response: %v", err)
+	}
+	if !response.Success {
+		t.Error("success = false, want true (nil notifier should not affect update result)")
+	}
+}
+
+// TestTriggerHandler_DisabledNotifier_NilSafe verifies UNOTIF-04:
+// When notifier is disabled (Pushover not configured), Handle() returns normal response
+func TestTriggerHandler_DisabledNotifier_NilSafe(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+	ul := updatelog.NewUpdateLogger(logger, "")
+
+	mock := &mockTriggerUpdater{
+		result: &instance.UpdateResult{
+			Stopped:     []string{},
+			Started:     []string{},
+			StopFailed:  []*instance.InstanceError{},
+			StartFailed: []*instance.InstanceError{},
+		},
+	}
+	// Create disabled notifier (empty config)
+	disabledNotif := notifier.NewWithConfig(notifier.Config{}, logger)
+	handler := newTestHandler(logger, ul, mock, disabledNotif)
+
+	req := httptest.NewRequest("POST", "/api/v1/trigger-update", nil)
+	rec := httptest.NewRecorder()
+
+	handler.Handle(rec, req)
+
+	// Response should be 200 OK
+	if rec.Code != http.StatusOK {
+		t.Errorf("Status code = %d, want %d (disabled notifier should not affect response)", rec.Code, http.StatusOK)
+	}
+}
+
+// TestTriggerHandler_NilNotifier_ErrorPaths verifies UNOTIF-03:
+// nil notifier does not cause panic on error paths (conflict, timeout, internal error)
+func TestTriggerHandler_NilNotifier_ErrorPaths(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+	ul := updatelog.NewUpdateLogger(logger, "")
+
+	tests := []struct {
+		name           string
+		mock           *mockTriggerUpdater
+		expectedStatus int
+	}{
+		{
+			name:           "conflict with nil notifier",
+			mock:           &mockTriggerUpdater{err: instance.ErrUpdateInProgress},
+			expectedStatus: http.StatusConflict,
+		},
+		{
+			name:           "timeout with nil notifier",
+			mock:           &mockTriggerUpdater{err: context.DeadlineExceeded},
+			expectedStatus: http.StatusGatewayTimeout,
+		},
+		{
+			name:           "internal error with nil notifier",
+			mock:           &mockTriggerUpdater{err: errors.New("UV update failed")},
+			expectedStatus: http.StatusInternalServerError,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			handler := newTestHandler(logger, ul, tt.mock, nil)
+
+			req := httptest.NewRequest("POST", "/api/v1/trigger-update", nil)
+			rec := httptest.NewRecorder()
+
+			handler.Handle(rec, req)
+
+			if rec.Code != tt.expectedStatus {
+				t.Errorf("Status code = %d, want %d", rec.Code, tt.expectedStatus)
+			}
+		})
 	}
 }
