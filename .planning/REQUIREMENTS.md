@@ -9,9 +9,9 @@ Requirements for v0.8 Self-Update milestone. Each maps to roadmap phases.
 
 ### VALIDATION (可行性验证)
 
-- [ ] **VALID-01**: 创建独立 PoC 测试程序，验证 minio/selfupdate 在 Windows 上的 exe 替换可行性
-- [ ] **VALID-02**: 验证备份机制（.old 文件创建）和回滚功能正常工作
-- [ ] **VALID-03**: 验证 self-spawn 重启机制（更新后自动重启新版本进程）
+- [x] **VALID-01**: 创建独立 PoC 测试程序，验证 minio/selfupdate 在 Windows 上的 exe 替换可行性
+- [x] **VALID-02**: 验证备份机制（.old 文件创建）和回滚功能正常工作
+- [x] **VALID-03**: 验证 self-spawn 重启机制（更新后自动重启新版本进程）
 
 ### CI/CD (构建发布)
 
@@ -71,9 +71,9 @@ Confirmed by roadmapper. All 21 v1 requirements mapped to 5 phases (36-40).
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| VALID-01 | Phase 36 | Pending |
-| VALID-02 | Phase 36 | Pending |
-| VALID-03 | Phase 36 | Pending |
+| VALID-01 | Phase 36 | Complete |
+| VALID-02 | Phase 36 | Complete |
+| VALID-03 | Phase 36 | Complete |
 | CICD-01 | Phase 37 | Pending |
 | CICD-02 | Phase 37 | Pending |
 | CICD-03 | Phase 37 | Pending |

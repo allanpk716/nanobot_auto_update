@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v0.8
 milestone_name: Self-Update
-status: planning
-last_updated: "2026-03-29T09:52:00.153Z"
-last_activity: 2026-03-29 — Roadmap created for v0.8 Self-Update (5 phases, 21 requirements)
+status: verifying
+last_updated: "2026-03-29T11:08:51.267Z"
+last_activity: 2026-03-29
 progress:
   total_phases: 5
-  completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
+  completed_phases: 1
+  total_plans: 1
+  completed_plans: 1
   percent: 0
 ---
 
@@ -20,14 +20,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-29)
 
 **Core value:** 自动保持 nanobot 处于最新版本,无需用户手动干预。
-**Current focus:** v0.8 Self-Update roadmap created
+**Current focus:** Phase 36 — poc-validation
 
 ## Current Position
 
-Phase: 36 of 40 (PoC Validation)
-Plan: —
-Status: Ready to plan
-Last activity: 2026-03-29 — Roadmap created for v0.8 Self-Update (5 phases, 21 requirements)
+Phase: 36 (poc-validation) — EXECUTING
+Plan: 1 of 1
+Status: Phase complete — ready for verification
+Last activity: 2026-03-29
 
 Progress: [░░░░░░░░░░░░░░░░░░░░] 0%
 
@@ -51,6 +51,8 @@ Recent decisions affecting current work:
 - [v0.8]: minio/selfupdate v0.6.0 chosen for binary replacement (battle-tested Windows exe rename trick)
 - [v0.8]: Raw net/http for GitHub API access (single endpoint, no heavy SDK)
 - [v0.8]: PoC-first approach to validate Windows self-update feasibility before implementation
+- [Phase 36]: minio/selfupdate v0.6.0 validated on Windows: exe replacement, .old backup, self-spawn all work in under 3 seconds
+- [Phase 36]: Added //go:build ignore to 10 old tmp test files to prevent package main conflicts with PoC files
 
 ### Pending Todos
 
@@ -63,4 +65,4 @@ None.
 ## Session Continuity
 
 Last activity: 2026-03-29 — v0.8 roadmap created, 5 phases (36-40), 21 requirements mapped
-Resume file: .planning/phases/36-poc-validation/36-CONTEXT.md
+Resume file: None

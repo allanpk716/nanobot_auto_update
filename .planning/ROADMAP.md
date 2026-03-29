@@ -62,7 +62,7 @@
 
 **Milestone Goal:** 让 nanobot-auto-updater 程序自身支持通过 GitHub Releases 自动检测、下载并替换更新
 
-- [ ] **Phase 36: PoC Validation** - 独立测试程序验证 minio/selfupdate 在 Windows 上的可行性
+- [x] **Phase 36: PoC Validation** - 独立测试程序验证 minio/selfupdate 在 Windows 上的可行性 (completed 2026-03-29)
 - [ ] **Phase 37: CI/CD Pipeline** - GoReleaser + GitHub Actions 自动构建发布
 - [ ] **Phase 38: Self-Update Core** - internal/selfupdate/ 包实现自更新核心逻辑
 - [ ] **Phase 39: HTTP API Integration** - 自更新 API 端点 + Help 接口更新
@@ -81,7 +81,7 @@
 **Plans**: 1 plan
 
 Plans:
-- [ ] 36-01-PLAN.md — Create PoC program + automated test validating exe replacement, backup, and self-spawn restart
+- [x] 36-01-PLAN.md — Create PoC program + automated test validating exe replacement, backup, and self-spawn restart
 
 ### Phase 37: CI/CD Pipeline
 **Goal**: 用户推送 v* tag 后自动构建 Windows amd64 二进制并发布到 GitHub Releases，后续阶段有 Release 可以下载
@@ -146,7 +146,7 @@ Phases execute in numeric order: 36 → 37 → 38 → 39 → 40
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 36. PoC Validation | 0/1 | Planned | - |
+| 36. PoC Validation | 1/1 | Complete   | 2026-03-29 |
 | 37. CI/CD Pipeline | 0/? | Not started | - |
 | 38. Self-Update Core | 0/? | Not started | - |
 | 39. HTTP API Integration | 0/? | Not started | - |
