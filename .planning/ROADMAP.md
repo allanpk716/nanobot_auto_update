@@ -70,7 +70,10 @@
   2. User receives a Pushover notification when the update completes, showing the three-state status (success/partial_success/failed), elapsed time, and per-instance stop/start results
   3. Update flow completes normally even if Pushover notification sending fails — API response and UpdateLog recording are unaffected
   4. When Pushover is not configured, no notifications are sent and the update flow runs without errors or warnings
-**Plans**: TBD
+**Plans**: 1 plan
+
+Plans:
+- [ ] 34-01-PLAN.md — Inject Notifier into TriggerHandler with start/completion notifications and tests
 
 ### Phase 35: Notification Integration Testing
 **Goal**: E2E verification that the full notification lifecycle works correctly — start notification, completion notification, non-blocking behavior, and graceful degradation.
@@ -89,7 +92,7 @@
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 34. Update Notification Integration | 0/? | Not started | - |
+| 34. Update Notification Integration | 0/1 | Planning complete | - |
 | 35. Notification Integration Testing | 0/? | Not started | - |
 
 ---
