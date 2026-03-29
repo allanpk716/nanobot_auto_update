@@ -84,7 +84,10 @@ Plans:
   2. E2E test confirms a completion notification is sent after update completes and contains correct status, elapsed time, and instance details
   3. Test verifies that simulated Pushover failure does not affect the update API response status code, response body, or UpdateLog recording
   4. Test verifies that a disabled/not-configured Notifier results in zero notification attempts and no errors in the update flow
-**Plans**: TBD
+**Plans**: 1 plan
+
+Plans:
+- [ ] 35-01-PLAN.md — Refactor Notifier to interface, add recordingNotifier mock and 4 E2E notification tests
 
 ---
 
@@ -93,8 +96,8 @@ Plans:
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 34. Update Notification Integration | 1/1 | Complete    | 2026-03-29 |
-| 35. Notification Integration Testing | 0/? | Not started | - |
+| 35. Notification Integration Testing | 0/1 | Planned | - |
 
 ---
 
-*Last updated: 2026-03-29 (after Plan 34-01 execution)*
+*Last updated: 2026-03-29 (Phase 35 planning)*
