@@ -12,6 +12,11 @@
 
 ### Validated
 
+**v0.8 PoC Validation** — 2026-03-29 (Phase 36):
+- ✓ VALID-01: minio/selfupdate v0.6.0 成功替换运行中 Windows exe
+- ✓ VALID-02: 旧版本保存为 .old 备份文件
+- ✓ VALID-03: 自更新后独立重启 (self-spawn via cmd.Start)
+
 **v0.7 Update Lifecycle Notifications** — 2026-03-29:
 - ✓ UNOTIF-01: 更新开始通知 (触发来源 + 实例数量)
 - ✓ UNOTIF-02: 更新完成通知 (三态状态 + 耗时 + 实例详情)
@@ -199,11 +204,11 @@ instances:
 - go-update 库实现运行中 exe 安全替换
 - 备份回滚：更新前备份当前 exe，新版本启动失败可恢复
 
-**Last Shipped: v0.7 Update Lifecycle Notifications** — Completed 2026-03-29
+**v0.8 In Progress:** Phase 36 (PoC Validation) complete — minio/selfupdate v0.6.0 proven working on Windows for binary replacement. Phase 37 (CI/CD Pipeline) next.
 
 ---
 
-*Last updated: 2026-03-29 — Milestone v0.8 Self-Update started*
+*Last updated: 2026-03-29 — Phase 36 PoC Validation complete, Phase 37 next*
 
 ## Evolution
 
