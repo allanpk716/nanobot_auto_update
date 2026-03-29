@@ -91,10 +91,10 @@ Plans:
   1. 推送 v* tag 后 GitHub Actions 自动触发构建流程
   2. GoReleaser 编译出 Windows amd64 二进制并发布到 GitHub Releases 页面（含 checksums）
   3. 编译产物通过 ldflags 注入了版本号，运行 -version 可看到正确的版本信息
-**Plans**: TBD
+**Plans**: 1 plan
 
 Plans:
-- [ ] 37-01: TBD
+- [ ] 37-01-PLAN.md — Create .goreleaser.yaml and .github/workflows/release.yml for automated Windows binary releases
 
 ### Phase 38: Self-Update Core
 **Goal**: internal/selfupdate/ 包能独立检查 GitHub 最新 Release、比较版本、下载并安全替换运行中的 exe
@@ -147,11 +147,11 @@ Phases execute in numeric order: 36 → 37 → 38 → 39 → 40
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 36. PoC Validation | 1/1 | Complete    | 2026-03-29 |
-| 37. CI/CD Pipeline | 0/? | Not started | - |
+| 37. CI/CD Pipeline | 0/1 | Not started | - |
 | 38. Self-Update Core | 0/? | Not started | - |
 | 39. HTTP API Integration | 0/? | Not started | - |
 | 40. Safety & Recovery | 0/? | Not started | - |
 
 ---
 
-*Last updated: 2026-03-29 (Phase 36 planned)*
+*Last updated: 2026-03-29 (Phase 37 planned)*
