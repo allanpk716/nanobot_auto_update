@@ -2,7 +2,7 @@
 
 ## What This Is
 
-一个 Windows 后台监控服务，使用 Golang 开发，用于监控网络连通性并通过 HTTP API 触发 nanobot 工具的更新。**v0.6 更新日志记录和查询**：持久化记录每次更新操作的详细日志，提供分页查询 API 和 7 天自动清理。**v0.5 核心监控和自动化**：启动时自动启动实例、实例健康监控、Google 连通性监控、HTTP API 触发更新和 help 接口。**v0.4 实时日志查看**：通过 SSE 流式传输和嵌入式 Web UI 实时查看 nanobot 实例的 stdout/stderr 输出。多实例管理保持不变。通过配置文件和 HTTP API 控制行为。
+一个 Windows 后台监控服务，使用 Golang 开发，用于监控网络连通性并通过 HTTP API 触发 nanobot 工具的更新。**v0.7 更新生命周期通知**：HTTP API 触发更新时发送 Pushover 通知，包括更新开始/完成通知、非阻塞发送、优雅降级。**v0.6 更新日志记录和查询**：持久化记录每次更新操作的详细日志，提供分页查询 API 和 7 天自动清理。**v0.5 核心监控和自动化**：启动时自动启动实例、实例健康监控、Google 连通性监控、HTTP API 触发更新和 help 接口。**v0.4 实时日志查看**：通过 SSE 流式传输和嵌入式 Web UI 实时查看 nanobot 实例的 stdout/stderr 输出。多实例管理保持不变。通过配置文件和 HTTP API 控制行为。
 
 ## Core Value
 
@@ -11,6 +11,12 @@
 ## Requirements
 
 ### Validated
+
+**v0.7 Update Lifecycle Notifications** — 2026-03-29:
+- ✓ UNOTIF-01: 更新开始通知 (触发来源 + 实例数量)
+- ✓ UNOTIF-02: 更新完成通知 (三态状态 + 耗时 + 实例详情)
+- ✓ UNOTIF-03: 非阻塞通知 (goroutine + panic recovery)
+- ✓ UNOTIF-04: 优雅降级 (Pushover 未配置时跳过)
 
 **v0.6 Update Log Recording and Query System** — 2026-03-29:
 - ✓ LOG-01: UpdateLog 数据模型 (UUID, 时间戳, 触发方式, 实例详情)
@@ -40,6 +46,8 @@
 **uv**: Python 包管理器，用于安装和管理 Python 工具。
 
 **Pushover**: 推送通知服务，用于在更新失败时通知用户。
+
+**v0.7 Shipped:** 2026-03-29 — 更新生命周期通知里程碑完成，2 个阶段 (34-35)，2 个计划，4 个任务。Phase 34: Notifier 注入 TriggerHandler + 异步通知 (开始/完成) + panic recovery。Phase 35: Notifier 接口重构 + recordingNotifier mock + 4 个 E2E 通知测试。审计结果: 4/4 需求满足，2/2 阶段通过，5/5 集成点连接，5/5 E2E 流程完整，77/77 测试通过。
 
 **v0.6 Shipped:** 2026-03-29 — 更新日志记录和查询系统里程碑完成，4 个阶段 (30-33)，8 个计划，16 个任务。Phase 30: UpdateLog 数据模型 + UpdateLogger 组件。Phase 31: JSONL 文件持久化 + 7天自动清理。Phase 32: 查询 API + 分页 + Bearer Token 认证。Phase 33: E2E 集成测试 + 性能基准 (867ns-87us)。验证: 5/5 成功标准通过，50+ 测试全部通过。
 
@@ -136,6 +144,13 @@
 | Non-blocking file write failure | 静默降级到纯内存模式 | ✓ Good — Phase 31 |
 | UpdateLogger in main.go | 应用级生命周期控制 | ✓ Good — Phase 31 |
 | bufio.Scanner 流式分页 | 避免 1000+ 记录内存问题 | ✓ Good — Phase 32 |
+| Notifier 注入 TriggerHandler | 更新生命周期通知,与 UpdateLogger 同模式 | ✓ Good — Phase 34 |
+| 异步通知 goroutine + panic recovery | 通知失败不影响更新流程 | ✓ Good — Phase 34 |
+| instanceCount 构造时注入 | 通知内容含实例数,无需运行时查询 | ✓ Good — Phase 34 |
+| statusToTitle/formatCompletionMessage | 三态通知标题和实例详情格式化 | ✓ Good — Phase 34 |
+| Notifier 接口 (trigger.go 本地定义) | 最小范围,单方法接口,duck typing | ✓ Good — Phase 35 |
+| recordingNotifier (sync.Mutex) | goroutine-safe mock,可配置错误 | ✓ Good — Phase 35 |
+| time.Sleep(50ms) goroutine 同步 | 匹配异步通知模式的 E2E 测试 | ✓ Good — Phase 35 |
 
 ## Configuration
 
@@ -174,17 +189,12 @@ instances:
 
 ---
 
-## Current Milestone: v0.7 Update Lifecycle Notifications
-
-**Goal:** 在 HTTP API 触发的 nanobot 更新流程中，发送 Pushover 通知告知用户更新状态
-
-**Target features:**
-- 更新开始通知：收到更新触发请求后，立即发送 Pushover 通知告知更新已开始
-- 更新完成通知：更新完成后，发送 Pushover 通知告知简要结果（成功/失败/部分成功 + 各实例状态）
-- 非阻塞通知：通知发送失败不影响更新流程本身
+## Current Milestone: None (v0.7 shipped)
 
 **Last Shipped: v0.7 Update Lifecycle Notifications** — Completed 2026-03-29
 
+Use `/gsd:new-milestone` to start the next milestone.
+
 ---
 
-*Last updated: 2026-03-29 after Phase 35 completion*
+*Last updated: 2026-03-29 after v0.7 milestone archival*

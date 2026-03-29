@@ -1,5 +1,15 @@
 # Milestones
 
+## v0.7 Update Lifecycle Notifications (Shipped: 2026-03-29)
+
+**Phases completed:** 2 phases, 2 plans, 4 tasks
+
+**Key accomplishments:**
+
+- Notifier refactored to interface with recordingNotifier mock, 4 E2E tests validating full notification lifecycle (start, completion, non-blocking, graceful degradation)
+
+---
+
 ## v0.6 Update Log Recording and Query System (Shipped: 2026-03-29)
 
 **Phases completed:** 4 phases, 8 plans, 16 tasks
