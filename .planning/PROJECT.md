@@ -183,8 +183,8 @@ instances:
 - 更新完成通知：更新完成后，发送 Pushover 通知告知简要结果（成功/失败/部分成功 + 各实例状态）
 - 非阻塞通知：通知发送失败不影响更新流程本身
 
-**Last Shipped: v0.6 Update Log Recording and Query System** — Completed 2026-03-29
+**Last Shipped: v0.7 Update Lifecycle Notifications** — Completed 2026-03-29
 
 ---
 
-*Last updated: 2026-03-29 after Phase 34 completion*
+*Last updated: 2026-03-29 after Phase 35 completion*
