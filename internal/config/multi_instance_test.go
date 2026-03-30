@@ -161,6 +161,10 @@ func TestConfigValidateWithInstances(t *testing.T) {
 				HealthCheck: HealthCheckConfig{
 					Interval: 1 * time.Minute,
 				},
+				SelfUpdate: SelfUpdateConfig{
+					GithubOwner: "HQGroup",
+					GithubRepo:  "nanobot-auto-updater",
+				},
 			},
 			expectError: false,
 		},

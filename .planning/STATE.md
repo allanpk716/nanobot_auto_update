@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v0.8
 milestone_name: Self-Update
 status: executing
-last_updated: "2026-03-30T03:20:03.549Z"
-last_activity: 2026-03-30 -- Phase 38 execution started
+last_updated: "2026-03-30T03:53:49Z"
+last_activity: 2026-03-30
 progress:
   total_phases: 5
   completed_phases: 2
   total_plans: 4
-  completed_plans: 2
-  percent: 0
+  completed_plans: 4
+  percent: 100
 ---
 
 # Project State
@@ -24,12 +24,12 @@ See: .planning/PROJECT.md (updated 2026-03-29)
 
 ## Current Position
 
-Phase: 38 (self-update-core) — EXECUTING
-Plan: 1 of 2
-Status: Executing Phase 38
-Last activity: 2026-03-30 -- Phase 38 execution started
+Phase: 38
+Plan: 02 completed
+Status: Plan 02 complete — Update pipeline and config extension done
+Last activity: 2026-03-30
 
-Progress: [░░░░░░░░░░░░░░░░░░░░] 0%
+Progress: [####################] 100%
 
 ## Performance Metrics
 
@@ -56,6 +56,13 @@ Recent decisions affecting current work:
 - [Phase 37-ci-cd-pipeline]: GoReleaser ZIP archive format for Phase 38 self-update to download and extract exe
 - [Phase 37-ci-cd-pipeline]: Single platform windows/amd64 with -H=windowsgui matching Makefile LDFLAGS_RELEASE
 - [Phase 37-ci-cd-pipeline]: GoReleaser manages entire release (single job, no separate test step)
+- [Phase ?]: golang.org/x/mod/semver for standard semver comparison in selfupdate package
+- [Phase ?]: struct-based cache (cachedRelease + cacheTime) for testability in selfupdate Updater
+
+- [Phase 38-02]: In-memory ZIP extraction via bytes.Reader (no temp files, per D-01)
+- [Phase 38-02]: GoReleaser checksums.txt parsing with two-space delimiter
+- [Phase 38-02]: exeName constant for binary name inside ZIP
+- [Phase 38-02]: SelfUpdateConfig defaults HQGroup/nanobot-auto-updater for zero-config
 
 ### Pending Todos
 
@@ -67,5 +74,5 @@ None.
 
 ## Session Continuity
 
-Last activity: 2026-03-29 — v0.8 roadmap created, 5 phases (36-40), 21 requirements mapped
-Resume file: .planning/phases/38-self-update-core/38-CONTEXT.md
+Last activity: 2026-03-30 — Phase 38 Plan 02 complete (Update pipeline + config extension)
+Resume file: .planning/phases/38-self-update-core/38-02-SUMMARY.md

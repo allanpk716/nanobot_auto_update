@@ -1,6 +1,10 @@
 package selfupdate
 
 import (
+	"archive/zip"
+	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -8,6 +12,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -333,4 +338,181 @@ func TestNeedUpdate_NilCacheAndAPIError(t *testing.T) {
 	require.Error(t, err)
 	assert.False(t, needsUpdate)
 	assert.Nil(t, release)
+}
+
+// --- Plan 02 tests: Update pipeline (download, checksum, extract, apply) ---
+
+// createTestZip creates a ZIP archive in memory containing a single file with the given content.
+func createTestZip(t *testing.T, filename, content string) []byte {
+	var buf bytes.Buffer
+	w := zip.NewWriter(&buf)
+	f, err := w.Create(filename)
+	require.NoError(t, err)
+	_, err = f.Write([]byte(content))
+	require.NoError(t, err)
+	require.NoError(t, w.Close())
+	return buf.Bytes()
+}
+
+func TestVerifyChecksum_Valid(t *testing.T) {
+	data := []byte("hello")
+	hash := sha256.Sum256(data)
+	assert.True(t, verifyChecksum(data, hash[:]))
+}
+
+func TestVerifyChecksum_Invalid(t *testing.T) {
+	assert.False(t, verifyChecksum([]byte("hello"), []byte("0000")))
+}
+
+func TestParseChecksum_Valid(t *testing.T) {
+	// GoReleaser format: <sha256_hex>  <filename>\n
+	data := []byte("a1b2c3d4  test.zip\notherhash  other.zip\n")
+	result, err := parseChecksum(data, "test.zip")
+	require.NoError(t, err)
+	expected, _ := hex.DecodeString("a1b2c3d4")
+	assert.Equal(t, expected, result)
+}
+
+func TestParseChecksum_NotFound(t *testing.T) {
+	data := []byte("a1b2c3d4  test.zip\n")
+	_, err := parseChecksum(data, "missing.zip")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not found")
+}
+
+func TestExtractExeFromZip(t *testing.T) {
+	zipData := createTestZip(t, exeName, "fake exe content")
+	reader, err := extractExeFromZip(zipData, exeName)
+	require.NoError(t, err)
+	content, err := io.ReadAll(reader)
+	require.NoError(t, err)
+	assert.Equal(t, "fake exe content", string(content))
+}
+
+func TestExtractExeFromZip_NotFound(t *testing.T) {
+	zipData := createTestZip(t, "other.exe", "other content")
+	_, err := extractExeFromZip(zipData, exeName)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not found in zip")
+}
+
+// TestUpdate_FullFlow tests the individual pipeline steps (download, checksum, extract)
+// Update() full integration tested via Phase 36 PoC pattern (selfupdate.Apply replaces running exe).
+func TestUpdate_FullFlow(t *testing.T) {
+	exeContent := "fake exe binary content"
+	zipData := createTestZip(t, exeName, exeContent)
+	zipHash := sha256.Sum256(zipData)
+	checksumsContent := fmt.Sprintf("%s  nanobot-auto-updater_2.0.0_windows_amd64.zip\n",
+		hex.EncodeToString(zipHash[:]))
+
+	var downloadCount int32
+	var serverURL string // captured by closure, set after httptest.NewServer
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/repos/test/repo/releases/latest":
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			release := map[string]interface{}{
+				"tag_name":     "v2.0.0",
+				"name":         "v2.0.0",
+				"body":         "Release notes for v2.0.0",
+				"html_url":     "https://github.com/test/repo/releases/tag/v2.0.0",
+				"published_at": "2026-03-29T00:00:00Z",
+				"assets": []map[string]interface{}{
+					{
+						"name":               "nanobot-auto-updater_2.0.0_windows_amd64.zip",
+						"browser_download_url": serverURL + "/download/zip",
+						"size":               len(zipData),
+						"content_type":       "application/zip",
+					},
+					{
+						"name":               "nanobot-auto-updater_2.0.0_checksums.txt",
+						"browser_download_url": serverURL + "/download/checksums",
+						"size":               len(checksumsContent),
+						"content_type":       "text/plain",
+					},
+				},
+			}
+			data, _ := json.Marshal(release)
+			w.Write(data)
+
+		case r.URL.Path == "/download/checksums":
+			atomic.AddInt32(&downloadCount, 1)
+			w.WriteHeader(http.StatusOK)
+			fmt.Fprint(w, checksumsContent)
+
+		case r.URL.Path == "/download/zip":
+			atomic.AddInt32(&downloadCount, 1)
+			w.WriteHeader(http.StatusOK)
+			w.Write(zipData)
+
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+	serverURL = server.URL
+
+	u := newTestUpdater(server.URL)
+
+	// Step 1: Check if update needed
+	needsUpdate, release, err := u.NeedUpdate("1.0.0")
+	require.NoError(t, err)
+	assert.True(t, needsUpdate)
+	require.NotNil(t, release)
+
+	// Step 2: Find ZIP asset name
+	var zipAssetName string
+	for _, a := range release.Assets {
+		if strings.HasSuffix(a.Name, zipAssetSuffix) {
+			zipAssetName = a.Name
+			break
+		}
+	}
+	assert.NotEmpty(t, zipAssetName)
+
+	// Step 3: Download checksums
+	checksumsData, err := u.download(release.ChecksumURL)
+	require.NoError(t, err)
+	assert.Equal(t, checksumsContent, string(checksumsData))
+
+	// Step 4: Download ZIP
+	downloadedZip, err := u.download(release.DownloadURL)
+	require.NoError(t, err)
+	assert.Equal(t, zipData, downloadedZip)
+
+	// Step 5: Verify checksum
+	expectedHash, err := parseChecksum(checksumsData, zipAssetName)
+	require.NoError(t, err)
+	assert.True(t, verifyChecksum(downloadedZip, expectedHash))
+
+	// Step 6: Extract exe from ZIP
+	exeReader, err := extractExeFromZip(downloadedZip, exeName)
+	require.NoError(t, err)
+	extractedContent, err := io.ReadAll(exeReader)
+	require.NoError(t, err)
+	assert.Equal(t, exeContent, string(extractedContent))
+
+	// Verify downloads happened
+	assert.Equal(t, int32(2), atomic.LoadInt32(&downloadCount))
+}
+
+func TestUpdate_AlreadyUpToDate(t *testing.T) {
+	var requestCount int32
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&requestCount, 1)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		fmt.Fprint(w, validReleaseJSON("v1.0.0"))
+	}))
+	defer server.Close()
+
+	u := newTestUpdater(server.URL)
+	err := u.Update("1.0.0")
+
+	require.NoError(t, err)
+	// Only 1 request (the API call to check version), no download requests
+	assert.Equal(t, int32(1), atomic.LoadInt32(&requestCount))
 }

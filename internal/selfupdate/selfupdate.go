@@ -4,14 +4,20 @@
 package selfupdate
 
 import (
+	"archive/zip"
+	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
+	"github.com/minio/selfupdate"
 	"golang.org/x/mod/semver"
 )
 
@@ -23,6 +29,7 @@ const (
 	defaultGitHubAPIBase  = "https://api.github.com"
 	zipAssetSuffix        = "_windows_amd64.zip"
 	checksumsAssetSuffix  = "_checksums.txt"
+	exeName               = "nanobot-auto-updater.exe" // binary name inside ZIP (per RESEARCH Pitfall 3)
 )
 
 // SelfUpdateConfig holds configuration for self-update functionality.
@@ -214,4 +221,152 @@ func (u *Updater) NeedUpdate(currentVersion string) (bool, *ReleaseInfo, error) 
 	)
 
 	return needsUpdate, release, nil
+}
+
+// verifyChecksum computes SHA256 of data and compares with expected hash (UPDATE-03).
+func verifyChecksum(data []byte, expectedSHA256 []byte) bool {
+	hash := sha256.Sum256(data)
+	return bytes.Equal(hash[:], expectedSHA256)
+}
+
+// parseChecksum parses GoReleaser checksums.txt format to find the SHA256 hash for a given filename.
+// Format: "<sha256_hex>  <filename>\n" (two spaces between hash and filename).
+func parseChecksum(checksumsTxt []byte, filename string) ([]byte, error) {
+	lines := strings.Split(string(checksumsTxt), "\n")
+	for _, line := range lines {
+		parts := strings.SplitN(line, "  ", 2)
+		if len(parts) == 2 && parts[1] == filename {
+			return hex.DecodeString(parts[0])
+		}
+	}
+	return nil, fmt.Errorf("checksum for %q not found", filename)
+}
+
+// extractExeFromZip extracts the target exe from a ZIP archive in memory (per D-01).
+// No temp files are created; the exe content is returned as an io.Reader.
+func extractExeFromZip(zipData []byte, targetExeName string) (io.Reader, error) {
+	readerAt := bytes.NewReader(zipData)
+	zipReader, err := zip.NewReader(readerAt, int64(len(zipData)))
+	if err != nil {
+		return nil, fmt.Errorf("zip open: %w", err)
+	}
+	for _, f := range zipReader.File {
+		if f.Name == targetExeName {
+			rc, err := f.Open()
+			if err != nil {
+				return nil, fmt.Errorf("zip entry open: %w", err)
+			}
+			defer rc.Close()
+			var buf bytes.Buffer
+			if _, err := io.Copy(&buf, rc); err != nil {
+				return nil, fmt.Errorf("zip entry read: %w", err)
+			}
+			return &buf, nil
+		}
+	}
+	return nil, fmt.Errorf("exe %q not found in zip", targetExeName)
+}
+
+// download fetches a URL and returns the response body bytes.
+func (u *Updater) download(url string) ([]byte, error) {
+	resp, err := u.httpClient.Get(url)
+	if err != nil {
+		return nil, fmt.Errorf("download %s: %w", url, err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("download %s: HTTP %d", url, resp.StatusCode)
+	}
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("read download %s: %w", url, err)
+	}
+	return data, nil
+}
+
+// Update performs the full self-update pipeline: check version, download ZIP,
+// verify SHA256 checksum, extract exe in memory, and apply via minio/selfupdate
+// (UPDATE-04, UPDATE-05).
+// If already up to date, returns nil without downloading.
+// On Apply failure, checks RollbackError to determine if rollback succeeded.
+func (u *Updater) Update(currentVersion string) error {
+	// 1. Check if update needed
+	needsUpdate, release, err := u.NeedUpdate(currentVersion)
+	if err != nil {
+		return fmt.Errorf("check update: %w", err)
+	}
+	if !needsUpdate {
+		u.logger.Info("Already up to date")
+		return nil
+	}
+
+	u.logger.Info("Update available",
+		"current", currentVersion,
+		"latest", release.Version)
+
+	// 2. Find the ZIP asset name from release assets
+	var zipAssetName string
+	for _, a := range release.Assets {
+		if strings.HasSuffix(a.Name, zipAssetSuffix) {
+			zipAssetName = a.Name
+			break
+		}
+	}
+	if zipAssetName == "" {
+		return fmt.Errorf("no windows amd64 zip asset found in release %s", release.Version)
+	}
+
+	// 3. Download checksums.txt
+	u.logger.Info("Downloading checksums", "url", release.ChecksumURL)
+	checksumsData, err := u.download(release.ChecksumURL)
+	if err != nil {
+		return fmt.Errorf("download checksums: %w", err)
+	}
+
+	// 4. Download ZIP
+	u.logger.Info("Downloading update", "url", release.DownloadURL)
+	zipData, err := u.download(release.DownloadURL)
+	if err != nil {
+		return fmt.Errorf("download zip: %w", err)
+	}
+
+	// 5. Verify ZIP checksum (D-02, UPDATE-03)
+	expectedHash, err := parseChecksum(checksumsData, zipAssetName)
+	if err != nil {
+		return fmt.Errorf("parse checksum: %w", err)
+	}
+	if !verifyChecksum(zipData, expectedHash) {
+		return fmt.Errorf("checksum verification failed for %s", zipAssetName)
+	}
+	u.logger.Info("Checksum verified", "asset", zipAssetName)
+
+	// 6. Extract exe from ZIP in memory (D-01)
+	exeReader, err := extractExeFromZip(zipData, exeName)
+	if err != nil {
+		return fmt.Errorf("extract exe: %w", err)
+	}
+	u.logger.Info("Extracted exe from zip", "exe", exeName)
+
+	// 7. Apply update using minio/selfupdate (UPDATE-04, UPDATE-05)
+	exePath, err := os.Executable()
+	if err != nil {
+		return fmt.Errorf("get exe path: %w", err)
+	}
+	opts := selfupdate.Options{
+		OldSavePath: exePath + ".old",
+	}
+
+	u.logger.Info("Applying update", "exe", exePath, "backup", opts.OldSavePath)
+	err = selfupdate.Apply(exeReader, opts)
+	if err != nil {
+		if rerr := selfupdate.RollbackError(err); rerr != nil {
+			return fmt.Errorf("update failed and rollback also failed: %w (rollback: %v)", err, rerr)
+		}
+		return fmt.Errorf("update failed (rolled back): %w", err)
+	}
+
+	u.logger.Info("Update applied successfully",
+		"old_version", currentVersion,
+		"new_version", release.Version)
+	return nil
 }
