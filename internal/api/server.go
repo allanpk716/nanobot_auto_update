@@ -90,7 +90,7 @@ func NewServer(cfg *config.APIConfig, im *instance.InstanceManager, fullCfg *con
 
 	// Self-update endpoints (Phase 39: API-01, API-02, API-03)
 	if selfUpdater != nil {
-		selfUpdateHandler := NewSelfUpdateHandler(selfUpdater, version, im, logger)
+		selfUpdateHandler := NewSelfUpdateHandler(selfUpdater, version, im, notif, logger)
 		mux.Handle("GET /api/v1/self-update/check",
 			authMiddleware(http.HandlerFunc(selfUpdateHandler.HandleCheck)))
 		mux.Handle("POST /api/v1/self-update",

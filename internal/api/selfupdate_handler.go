@@ -5,10 +5,14 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"os"
+	"os/exec"
 	"runtime/debug"
 	"sync/atomic"
+	"time"
 
 	"github.com/HQGroup/nanobot-auto-updater/internal/selfupdate"
+	"golang.org/x/sys/windows"
 )
 
 // SelfUpdateChecker is the interface for checking and executing self-updates.
@@ -51,15 +55,17 @@ type SelfUpdateHandler struct {
 	version         string
 	instanceManager UpdateMutex
 	status          atomic.Value // stores *SelfUpdateStatus
+	notifier        Notifier     // SAFE-02: Pushover notification sender
 	logger          *slog.Logger
 }
 
 // NewSelfUpdateHandler creates a new SelfUpdateHandler.
-func NewSelfUpdateHandler(updater SelfUpdateChecker, version string, im UpdateMutex, logger *slog.Logger) *SelfUpdateHandler {
+func NewSelfUpdateHandler(updater SelfUpdateChecker, version string, im UpdateMutex, notif Notifier, logger *slog.Logger) *SelfUpdateHandler {
 	h := &SelfUpdateHandler{
 		updater:         updater,
 		version:         version,
 		instanceManager: im,
+		notifier:        notif,
 		logger:          logger.With("source", "api-self-update"),
 	}
 	h.status.Store(&SelfUpdateStatus{Status: "idle"})
@@ -125,6 +131,24 @@ func (h *SelfUpdateHandler) HandleUpdate(w http.ResponseWriter, r *http.Request)
 		h.logger.Error("Failed to encode update response", "error", err)
 	}
 
+	// Send start notification (D-03: start notification)
+	if h.notifier != nil {
+		title := "Nanobot 自更新开始"
+		message := fmt.Sprintf("当前版本: %s", h.version)
+		go func() {
+			defer func() {
+				if r := recover(); r != nil {
+					h.logger.Error("start notification goroutine panic",
+						"panic", r,
+						"stack", string(debug.Stack()))
+				}
+			}()
+			if err := h.notifier.Notify(title, message); err != nil {
+				h.logger.Error("start notification failed", "error", err)
+			}
+		}()
+	}
+
 	// Launch async goroutine for self-update
 	go func() {
 		defer h.instanceManager.UnlockUpdate()
@@ -139,6 +163,23 @@ func (h *SelfUpdateHandler) HandleUpdate(w http.ResponseWriter, r *http.Request)
 					Status: "failed",
 					Error:  fmt.Sprintf("panic: %v", r),
 				})
+				// Send failure notification for panic (D-03)
+				if h.notifier != nil {
+					title := "Nanobot 自更新失败"
+					message := fmt.Sprintf("当前版本: %s\n错误: panic: %v", h.version, r)
+					go func() {
+						defer func() {
+							if r := recover(); r != nil {
+								h.logger.Error("panic notification goroutine panic",
+									"panic", r,
+									"stack", string(debug.Stack()))
+							}
+						}()
+						if notifyErr := h.notifier.Notify(title, message); notifyErr != nil {
+							h.logger.Error("panic notification failed", "error", notifyErr)
+						}
+					}()
+				}
 			}
 		}()
 
@@ -151,6 +192,23 @@ func (h *SelfUpdateHandler) HandleUpdate(w http.ResponseWriter, r *http.Request)
 				Status: "failed",
 				Error:  err.Error(),
 			})
+			// Send failure notification (D-03)
+			if h.notifier != nil {
+				title := "Nanobot 自更新失败"
+				message := fmt.Sprintf("当前版本: %s\n错误: %s", h.version, err.Error())
+				go func() {
+					defer func() {
+						if r := recover(); r != nil {
+							h.logger.Error("failure notification goroutine panic",
+								"panic", r,
+								"stack", string(debug.Stack()))
+						}
+					}()
+					if notifyErr := h.notifier.Notify(title, message); notifyErr != nil {
+						h.logger.Error("failure notification failed", "error", notifyErr)
+					}
+				}()
+			}
 			return
 		}
 
@@ -158,5 +216,52 @@ func (h *SelfUpdateHandler) HandleUpdate(w http.ResponseWriter, r *http.Request)
 		h.status.Store(&SelfUpdateStatus{
 			Status: "updated",
 		})
+
+		// Get target version for status file and notification (cache hit guaranteed)
+		_, releaseInfo, _ := h.updater.NeedUpdate(h.version)
+		var targetVersion string
+		if releaseInfo != nil {
+			targetVersion = releaseInfo.Version
+		} else {
+			targetVersion = "unknown"
+		}
+
+		// Write update success marker (D-04)
+		exePath, _ := os.Executable()
+		if exePath != "" {
+			marker := map[string]string{
+				"timestamp":   time.Now().Format(time.RFC3339),
+				"new_version": targetVersion,
+				"old_version": h.version,
+			}
+			markerData, _ := json.Marshal(marker)
+			markerPath := exePath + ".update-success"
+			if err := os.WriteFile(markerPath, markerData, 0644); err != nil {
+				h.logger.Error("failed to write update-success marker", "error", err)
+			}
+		}
+
+		// Send completion notification synchronously (D-03, avoids Pitfall 1)
+		if h.notifier != nil {
+			title := "Nanobot 自更新成功"
+			message := fmt.Sprintf("已从 %s 更新到 %s", h.version, targetVersion)
+			if err := h.notifier.Notify(title, message); err != nil {
+				h.logger.Error("completion notification failed", "error", err)
+			}
+		}
+
+		// Self-spawn restart (D-01: direct exit, no graceful shutdown)
+		// Using same flags as daemon.go to ensure child survives parent's os.Exit(0)
+		cmd := exec.Command(exePath, os.Args[1:]...)
+		cmd.SysProcAttr = &windows.SysProcAttr{
+			HideWindow:    true,
+			CreationFlags: windows.CREATE_NO_WINDOW | windows.CREATE_NEW_PROCESS_GROUP | windows.DETACHED_PROCESS,
+		}
+		if err := cmd.Start(); err != nil {
+			h.logger.Error("failed to spawn new process after update", "error", err)
+			return
+		}
+		h.logger.Info("self-spawn restart initiated", "new_pid", cmd.Process.Pid)
+		os.Exit(0)
 	}()
 }
