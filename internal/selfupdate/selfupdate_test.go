@@ -406,6 +406,7 @@ func TestUpdate_FullFlow(t *testing.T) {
 		hex.EncodeToString(zipHash[:]))
 
 	var downloadCount int32
+	var serverURL string // captured by closure, set after httptest.NewServer
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
@@ -421,13 +422,13 @@ func TestUpdate_FullFlow(t *testing.T) {
 				"assets": []map[string]interface{}{
 					{
 						"name":               "nanobot-auto-updater_2.0.0_windows_amd64.zip",
-						"browser_download_url": server.URL + "/download/zip",
+						"browser_download_url": serverURL + "/download/zip",
 						"size":               len(zipData),
 						"content_type":       "application/zip",
 					},
 					{
 						"name":               "nanobot-auto-updater_2.0.0_checksums.txt",
-						"browser_download_url": server.URL + "/download/checksums",
+						"browser_download_url": serverURL + "/download/checksums",
 						"size":               len(checksumsContent),
 						"content_type":       "text/plain",
 					},
@@ -451,6 +452,7 @@ func TestUpdate_FullFlow(t *testing.T) {
 		}
 	}))
 	defer server.Close()
+	serverURL = server.URL
 
 	u := newTestUpdater(server.URL)
 
