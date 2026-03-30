@@ -48,7 +48,7 @@ created: 2026-03-30
 | 38-02-04 | 02 | 1 | UPDATE-05 | unit | `go test ./internal/selfupdate/ -run TestApplyUpdate_OldSavePath -v` | ❌ W0 | ⬜ pending |
 | 38-02-05 | 02 | 1 | UPDATE-06 | unit | `go test ./internal/selfupdate/ -run TestCache -v` | ❌ W0 | ⬜ pending |
 | 38-02-06 | 02 | 1 | UPDATE-06 | unit | `go test ./internal/selfupdate/ -run TestCache_Expiry -v` | ❌ W0 | ⬜ pending |
-| 38-03-01 | 03 | 2 | UPDATE-07 | unit | `go test ./internal/config/ -run TestSelfUpdateConfig -v` | ❌ W0 | ⬜ pending |
+| 38-02-07 | 02 | 2 | UPDATE-07 | unit | `go test ./internal/config/ -run TestSelfUpdateConfig -v` | ❌ W0 | ⬜ pending |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
