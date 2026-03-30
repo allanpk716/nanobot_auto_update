@@ -1,5 +1,19 @@
 # Milestones
 
+## v0.8 Self-Update (Shipped: 2026-03-30)
+
+**Phases completed:** 5 phases, 8 plans, 12 tasks
+
+**Key accomplishments:**
+
+- Validated minio/selfupdate v0.6.0 can replace a running Windows exe, save .old backup, and self-spawn new version in under 3 seconds
+- SelfUpdateHandler with HandleCheck/HandleUpdate endpoints, shared mutex with trigger-update, async 202 Accepted pattern, and 8 unit tests
+- Self-update endpoint descriptions added to Help API response with self_update_check (GET) and self_update (POST) entries plus verification test
+- Notifier injection with start/complete/failure Pushover notifications, .update-success status file, and testable self-spawn restart in SelfUpdateHandler
+- 1. [Rule 3 - Blocking] Pre-existing capture_test.go compilation error
+
+---
+
 ## v0.7 Update Lifecycle Notifications (Shipped: 2026-03-29)
 
 **Phases completed:** 2 phases, 2 plans, 4 tasks

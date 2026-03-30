@@ -2,7 +2,7 @@
 
 ## What This Is
 
-一个 Windows 后台监控服务，使用 Golang 开发，用于监控网络连通性并通过 HTTP API 触发 nanobot 工具的更新。**v0.7 更新生命周期通知**：HTTP API 触发更新时发送 Pushover 通知，包括更新开始/完成通知、非阻塞发送、优雅降级。**v0.6 更新日志记录和查询**：持久化记录每次更新操作的详细日志，提供分页查询 API 和 7 天自动清理。**v0.5 核心监控和自动化**：启动时自动启动实例、实例健康监控、Google 连通性监控、HTTP API 触发更新和 help 接口。**v0.4 实时日志查看**：通过 SSE 流式传输和嵌入式 Web UI 实时查看 nanobot 实例的 stdout/stderr 输出。多实例管理保持不变。通过配置文件和 HTTP API 控制行为。
+一个 Windows 后台监控服务，使用 Golang 开发，用于监控网络连通性并通过 HTTP API 触发 nanobot 工具的更新。**v0.8 自更新**：通过 GitHub Releases 自动检测、下载并替换更新 nanobot-auto-updater 自身，包括 CI/CD 自动构建、HTTP API 触发自更新、安全恢复机制。**v0.7 更新生命周期通知**：HTTP API 触发更新时发送 Pushover 通知，包括更新开始/完成通知、非阻塞发送、优雅降级。**v0.6 更新日志记录和查询**：持久化记录每次更新操作的详细日志，提供分页查询 API 和 7 天自动清理。**v0.5 核心监控和自动化**：启动时自动启动实例、实例健康监控、Google 连通性监控、HTTP API 触发更新和 help 接口。**v0.4 实时日志查看**：通过 SSE 流式传输和嵌入式 Web UI 实时查看 nanobot 实例的 stdout/stderr 输出。多实例管理保持不变。通过配置文件和 HTTP API 控制行为。
 
 ## Core Value
 
@@ -78,6 +78,8 @@
 
 **Pushover**: 推送通知服务，用于在更新失败时通知用户。
 
+**v0.8 Shipped:** 2026-03-30 — 自更新里程碑完成，5 个阶段 (36-40)，8 个计划，12 个任务。Phase 36: minio/selfupdate PoC 验证。Phase 37: GoReleaser + GitHub Actions CI/CD。Phase 38: selfupdate 包 (GitHub Release 检查 + semver + SHA256 + ZIP 解压 + Apply)。Phase 39: HTTP API 集成 (SelfUpdateHandler + 互斥锁 + Help 条目)。Phase 40: 安全恢复 (通知 + self-spawn + .old 清理/恢复 + 端口重试)。21/21 需求满足。
+
 **v0.7 Shipped:** 2026-03-29 — 更新生命周期通知里程碑完成，2 个阶段 (34-35)，2 个计划，4 个任务。Phase 34: Notifier 注入 TriggerHandler + 异步通知 (开始/完成) + panic recovery。Phase 35: Notifier 接口重构 + recordingNotifier mock + 4 个 E2E 通知测试。审计结果: 4/4 需求满足，2/2 阶段通过，5/5 集成点连接，5/5 E2E 流程完整，77/77 测试通过。
 
 **v0.6 Shipped:** 2026-03-29 — 更新日志记录和查询系统里程碑完成，4 个阶段 (30-33)，8 个计划，16 个任务。Phase 30: UpdateLog 数据模型 + UpdateLogger 组件。Phase 31: JSONL 文件持久化 + 7天自动清理。Phase 32: 查询 API + 分页 + Bearer Token 认证。Phase 33: E2E 集成测试 + 性能基准 (867ns-87us)。验证: 5/5 成功标准通过，50+ 测试全部通过。
@@ -88,7 +90,7 @@
 
 **v0.2 Shipped:** 2026-03-16 — 多实例支持里程碑完成，5 个阶段，7 个计划，8 个任务，~5000 LOC Go 代码。测试覆盖: 单元测试 + 集成测试 + E2E 测试。
 
-**Tech Stack:** Golang, viper (YAML 配置), logrus (日志), cron (调度), Pushover API (通知), SSE (Server-Sent Events), embed.FS (静态资源嵌入)
+**Tech Stack:** Golang, viper (YAML 配置), logrus (日志), cron (调度), Pushover API (通知), SSE (Server-Sent Events), embed.FS (静态资源嵌入), minio/selfupdate (exe 替换), GoReleaser (CI/CD), golang.org/x/mod/semver (版本比较)
 
 **Key Patterns:**
 - 上下文感知日志 (logger.With 预注入)
@@ -186,6 +188,18 @@
 | 202 Accepted 异步更新 (goroutine + panic recovery) | 非阻塞触发 + 容错 | ✓ Good — Phase 39 |
 | selfupdate.Updater 注入 NewServer (第8参数) | 零配置自更新集成 | ✓ Good — Phase 39 |
 | Help 端点自更新条目 (self_update_check + self_update) | API 可发现性 | ✓ Good — Phase 39 |
+| minio/selfupdate v0.6.0 选择 | 战斗验证的 Windows exe rename trick | ✓ Good — Phase 36 |
+| PoC-first 验证策略 | 消除 Windows exe 替换技术不确定性 | ✓ Good — Phase 36 |
+| GoReleaser ZIP 格式 | Phase 38 下载 ZIP 并提取 exe | ✓ Good — Phase 37 |
+| golang.org/x/mod/semver | 标准库扩展，成熟的 semver 比较 | ✓ Good — Phase 38 |
+| struct-based 缓存 (cachedRelease + cacheTime) | 简洁且可测试 (操纵 cacheTime 测试过期) | ✓ Good — Phase 38 |
+| In-memory ZIP 提取 (bytes.Reader) | 无临时文件，避免 Windows 文件锁问题 | ✓ Good — Phase 38 |
+| GoReleaser checksums.txt 两空格分隔 | 匹配 GoReleaser 标准输出格式 | ✓ Good — Phase 38 |
+| SelfUpdateChecker/UpdateMutex 接口 (duck typing) | 最小范围，单方法接口，与 TriggerUpdater 同模式 | ✓ Good — Phase 39 |
+| restartFn 注入 SelfUpdateHandler | 生产用 defaultRestartFn，测试覆写 no-op，避免子进程循环 | ✓ Good — Phase 40 |
+| Sync 完成通知 (os.Exit 前) | 避免 goroutine 被 os.Exit 杀死 (Pitfall 1) | ✓ Good — Phase 40 |
+| CheckUpdateState 内外函数分离 | checkUpdateStateInternal 返回决策字符串，CheckUpdateStateForPath 执行，可测试无 os.Exit | ✓ Good — Phase 40 |
+| net.Listen + http.Serve 替代 ListenAndServe | 启用端口绑定重试能力 | ✓ Good — Phase 40 |
 
 ## Configuration
 
@@ -212,6 +226,13 @@ instances:
     startup_timeout: 45
 ```
 
+**v0.8 自更新配置** (新):
+```yaml
+self_update:
+  github_owner: "HQGroup"       # 默认值
+  github_repo: "nanobot-auto-updater"  # 默认值
+```
+
 **命令行参数**:
 - `-cron`: 覆盖配置文件中的 cron 表达式
 - `-config`: 指定配置文件路径
@@ -224,21 +245,17 @@ instances:
 
 ---
 
-## Current Milestone: v0.8 Self-Update
+## Current State
 
-**Goal:** 让 nanobot-auto-updater 程序自身支持通过 GitHub Releases 自动检测、下载并替换更新
+**Shipped:** v0.8 Self-Update (2026-03-30)
+**Total:** 8 milestones shipped, 40 phases, ~16,830 LOC Go
 
-**Target features:**
-- GitHub Actions CI/CD：打 tag 推送后自动编译 Windows amd64 并发布 GitHub Release
-- 自更新 HTTP API：新增 API 端点检查 GitHub 最新 Release 并触发更新
-- go-update 库实现运行中 exe 安全替换
-- 备份回滚：更新前备份当前 exe，新版本启动失败可恢复
-
-**v0.8 Complete:** Phase 40 (Safety & Recovery) complete — self-spawn restart, Pushover notifications, .old cleanup/recovery, port retry. All 5 phases (36-40) shipped. Milestone ready for archival.
+**Next Milestone Goals:**
+- 待定义 — 使用 `/gsd:new-milestone` 开始下一个里程碑
 
 ---
 
-*Last updated: 2026-03-30 — Phase 40 Safety & Recovery complete, v0.8 milestone finished*
+*Last updated: 2026-03-30 after v0.8 milestone archival*
 
 ## Evolution
 
