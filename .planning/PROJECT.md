@@ -12,6 +12,12 @@
 
 ### Validated
 
+**v0.8 Safety & Recovery** — 2026-03-30 (Phase 40):
+- ✓ SAFE-01: 自更新后 self-spawn 重启 (daemon.go 标志) + 端口重试 (500ms × 5)
+- ✓ SAFE-02: Pushover 通知 (开始/成功/失败) + Notifier 注入
+- ✓ SAFE-03: .update-success 标记 + 启动时 .old 清理
+- ✓ SAFE-04: .exe.old 异常检测 + 自动恢复旧版本
+
 **v0.8 Self-Update HTTP API** — 2026-03-30 (Phase 39):
 - ✓ API-01: POST /api/v1/self-update Bearer Token 认证 (401 Unauthorized)
 - ✓ API-02: 自更新与 trigger-update 互斥锁 (409 Conflict)
@@ -228,11 +234,11 @@ instances:
 - go-update 库实现运行中 exe 安全替换
 - 备份回滚：更新前备份当前 exe，新版本启动失败可恢复
 
-**v0.8 In Progress:** Phase 39 (HTTP API Integration) complete — SelfUpdateHandler + shared mutex + auth routes + Help entries. Phase 40 (Safety & Recovery) next.
+**v0.8 Complete:** Phase 40 (Safety & Recovery) complete — self-spawn restart, Pushover notifications, .old cleanup/recovery, port retry. All 5 phases (36-40) shipped. Milestone ready for archival.
 
 ---
 
-*Last updated: 2026-03-30 — Phase 39 HTTP API Integration complete, Phase 40 next*
+*Last updated: 2026-03-30 — Phase 40 Safety & Recovery complete, v0.8 milestone finished*
 
 ## Evolution
 
