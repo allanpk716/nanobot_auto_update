@@ -139,7 +139,7 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 40-01-PLAN.md — Notifier injection + start/complete notifications + status file + self-spawn restart in SelfUpdateHandler
+- [x] 40-01-PLAN.md — Notifier injection + start/complete notifications + status file + self-spawn restart in SelfUpdateHandler
 - [ ] 40-02-PLAN.md — Startup .old cleanup/recovery + port binding retry in Server.Start()
 
 ## Progress
@@ -153,8 +153,8 @@ Phases execute in numeric order: 36 → 37 → 38 → 39 → 40
 | 37. CI/CD Pipeline | 1/1 | Complete    | 2026-03-29 |
 | 38. Self-Update Core | 2/2 | Complete    | 2026-03-30 |
 | 39. HTTP API Integration | 2/2 | Complete    | 2026-03-30 |
-| 40. Safety & Recovery | 0/2 | Not started | - |
+| 40. Safety & Recovery | 1/2 | In Progress|  |
 
 ---
 
-*Last updated: 2026-03-30 (Phase 40 planned)*
+*Last updated: 2026-03-30 (Phase 40 Plan 01 complete)*

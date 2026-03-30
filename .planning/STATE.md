@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v0.8
 milestone_name: Self-Update
-status: verifying
-last_updated: "2026-03-30T10:24:08.167Z"
-last_activity: 2026-03-30
+status: executing
+last_updated: "2026-03-30T11:37:12Z"
+last_activity: 2026-03-30 -- Phase 40 Plan 01 complete
 progress:
   total_phases: 5
   completed_phases: 4
-  total_plans: 6
-  completed_plans: 6
-  percent: 100
+  total_plans: 8
+  completed_plans: 7
+  percent: 88
 ---
 
 # Project State
@@ -20,16 +20,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-29)
 
 **Core value:** 自动保持 nanobot 处于最新版本,无需用户手动干预。
-**Current focus:** Phase 39 — http-api-integration
+**Current focus:** Phase 40 -- safety-recovery
 
 ## Current Position
 
-Phase: 40
-Plan: Not started
-Status: Phase complete — ready for verification
-Last activity: 2026-03-30
+Phase: 40 (safety-recovery) -- EXECUTING
+Plan: 2 of 2 (Plan 01 complete)
+Status: Executing Phase 40 -- Plan 01 done, Plan 02 next
+Last activity: 2026-03-30 -- Phase 40 Plan 01 complete
 
-Progress: [####################] 100%
+Progress: [████████░░] 88%
 
 ## Performance Metrics
 
@@ -65,6 +65,8 @@ Recent decisions affecting current work:
 - [Phase 38-02]: SelfUpdateConfig defaults HQGroup/nanobot-auto-updater for zero-config
 - [Phase 39]: SelfUpdateChecker/UpdateMutex interfaces for duck typing (same pattern as TriggerUpdater)
 - [Phase 39]: Self-update endpoint descriptions follow existing EndpointInfo pattern in getEndpoints() (D-07)
+- [Phase 40]: restartFn field on SelfUpdateHandler for testable self-spawn (defaultRestartFn in production, no-op in tests)
+- [Phase 40]: [Phase 40-01]: Completion notification synchronous before os.Exit to avoid Pitfall 1 (goroutine killed by os.Exit)
 
 ### Pending Todos
 
@@ -76,5 +78,5 @@ None.
 
 ## Session Continuity
 
-Last activity: 2026-03-30 — Phase 38 Plan 02 complete (Update pipeline + config extension)
-Resume file: .planning/phases/40-safety-recovery/40-CONTEXT.md
+Last activity: 2026-03-30 -- Phase 40 Plan 01 complete (Notifier injection + notifications + status file + self-spawn)
+Resume file: .planning/phases/40-safety-recovery/40-02-PLAN.md
