@@ -29,6 +29,7 @@ instances:
   - name: test
     port: 8081
     install_path: "C:\\test"
+    start_command: "echo test"
 `)
 	require.NoError(t, os.WriteFile(configPath, yamlContent, 0644))
 
