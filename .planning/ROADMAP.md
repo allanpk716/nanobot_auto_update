@@ -64,7 +64,7 @@
 
 - [x] **Phase 36: PoC Validation** - 独立测试程序验证 minio/selfupdate 在 Windows 上的可行性 (completed 2026-03-29)
 - [x] **Phase 37: CI/CD Pipeline** - GoReleaser + GitHub Actions 自动构建发布 (completed 2026-03-29)
-- [ ] **Phase 38: Self-Update Core** - internal/selfupdate/ 包实现自更新核心逻辑
+- [x] **Phase 38: Self-Update Core** - internal/selfupdate/ 包实现自更新核心逻辑 (completed 2026-03-30)
 - [ ] **Phase 39: HTTP API Integration** - 自更新 API 端点 + Help 接口更新
 - [ ] **Phase 40: Safety & Recovery** - 重启机制、通知、备份清理与验证
 
@@ -110,7 +110,7 @@ Plans:
 
 Plans:
 - [x] 38-01-PLAN.md — Create selfupdate package: types, Updater struct, CheckLatest, NeedUpdate, cache, unit tests
-- [ ] 38-02-PLAN.md — Add Update method (download, checksum, ZIP extract, Apply) + config self_update section
+- [x] 38-02-PLAN.md — Add Update method (download, checksum, ZIP extract, Apply) + config self_update section
 
 ### Phase 39: HTTP API Integration
 **Goal**: 用户可通过 HTTP API 检查自更新版本和触发自更新，Help 接口提供自更新端点说明
@@ -149,7 +149,7 @@ Phases execute in numeric order: 36 → 37 → 38 → 39 → 40
 |-------|----------------|--------|-----------|
 | 36. PoC Validation | 1/1 | Complete    | 2026-03-29 |
 | 37. CI/CD Pipeline | 1/1 | Complete    | 2026-03-29 |
-| 38. Self-Update Core | 1/2 | In Progress|  |
+| 38. Self-Update Core | 2/2 | Complete   | 2026-03-30 |
 | 39. HTTP API Integration | 0/? | Not started | - |
 | 40. Safety & Recovery | 0/? | Not started | - |
 
