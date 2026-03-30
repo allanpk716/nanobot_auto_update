@@ -109,7 +109,7 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 38-01-PLAN.md — Create selfupdate package: types, Updater struct, CheckLatest, NeedUpdate, cache, unit tests
+- [x] 38-01-PLAN.md — Create selfupdate package: types, Updater struct, CheckLatest, NeedUpdate, cache, unit tests
 - [ ] 38-02-PLAN.md — Add Update method (download, checksum, ZIP extract, Apply) + config self_update section
 
 ### Phase 39: HTTP API Integration
@@ -149,7 +149,7 @@ Phases execute in numeric order: 36 → 37 → 38 → 39 → 40
 |-------|----------------|--------|-----------|
 | 36. PoC Validation | 1/1 | Complete    | 2026-03-29 |
 | 37. CI/CD Pipeline | 1/1 | Complete    | 2026-03-29 |
-| 38. Self-Update Core | 0/2 | Not started | - |
+| 38. Self-Update Core | 1/2 | In Progress|  |
 | 39. HTTP API Integration | 0/? | Not started | - |
 | 40. Safety & Recovery | 0/? | Not started | - |
 

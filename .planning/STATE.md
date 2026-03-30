@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v0.8
 milestone_name: Self-Update
 status: verifying
-last_updated: "2026-03-29T12:56:09.818Z"
+last_updated: "2026-03-30T03:35:00.983Z"
 last_activity: 2026-03-29
 progress:
   total_phases: 5
   completed_phases: 2
-  total_plans: 2
-  completed_plans: 2
+  total_plans: 4
+  completed_plans: 3
   percent: 0
 ---
 
@@ -56,6 +56,8 @@ Recent decisions affecting current work:
 - [Phase 37-ci-cd-pipeline]: GoReleaser ZIP archive format for Phase 38 self-update to download and extract exe
 - [Phase 37-ci-cd-pipeline]: Single platform windows/amd64 with -H=windowsgui matching Makefile LDFLAGS_RELEASE
 - [Phase 37-ci-cd-pipeline]: GoReleaser manages entire release (single job, no separate test step)
+- [Phase ?]: golang.org/x/mod/semver for standard semver comparison in selfupdate package
+- [Phase ?]: struct-based cache (cachedRelease + cacheTime) for testability in selfupdate Updater
 
 ### Pending Todos
 
@@ -68,4 +70,4 @@ None.
 ## Session Continuity
 
 Last activity: 2026-03-29 — v0.8 roadmap created, 5 phases (36-40), 21 requirements mapped
-Resume file: .planning/phases/38-self-update-core/38-CONTEXT.md
+Resume file: None

@@ -21,12 +21,12 @@ Requirements for v0.8 Self-Update milestone. Each maps to roadmap phases.
 
 ### UPDATE (自更新核心)
 
-- [ ] **UPDATE-01**: GitHub Release API 检查最新版本（GET /repos/{owner}/{repo}/releases/latest）
-- [ ] **UPDATE-02**: Semver 版本比较（当前版本 vs 最新 Release tag）
+- [x] **UPDATE-01**: GitHub Release API 检查最新版本（GET /repos/{owner}/{repo}/releases/latest）
+- [x] **UPDATE-02**: Semver 版本比较（当前版本 vs 最新 Release tag）
 - [ ] **UPDATE-03**: SHA256 校验验证下载的二进制完整性
 - [ ] **UPDATE-04**: minio/selfupdate 安全替换运行中 exe（Windows rename trick）
 - [ ] **UPDATE-05**: 备份当前 exe（Options.OldSavePath 保存 .old 文件）
-- [ ] **UPDATE-06**: Release 信息缓存（TTL 1 小时，避免 GitHub API 限速 60次/时）
+- [x] **UPDATE-06**: Release 信息缓存（TTL 1 小时，避免 GitHub API 限速 60次/时）
 - [ ] **UPDATE-07**: 配置文件新增 self_update 配置节（github_owner, github_repo）
 
 ### API (HTTP 接口)
@@ -77,12 +77,12 @@ Confirmed by roadmapper. All 21 v1 requirements mapped to 5 phases (36-40).
 | CICD-01 | Phase 37 | Complete |
 | CICD-02 | Phase 37 | Complete |
 | CICD-03 | Phase 37 | Complete |
-| UPDATE-01 | Phase 38 | Pending |
-| UPDATE-02 | Phase 38 | Pending |
+| UPDATE-01 | Phase 38 | Complete |
+| UPDATE-02 | Phase 38 | Complete |
 | UPDATE-03 | Phase 38 | Pending |
 | UPDATE-04 | Phase 38 | Pending |
 | UPDATE-05 | Phase 38 | Pending |
-| UPDATE-06 | Phase 38 | Pending |
+| UPDATE-06 | Phase 38 | Complete |
 | UPDATE-07 | Phase 38 | Pending |
 | API-01 | Phase 39 | Pending |
 | API-02 | Phase 39 | Pending |
