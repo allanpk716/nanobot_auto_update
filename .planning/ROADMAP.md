@@ -124,7 +124,7 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 39-01-PLAN.md — SelfUpdateHandler (interfaces, HandleCheck, HandleUpdate) + InstanceManager mutex methods + Server routes + main.go integration
+- [x] 39-01-PLAN.md — SelfUpdateHandler (interfaces, HandleCheck, HandleUpdate) + InstanceManager mutex methods + Server routes + main.go integration
 - [ ] 39-02-PLAN.md — Help endpoint self_update_check and self_update entries + test
 
 ### Phase 40: Safety & Recovery
@@ -151,7 +151,7 @@ Phases execute in numeric order: 36 → 37 → 38 → 39 → 40
 | 36. PoC Validation | 1/1 | Complete    | 2026-03-29 |
 | 37. CI/CD Pipeline | 1/1 | Complete    | 2026-03-29 |
 | 38. Self-Update Core | 2/2 | Complete    | 2026-03-30 |
-| 39. HTTP API Integration | 0/2 | Planned | - |
+| 39. HTTP API Integration | 1/2 | In Progress|  |
 | 40. Safety & Recovery | 0/? | Not started | - |
 
 ---

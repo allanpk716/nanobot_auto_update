@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v0.8
 milestone_name: Self-Update
-status: completed
-last_updated: "2026-03-30T06:18:56.455Z"
+status: executing
+last_updated: "2026-03-30T09:47:22.322Z"
 last_activity: 2026-03-30
 progress:
   total_phases: 5
   completed_phases: 3
-  total_plans: 4
-  completed_plans: 4
+  total_plans: 6
+  completed_plans: 5
   percent: 100
 ---
 
@@ -20,13 +20,13 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-29)
 
 **Core value:** 自动保持 nanobot 处于最新版本,无需用户手动干预。
-**Current focus:** Phase 38 — self-update-core
+**Current focus:** Phase 39 — http-api-integration
 
 ## Current Position
 
-Phase: 39
-Plan: Not started
-Status: Plan 02 complete — Update pipeline and config extension done
+Phase: 39 (http-api-integration) — EXECUTING
+Plan: 2 of 2
+Status: Ready to execute
 Last activity: 2026-03-30
 
 Progress: [####################] 100%
@@ -63,6 +63,7 @@ Recent decisions affecting current work:
 - [Phase 38-02]: GoReleaser checksums.txt parsing with two-space delimiter
 - [Phase 38-02]: exeName constant for binary name inside ZIP
 - [Phase 38-02]: SelfUpdateConfig defaults HQGroup/nanobot-auto-updater for zero-config
+- [Phase 39]: SelfUpdateChecker/UpdateMutex interfaces for duck typing (same pattern as TriggerUpdater)
 
 ### Pending Todos
 
@@ -75,4 +76,4 @@ None.
 ## Session Continuity
 
 Last activity: 2026-03-30 — Phase 38 Plan 02 complete (Update pipeline + config extension)
-Resume file: .planning/phases/39-http-api-integration/39-CONTEXT.md
+Resume file: None
