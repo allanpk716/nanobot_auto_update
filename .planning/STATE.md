@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v0.8
 milestone_name: Self-Update
-status: executing
-last_updated: "2026-03-30T11:37:12Z"
-last_activity: 2026-03-30 -- Phase 40 Plan 01 complete
+status: verifying
+last_updated: "2026-03-30T12:41:50.410Z"
+last_activity: 2026-03-30
 progress:
   total_phases: 5
-  completed_phases: 4
+  completed_phases: 5
   total_plans: 8
-  completed_plans: 7
+  completed_plans: 8
   percent: 88
 ---
 
@@ -26,8 +26,8 @@ See: .planning/PROJECT.md (updated 2026-03-29)
 
 Phase: 40 (safety-recovery) -- EXECUTING
 Plan: 2 of 2 (Plan 01 complete)
-Status: Executing Phase 40 -- Plan 01 done, Plan 02 next
-Last activity: 2026-03-30 -- Phase 40 Plan 01 complete
+Status: Phase complete — ready for verification
+Last activity: 2026-03-30
 
 Progress: [████████░░] 88%
 
@@ -67,6 +67,7 @@ Recent decisions affecting current work:
 - [Phase 39]: Self-update endpoint descriptions follow existing EndpointInfo pattern in getEndpoints() (D-07)
 - [Phase 40]: restartFn field on SelfUpdateHandler for testable self-spawn (defaultRestartFn in production, no-op in tests)
 - [Phase 40]: [Phase 40-01]: Completion notification synchronous before os.Exit to avoid Pitfall 1 (goroutine killed by os.Exit)
+- [Phase 40-02]: CheckUpdateState placed after logger creation, before server startup; internal/external split for testability without os.Exit; corrupt marker treated as missing; empty .old file not treated as recovery
 
 ### Pending Todos
 
@@ -79,4 +80,4 @@ None.
 ## Session Continuity
 
 Last activity: 2026-03-30 -- Phase 40 Plan 01 complete (Notifier injection + notifications + status file + self-spawn)
-Resume file: .planning/phases/40-safety-recovery/40-02-PLAN.md
+Resume file: None

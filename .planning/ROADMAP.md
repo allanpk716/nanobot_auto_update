@@ -66,7 +66,7 @@
 - [x] **Phase 37: CI/CD Pipeline** - GoReleaser + GitHub Actions 自动构建发布 (completed 2026-03-29)
 - [x] **Phase 38: Self-Update Core** - internal/selfupdate/ 包实现自更新核心逻辑 (completed 2026-03-30)
 - [x] **Phase 39: HTTP API Integration** - 自更新 API 端点 + Help 接口更新 (completed 2026-03-30)
-- [ ] **Phase 40: Safety & Recovery** - 重启机制、通知、备份清理与验证
+- [x] **Phase 40: Safety & Recovery** - 重启机制、通知、备份清理与验证 (completed 2026-03-30)
 
 ## Phase Details
 
@@ -140,7 +140,7 @@ Plans:
 
 Plans:
 - [x] 40-01-PLAN.md — Notifier injection + start/complete notifications + status file + self-spawn restart in SelfUpdateHandler
-- [ ] 40-02-PLAN.md — Startup .old cleanup/recovery + port binding retry in Server.Start()
+- [x] 40-02-PLAN.md — Startup .old cleanup/recovery + port binding retry in Server.Start()
 
 ## Progress
 
@@ -153,7 +153,7 @@ Phases execute in numeric order: 36 → 37 → 38 → 39 → 40
 | 37. CI/CD Pipeline | 1/1 | Complete    | 2026-03-29 |
 | 38. Self-Update Core | 2/2 | Complete    | 2026-03-30 |
 | 39. HTTP API Integration | 2/2 | Complete    | 2026-03-30 |
-| 40. Safety & Recovery | 1/2 | In Progress|  |
+| 40. Safety & Recovery | 2/2 | Complete   | 2026-03-30 |
 
 ---
 

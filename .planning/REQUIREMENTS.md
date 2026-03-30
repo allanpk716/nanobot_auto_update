@@ -40,8 +40,8 @@ Requirements for v0.8 Self-Update milestone. Each maps to roadmap phases.
 
 - [x] **SAFE-01**: 更新后自动重启（self-spawn + graceful shutdown + 端口重绑重试）
 - [x] **SAFE-02**: Pushover 通知（自更新开始/完成/失败通知）
-- [ ] **SAFE-03**: .old 文件清理（启动时检查并清理旧备份文件）
-- [ ] **SAFE-04**: 启动时备份验证（检测 .exe.old 异常文件存在，自动恢复旧版本）
+- [x] **SAFE-03**: .old 文件清理（启动时检查并清理旧备份文件）
+- [x] **SAFE-04**: 启动时备份验证（检测 .exe.old 异常文件存在，自动恢复旧版本）
 
 ## v2 Requirements
 
@@ -90,8 +90,8 @@ Confirmed by roadmapper. All 21 v1 requirements mapped to 5 phases (36-40).
 | API-04 | Phase 39 | Complete |
 | SAFE-01 | Phase 40 | Complete |
 | SAFE-02 | Phase 40 | Complete |
-| SAFE-03 | Phase 40 | Pending |
-| SAFE-04 | Phase 40 | Pending |
+| SAFE-03 | Phase 40 | Complete |
+| SAFE-04 | Phase 40 | Complete |
 
 **Coverage:**
 - v1 requirements: 21 total
