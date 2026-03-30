@@ -20,6 +20,7 @@ import (
 	"github.com/HQGroup/nanobot-auto-updater/internal/network"
 	"github.com/HQGroup/nanobot-auto-updater/internal/notification"
 	"github.com/HQGroup/nanobot-auto-updater/internal/notifier"
+	"github.com/HQGroup/nanobot-auto-updater/internal/selfupdate"
 	"github.com/HQGroup/nanobot-auto-updater/internal/updatelog"
 	"github.com/robfig/cron/v3"
 )
@@ -134,11 +135,20 @@ func main() {
 		logger,
 	)
 
+	// Create self-update Updater (Phase 39)
+	selfUpdater := selfupdate.NewUpdater(
+		selfupdate.SelfUpdateConfig{
+			GithubOwner: cfg.SelfUpdate.GithubOwner,
+			GithubRepo:  cfg.SelfUpdate.GithubRepo,
+		},
+		logger,
+	)
+
 	// Create API server (SSE-07: WriteTimeout=0)
 	var apiServer *api.Server
 	if cfg.API.Port != 0 {
 		var err error
-		apiServer, err = api.NewServer(&cfg.API, instanceManager, cfg, Version, logger, updateLogger, notif)
+		apiServer, err = api.NewServer(&cfg.API, instanceManager, cfg, Version, logger, updateLogger, notif, selfUpdater)
 		if err != nil {
 			logger.Error("Failed to create API server", "error", err)
 			os.Exit(1)
