@@ -9,6 +9,7 @@ import (
 
 	"github.com/HQGroup/nanobot-auto-updater/internal/config"
 	"github.com/HQGroup/nanobot-auto-updater/internal/instance"
+	"github.com/HQGroup/nanobot-auto-updater/internal/lifecycle"
 	"github.com/HQGroup/nanobot-auto-updater/internal/selfupdate"
 	"github.com/HQGroup/nanobot-auto-updater/internal/updatelog"
 	"github.com/HQGroup/nanobot-auto-updater/internal/web"
@@ -114,10 +115,17 @@ func NewServer(cfg *config.APIConfig, im *instance.InstanceManager, fullCfg *con
 	}, nil
 }
 
-// Start starts the HTTP server
+// Start starts the HTTP server with port binding retry (D-05).
 func (s *Server) Start() error {
 	s.logger.Info("HTTP server starting", "addr", s.httpServer.Addr)
-	err := s.httpServer.ListenAndServe()
+
+	// D-05: Retry port binding for self-update restart scenario
+	listener, err := lifecycle.ListenWithRetry(s.httpServer.Addr, s.logger)
+	if err != nil {
+		return err
+	}
+
+	err = s.httpServer.Serve(listener)
 	if err != nil && err != http.ErrServerClosed {
 		return err
 	}

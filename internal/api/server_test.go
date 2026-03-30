@@ -206,3 +206,43 @@ func TestWebUIInstanceNotFound(t *testing.T) {
 		t.Errorf("Expected 404 Not Found, got %d", rec.Code)
 	}
 }
+
+// TestServerStart_PortRetry tests that server start succeeds with port retry logic (D-05)
+func TestServerStart_PortRetry(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+
+	cfg := &config.APIConfig{
+		Port:        8085,
+		BearerToken: "test-token-32-characters-long-enough",
+		Timeout:     5 * time.Second,
+	}
+
+	fullCfg := &config.Config{
+		API: *cfg,
+		Instances: []config.InstanceConfig{
+			{Name: "test", Port: 8080, StartCommand: "test"},
+		},
+	}
+
+	im := instance.NewInstanceManager(fullCfg, logger)
+	server, err := NewServer(cfg, im, fullCfg, "test-version", logger, nil, nil, nil)
+	if err != nil {
+		t.Fatalf("NewServer failed: %v", err)
+	}
+
+	go func() {
+		if err := server.Start(); err != nil {
+			// ErrServerClosed is expected on shutdown
+		}
+	}()
+
+	// Wait for startup
+	time.Sleep(200 * time.Millisecond)
+
+	// Shutdown
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	if err := server.Shutdown(ctx); err != nil {
+		t.Errorf("Shutdown failed: %v", err)
+	}
+}

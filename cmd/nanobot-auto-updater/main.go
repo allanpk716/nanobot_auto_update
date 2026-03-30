@@ -16,6 +16,7 @@ import (
 	"github.com/HQGroup/nanobot-auto-updater/internal/config"
 	"github.com/HQGroup/nanobot-auto-updater/internal/health"
 	"github.com/HQGroup/nanobot-auto-updater/internal/instance"
+	"github.com/HQGroup/nanobot-auto-updater/internal/lifecycle"
 	"github.com/HQGroup/nanobot-auto-updater/internal/logging"
 	"github.com/HQGroup/nanobot-auto-updater/internal/network"
 	"github.com/HQGroup/nanobot-auto-updater/internal/notification"
@@ -79,6 +80,10 @@ func main() {
 	// Initialize logger
 	logger := logging.NewLogger("./logs")
 	slog.SetDefault(logger) // Set as default logger
+
+	// Check for leftover update state (D-04: .old cleanup/recovery)
+	// Runs before server startup to ensure clean state
+	lifecycle.CheckUpdateState(logger)
 
 	// Log configuration loaded (CONF-06, SEC-02)
 	// Note: Do NOT log full Bearer Token for security
