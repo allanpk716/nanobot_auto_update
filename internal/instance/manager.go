@@ -301,9 +301,22 @@ func (m *InstanceManager) TriggerUpdate(ctx context.Context) (*UpdateResult, err
 	return result, nil
 }
 
-// IsUpdating 返回当前是否有更新正在进行
+// IsUpdating returns whether an update is currently in progress.
 func (m *InstanceManager) IsUpdating() bool {
 	return m.isUpdating.Load()
+}
+
+// TryLockUpdate attempts to acquire the update lock using atomic CAS.
+// Returns true if the lock was acquired, false if already locked.
+// Used by SelfUpdateHandler to share the same isUpdating lock with TriggerUpdate (D-02).
+func (m *InstanceManager) TryLockUpdate() bool {
+	return m.isUpdating.CompareAndSwap(false, true)
+}
+
+// UnlockUpdate releases the update lock.
+// Must be called when update completes (success or failure) to prevent deadlock.
+func (m *InstanceManager) UnlockUpdate() {
+	m.isUpdating.Store(false)
 }
 
 // GetLifecycle returns the InstanceLifecycle for a specific instance by name.
