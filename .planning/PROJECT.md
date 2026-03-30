@@ -12,6 +12,15 @@
 
 ### Validated
 
+**v0.8 Self-Update Core** — 2026-03-30 (Phase 38):
+- ✓ UPDATE-01: CheckLatest() 获取 GitHub 最新 Release
+- ✓ UPDATE-02: NeedUpdate() semver 版本比较 (dev 版本始终更新)
+- ✓ UPDATE-03: SHA256 校验下载 ZIP 完整性
+- ✓ UPDATE-04: minio/selfupdate Apply 运行中 exe 替换
+- ✓ UPDATE-05: .old 备份 + RollbackError 检查
+- ✓ UPDATE-06: 1小时 Release 缓存
+- ✓ UPDATE-07: self_update 配置段 (默认 HQGroup/nanobot-auto-updater)
+
 **v0.8 CI/CD Pipeline** — 2026-03-29 (Phase 37):
 - ✓ CICD-01: v* tag 触发 GitHub Actions 自动构建
 - ✓ CICD-02: GoReleaser 编译 Windows amd64 + checksums 发布到 GitHub Releases
@@ -209,11 +218,11 @@ instances:
 - go-update 库实现运行中 exe 安全替换
 - 备份回滚：更新前备份当前 exe，新版本启动失败可恢复
 
-**v0.8 In Progress:** Phase 36 (PoC Validation) complete — minio/selfupdate v0.6.0 proven working on Windows for binary replacement. Phase 37 (CI/CD Pipeline) next.
+**v0.8 In Progress:** Phase 38 (Self-Update Core) complete — selfupdate 包实现 CheckLatest/NeedUpdate/Update 全流程 + config 扩展。Phase 39 (HTTP API Integration) next.
 
 ---
 
-*Last updated: 2026-03-29 — Phase 36 PoC Validation complete, Phase 37 next*
+*Last updated: 2026-03-30 — Phase 38 Self-Update Core complete, Phase 39 next*
 
 ## Evolution
 
