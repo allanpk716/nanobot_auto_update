@@ -12,6 +12,12 @@
 
 ### Validated
 
+**v0.8 Self-Update HTTP API** — 2026-03-30 (Phase 39):
+- ✓ API-01: POST /api/v1/self-update Bearer Token 认证 (401 Unauthorized)
+- ✓ API-02: 自更新与 trigger-update 互斥锁 (409 Conflict)
+- ✓ API-03: GET /api/v1/self-update/check 版本检查 + 状态查询
+- ✓ API-04: Help 接口包含 self_update_check 和 self_update 端点说明
+
 **v0.8 Self-Update Core** — 2026-03-30 (Phase 38):
 - ✓ UPDATE-01: CheckLatest() 获取 GitHub 最新 Release
 - ✓ UPDATE-02: NeedUpdate() semver 版本比较 (dev 版本始终更新)
@@ -168,8 +174,12 @@
 | instanceCount 构造时注入 | 通知内容含实例数,无需运行时查询 | ✓ Good — Phase 34 |
 | statusToTitle/formatCompletionMessage | 三态通知标题和实例详情格式化 | ✓ Good — Phase 34 |
 | Notifier 接口 (trigger.go 本地定义) | 最小范围,单方法接口,duck typing | ✓ Good — Phase 35 |
-| recordingNotifier (sync.Mutex) | goroutine-safe mock,可配置错误 | ✓ Good — Phase 35 |
-| time.Sleep(50ms) goroutine 同步 | 匹配异步通知模式的 E2E 测试 | ✓ Good — Phase 35 |
+| TryLockUpdate/UnlockUpdate 共享互斥锁 | 自更新与 trigger-update 复用 atomic.Bool | ✓ Good — Phase 39 |
+| SelfUpdateHandler (Check + Update 端点) | HandleCheck 版本信息 + HandleUpdate 异步更新 | ✓ Good — Phase 39 |
+| atomic.Value 状态追踪 (idle/updating/updated/failed) | 无锁并发读取更新状态 | ✓ Good — Phase 39 |
+| 202 Accepted 异步更新 (goroutine + panic recovery) | 非阻塞触发 + 容错 | ✓ Good — Phase 39 |
+| selfupdate.Updater 注入 NewServer (第8参数) | 零配置自更新集成 | ✓ Good — Phase 39 |
+| Help 端点自更新条目 (self_update_check + self_update) | API 可发现性 | ✓ Good — Phase 39 |
 
 ## Configuration
 
@@ -218,11 +228,11 @@ instances:
 - go-update 库实现运行中 exe 安全替换
 - 备份回滚：更新前备份当前 exe，新版本启动失败可恢复
 
-**v0.8 In Progress:** Phase 38 (Self-Update Core) complete — selfupdate 包实现 CheckLatest/NeedUpdate/Update 全流程 + config 扩展。Phase 39 (HTTP API Integration) next.
+**v0.8 In Progress:** Phase 39 (HTTP API Integration) complete — SelfUpdateHandler + shared mutex + auth routes + Help entries. Phase 40 (Safety & Recovery) next.
 
 ---
 
-*Last updated: 2026-03-30 — Phase 38 Self-Update Core complete, Phase 39 next*
+*Last updated: 2026-03-30 — Phase 39 HTTP API Integration complete, Phase 40 next*
 
 ## Evolution
 
