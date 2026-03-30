@@ -101,6 +101,18 @@ func (h *HelpHandler) getEndpoints() map[string]EndpointInfo {
 			Auth:        "optional",
 			Description: "Web UI 日志查看器",
 		},
+		"self_update_check": {
+			Method:      "GET",
+			Path:        "/api/v1/self-update/check",
+			Auth:        "required",
+			Description: "Check self-update version information (current version, latest version, update status)",
+		},
+		"self_update": {
+			Method:      "POST",
+			Path:        "/api/v1/self-update",
+			Auth:        "required",
+			Description: "Trigger self-update (async, returns 202 Accepted)",
+		},
 	}
 }
 
