@@ -84,7 +84,7 @@ Plans:
 - [x] 36-01-PLAN.md — Create PoC program + automated test validating exe replacement, backup, and self-spawn restart
 
 ### Phase 37: CI/CD Pipeline
-**Goal**: 用户推送 v* tag 后自动构建 Windows amd64 二进制并发布到 GitHub Releases，后续阶段有 Release 可以下载
+**Goal**: 用户推送 v* tag 后自动构建 Windows amd64 二进制并发布到 GitHub Releases，后续阶段有 Release 可下载
 **Depends on**: Nothing (独立于 Go 代码变更)
 **Requirements**: CICD-01, CICD-02, CICD-03
 **Success Criteria** (what must be TRUE):
@@ -106,10 +106,11 @@ Plans:
   3. 下载的二进制通过 SHA256 校验验证完整性
   4. 调用更新方法后运行中的 exe 被安全替换，旧 exe 被保存为 .old 备份
   5. Release 信息被缓存 1 小时，缓存有效期内不重复请求 GitHub API
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 38-01: TBD
+- [ ] 38-01-PLAN.md — Create selfupdate package: types, Updater struct, CheckLatest, NeedUpdate, cache, unit tests
+- [ ] 38-02-PLAN.md — Add Update method (download, checksum, ZIP extract, Apply) + config self_update section
 
 ### Phase 39: HTTP API Integration
 **Goal**: 用户可通过 HTTP API 检查自更新版本和触发自更新，Help 接口提供自更新端点说明
@@ -148,10 +149,10 @@ Phases execute in numeric order: 36 → 37 → 38 → 39 → 40
 |-------|----------------|--------|-----------|
 | 36. PoC Validation | 1/1 | Complete    | 2026-03-29 |
 | 37. CI/CD Pipeline | 1/1 | Complete    | 2026-03-29 |
-| 38. Self-Update Core | 0/? | Not started | - |
+| 38. Self-Update Core | 0/2 | Not started | - |
 | 39. HTTP API Integration | 0/? | Not started | - |
 | 40. Safety & Recovery | 0/? | Not started | - |
 
 ---
 
-*Last updated: 2026-03-29 (Phase 37 planned)*
+*Last updated: 2026-03-30 (Phase 38 planned)*
