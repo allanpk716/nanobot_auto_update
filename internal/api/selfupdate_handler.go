@@ -57,6 +57,10 @@ type SelfUpdateHandler struct {
 	status          atomic.Value // stores *SelfUpdateStatus
 	notifier        Notifier     // SAFE-02: Pushover notification sender
 	logger          *slog.Logger
+	// restartFn is called after successful update to restart the process.
+	// In production this spawns a new process and calls os.Exit(0).
+	// In tests this is overridden to avoid terminating the test process.
+	restartFn func(exePath string)
 }
 
 // NewSelfUpdateHandler creates a new SelfUpdateHandler.
@@ -67,9 +71,27 @@ func NewSelfUpdateHandler(updater SelfUpdateChecker, version string, im UpdateMu
 		instanceManager: im,
 		notifier:        notif,
 		logger:          logger.With("source", "api-self-update"),
+		restartFn:       defaultRestartFn,
 	}
 	h.status.Store(&SelfUpdateStatus{Status: "idle"})
 	return h
+}
+
+// defaultRestartFn is the production restart implementation (D-01).
+// It spawns a new process with the same arguments and exits the current one.
+func defaultRestartFn(exePath string) {
+	cmd := exec.Command(exePath, os.Args[1:]...)
+	cmd.SysProcAttr = &windows.SysProcAttr{
+		HideWindow:    true,
+		CreationFlags: windows.CREATE_NO_WINDOW | windows.CREATE_NEW_PROCESS_GROUP | windows.DETACHED_PROCESS,
+	}
+	// Log before cmd.Start since we won't be around after os.Exit
+	slog.Info("self-spawn restart initiated", "exe", exePath)
+	if err := cmd.Start(); err != nil {
+		slog.Error("failed to spawn new process after update", "error", err)
+		return
+	}
+	os.Exit(0)
 }
 
 // HandleCheck handles GET /api/v1/self-update/check requests.
@@ -251,17 +273,6 @@ func (h *SelfUpdateHandler) HandleUpdate(w http.ResponseWriter, r *http.Request)
 		}
 
 		// Self-spawn restart (D-01: direct exit, no graceful shutdown)
-		// Using same flags as daemon.go to ensure child survives parent's os.Exit(0)
-		cmd := exec.Command(exePath, os.Args[1:]...)
-		cmd.SysProcAttr = &windows.SysProcAttr{
-			HideWindow:    true,
-			CreationFlags: windows.CREATE_NO_WINDOW | windows.CREATE_NEW_PROCESS_GROUP | windows.DETACHED_PROCESS,
-		}
-		if err := cmd.Start(); err != nil {
-			h.logger.Error("failed to spawn new process after update", "error", err)
-			return
-		}
-		h.logger.Info("self-spawn restart initiated", "new_pid", cmd.Process.Pid)
-		os.Exit(0)
+		h.restartFn(exePath)
 	}()
 }

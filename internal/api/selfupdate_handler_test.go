@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -53,9 +54,39 @@ func (m *mockUpdateMutex) IsUpdating() bool {
 }
 
 // newTestSelfUpdateHandler creates a SelfUpdateHandler with mocks for testing.
-func newTestSelfUpdateHandler(checker SelfUpdateChecker, mutex *mockUpdateMutex) *SelfUpdateHandler {
+func newTestSelfUpdateHandler(checker SelfUpdateChecker, mutex *mockUpdateMutex, notif Notifier) *SelfUpdateHandler {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
-	return NewSelfUpdateHandler(checker, "dev", mutex, logger)
+	h := NewSelfUpdateHandler(checker, "dev", mutex, notif, logger)
+	// Override restartFn to prevent os.Exit(0) during tests
+	h.restartFn = func(exePath string) {}
+	return h
+}
+
+// mockNotifier records notification calls for testing
+type mockNotifier struct {
+	mu    sync.Mutex
+	calls []mockNotifyCall
+	err   error // if set, Notify returns this error
+}
+
+type mockNotifyCall struct {
+	title   string
+	message string
+}
+
+func (m *mockNotifier) Notify(title, message string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.calls = append(m.calls, mockNotifyCall{title: title, message: message})
+	return m.err
+}
+
+func (m *mockNotifier) getCalls() []mockNotifyCall {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	result := make([]mockNotifyCall, len(m.calls))
+	copy(result, m.calls)
+	return result
 }
 
 // TestSelfUpdateCheck_Success tests GET check returns 200 with version info
@@ -70,7 +101,7 @@ func TestSelfUpdateCheck_Success(t *testing.T) {
 		},
 	}
 	mutex := &mockUpdateMutex{}
-	handler := newTestSelfUpdateHandler(checker, mutex)
+	handler := newTestSelfUpdateHandler(checker, mutex, nil)
 
 	req := httptest.NewRequest("GET", "/api/v1/self-update/check", nil)
 	rec := httptest.NewRecorder()
@@ -106,7 +137,7 @@ func TestSelfUpdateCheck_Error(t *testing.T) {
 		err: errors.New("api error"),
 	}
 	mutex := &mockUpdateMutex{}
-	handler := newTestSelfUpdateHandler(checker, mutex)
+	handler := newTestSelfUpdateHandler(checker, mutex, nil)
 
 	req := httptest.NewRequest("GET", "/api/v1/self-update/check", nil)
 	rec := httptest.NewRecorder()
@@ -124,7 +155,7 @@ func TestSelfUpdateUpdate_Accepted(t *testing.T) {
 		updateErr: nil,
 	}
 	mutex := &mockUpdateMutex{}
-	handler := newTestSelfUpdateHandler(checker, mutex)
+	handler := newTestSelfUpdateHandler(checker, mutex, nil)
 
 	req := httptest.NewRequest("POST", "/api/v1/self-update", nil)
 	rec := httptest.NewRecorder()
@@ -164,7 +195,7 @@ func TestSelfUpdateUpdate_Conflict(t *testing.T) {
 	// Pre-lock the mutex
 	mutex.TryLockUpdate()
 
-	handler := newTestSelfUpdateHandler(checker, mutex)
+	handler := newTestSelfUpdateHandler(checker, mutex, nil)
 
 	req := httptest.NewRequest("POST", "/api/v1/self-update", nil)
 	rec := httptest.NewRecorder()
@@ -191,7 +222,7 @@ func TestSelfUpdateUpdate_Failed(t *testing.T) {
 		updateErr: errors.New("download failed"),
 	}
 	mutex := &mockUpdateMutex{}
-	handler := newTestSelfUpdateHandler(checker, mutex)
+	handler := newTestSelfUpdateHandler(checker, mutex, nil)
 
 	req := httptest.NewRequest("POST", "/api/v1/self-update", nil)
 	rec := httptest.NewRecorder()
@@ -219,7 +250,7 @@ func TestSelfUpdateUpdate_PanicRecovery(t *testing.T) {
 	// Create a checker that panics on Update
 	panicChecker := &panicSelfUpdateChecker{}
 	mutex := &mockUpdateMutex{}
-	handler := newTestSelfUpdateHandler(panicChecker, mutex)
+	handler := newTestSelfUpdateHandler(panicChecker, mutex, nil)
 
 	req := httptest.NewRequest("POST", "/api/v1/self-update", nil)
 	rec := httptest.NewRecorder()
@@ -266,7 +297,7 @@ func TestSelfUpdateCheck_StatusDuringUpdate(t *testing.T) {
 		done: make(chan struct{}),
 	}
 	mutex := &mockUpdateMutex{}
-	handler := newTestSelfUpdateHandler(slowChecker, mutex)
+	handler := newTestSelfUpdateHandler(slowChecker, mutex, nil)
 
 	// Start the update
 	req := httptest.NewRequest("POST", "/api/v1/self-update", nil)
@@ -333,7 +364,8 @@ func TestSelfUpdateAuth(t *testing.T) {
 	}
 	mutex := &mockUpdateMutex{}
 
-	selfUpdateHandler := NewSelfUpdateHandler(checker, "dev", mutex, logger)
+	selfUpdateHandler := NewSelfUpdateHandler(checker, "dev", mutex, nil, logger)
+	selfUpdateHandler.restartFn = func(exePath string) {} // prevent os.Exit in tests
 	authMiddleware := AuthMiddleware(cfg.BearerToken, logger)
 
 	checkHandler := authMiddleware(http.HandlerFunc(selfUpdateHandler.HandleCheck))
@@ -399,3 +431,105 @@ func TestSelfUpdateAuth(t *testing.T) {
 		})
 	}
 }
+
+// TestSelfUpdateUpdate_StartNotification verifies start notification is sent (D-03)
+func TestSelfUpdateUpdate_StartNotification(t *testing.T) {
+	checker := &mockSelfUpdateChecker{
+		updateErr: nil,
+	}
+	mutex := &mockUpdateMutex{}
+	notif := &mockNotifier{}
+	handler := newTestSelfUpdateHandler(checker, mutex, notif)
+
+	req := httptest.NewRequest("POST", "/api/v1/self-update", nil)
+	rec := httptest.NewRecorder()
+
+	handler.HandleUpdate(rec, req)
+
+	if rec.Code != http.StatusAccepted {
+		t.Fatalf("Status code = %d, want %d", rec.Code, http.StatusAccepted)
+	}
+
+	// Wait for start notification goroutine and update goroutine
+	time.Sleep(200 * time.Millisecond)
+
+	calls := notif.getCalls()
+	foundStart := false
+	for _, call := range calls {
+		if call.title == "Nanobot 自更新开始" {
+			foundStart = true
+			if call.message != "当前版本: dev" {
+				t.Errorf("start notification message = %q, want %q", call.message, "当前版本: dev")
+			}
+		}
+	}
+	if !foundStart {
+		t.Error("Expected start notification with title 'Nanobot 自更新开始', but none found")
+	}
+}
+
+// TestSelfUpdateUpdate_FailureNotification verifies failure notification is sent on error (D-03)
+func TestSelfUpdateUpdate_FailureNotification(t *testing.T) {
+	checker := &mockSelfUpdateChecker{
+		updateErr: errors.New("download failed"),
+	}
+	mutex := &mockUpdateMutex{}
+	notif := &mockNotifier{}
+	handler := newTestSelfUpdateHandler(checker, mutex, notif)
+
+	req := httptest.NewRequest("POST", "/api/v1/self-update", nil)
+	rec := httptest.NewRecorder()
+
+	handler.HandleUpdate(rec, req)
+
+	if rec.Code != http.StatusAccepted {
+		t.Fatalf("Status code = %d, want %d", rec.Code, http.StatusAccepted)
+	}
+
+	// Wait for goroutines
+	time.Sleep(200 * time.Millisecond)
+
+	calls := notif.getCalls()
+	foundFailure := false
+	for _, call := range calls {
+		if call.title == "Nanobot 自更新失败" {
+			foundFailure = true
+			if call.message == "" {
+				t.Error("failure notification message is empty")
+			}
+		}
+	}
+	if !foundFailure {
+		t.Errorf("Expected failure notification with title 'Nanobot 自更新失败', got calls: %+v", calls)
+	}
+}
+
+// TestSelfUpdateUpdate_NilNotifier verifies no panic when notifier is nil
+func TestSelfUpdateUpdate_NilNotifier(t *testing.T) {
+	checker := &mockSelfUpdateChecker{
+		updateErr: nil,
+	}
+	mutex := &mockUpdateMutex{}
+	handler := newTestSelfUpdateHandler(checker, mutex, nil)
+
+	req := httptest.NewRequest("POST", "/api/v1/self-update", nil)
+	rec := httptest.NewRecorder()
+
+	handler.HandleUpdate(rec, req)
+
+	if rec.Code != http.StatusAccepted {
+		t.Fatalf("Status code = %d, want %d", rec.Code, http.StatusAccepted)
+	}
+
+	// Wait for goroutine to finish
+	time.Sleep(100 * time.Millisecond)
+
+	currentStatus := handler.status.Load().(*SelfUpdateStatus)
+	if currentStatus.Status != "updated" {
+		t.Errorf("status = %q, want %q (nil notifier should not affect update)", currentStatus.Status, "updated")
+	}
+}
+
+// NOTE: The self-spawn + os.Exit(0) code path after successful update
+// cannot be unit tested (it terminates the test process).
+// This pattern was validated by the Phase 36 PoC (tmp/poc_selfupdate.go).
