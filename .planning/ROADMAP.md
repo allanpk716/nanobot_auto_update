@@ -136,10 +136,11 @@ Plans:
   2. 自更新开始和完成（成功或失败）时发送 Pushover 通知
   3. 程序启动时清理上一次更新留下的 .old 备份文件
   4. 程序启动时检测异常的 .exe.old 文件存在，自动恢复旧版本确保系统可用
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 40-01: TBD
+- [ ] 40-01-PLAN.md — Notifier injection + start/complete notifications + status file + self-spawn restart in SelfUpdateHandler
+- [ ] 40-02-PLAN.md — Startup .old cleanup/recovery + port binding retry in Server.Start()
 
 ## Progress
 
@@ -152,8 +153,8 @@ Phases execute in numeric order: 36 → 37 → 38 → 39 → 40
 | 37. CI/CD Pipeline | 1/1 | Complete    | 2026-03-29 |
 | 38. Self-Update Core | 2/2 | Complete    | 2026-03-30 |
 | 39. HTTP API Integration | 2/2 | Complete    | 2026-03-30 |
-| 40. Safety & Recovery | 0/? | Not started | - |
+| 40. Safety & Recovery | 0/2 | Not started | - |
 
 ---
 
-*Last updated: 2026-03-30 (Phase 39 planned)*
+*Last updated: 2026-03-30 (Phase 40 planned)*
