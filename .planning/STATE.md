@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v0.8
 milestone_name: Self-Update
-status: executing
-last_updated: "2026-03-30T09:47:22.322Z"
+status: verifying
+last_updated: "2026-03-30T09:56:48.172Z"
 last_activity: 2026-03-30
 progress:
   total_phases: 5
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 6
-  completed_plans: 5
+  completed_plans: 6
   percent: 100
 ---
 
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-03-29)
 
 Phase: 39 (http-api-integration) — EXECUTING
 Plan: 2 of 2
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-03-30
 
 Progress: [####################] 100%
@@ -64,6 +64,7 @@ Recent decisions affecting current work:
 - [Phase 38-02]: exeName constant for binary name inside ZIP
 - [Phase 38-02]: SelfUpdateConfig defaults HQGroup/nanobot-auto-updater for zero-config
 - [Phase 39]: SelfUpdateChecker/UpdateMutex interfaces for duck typing (same pattern as TriggerUpdater)
+- [Phase 39]: Self-update endpoint descriptions follow existing EndpointInfo pattern in getEndpoints() (D-07)
 
 ### Pending Todos
 

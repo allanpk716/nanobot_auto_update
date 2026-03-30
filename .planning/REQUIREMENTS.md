@@ -34,7 +34,7 @@ Requirements for v0.8 Self-Update milestone. Each maps to roadmap phases.
 - [x] **API-01**: POST /api/v1/self-update 端点（Bearer Token 认证，复用 Phase 28）
 - [x] **API-02**: 并发更新保护（复用 atomic.Bool，与 nanobot 更新互斥，返回 409 Conflict）
 - [x] **API-03**: GET /api/v1/self-update/check 端点（只读版本检查，不触发更新）
-- [ ] **API-04**: Help 接口更新（新增自更新端点使用说明）
+- [x] **API-04**: Help 接口更新（新增自更新端点使用说明）
 
 ### SAFETY (安全与恢复)
 
@@ -87,7 +87,7 @@ Confirmed by roadmapper. All 21 v1 requirements mapped to 5 phases (36-40).
 | API-01 | Phase 39 | Complete |
 | API-02 | Phase 39 | Complete |
 | API-03 | Phase 39 | Complete |
-| API-04 | Phase 39 | Pending |
+| API-04 | Phase 39 | Complete |
 | SAFE-01 | Phase 40 | Pending |
 | SAFE-02 | Phase 40 | Pending |
 | SAFE-03 | Phase 40 | Pending |
