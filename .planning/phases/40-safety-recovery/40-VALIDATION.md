@@ -19,7 +19,7 @@ created: 2026-03-30
 |----------|-------|
 | **Framework** | go test |
 | **Config file** | none — existing infrastructure |
-| **Quick run command** | `go test ./internal/api/... ./internal/selfupdate/... ./internal/notifier/... -count=1 -timeout 30s` |
+| **Quick run command** | `go test ./internal/api/... ./internal/lifecycle/... ./internal/notifier/... -count=1 -timeout 30s` |
 | **Full suite command** | `go test ./... -count=1 -timeout 60s` |
 | **Estimated runtime** | ~15 seconds |
 
@@ -27,7 +27,7 @@ created: 2026-03-30
 
 ## Sampling Rate
 
-- **After every task commit:** Run `go test ./internal/api/... ./internal/selfupdate/... -count=1 -timeout 30s`
+- **After every task commit:** Run `go test ./internal/api/... ./internal/lifecycle/... -count=1 -timeout 30s`
 - **After every plan wave:** Run `go test ./... -count=1 -timeout 60s`
 - **Before `/gsd:verify-work`:** Full suite must be green
 - **Max feedback latency:** 15 seconds
@@ -40,9 +40,9 @@ created: 2026-03-30
 |---------|------|------|-------------|-----------|-------------------|-------------|--------|
 | 40-01-01 | 01 | 1 | SAFE-02 | unit | `go test ./internal/api/... -run TestSelfUpdate -count=1` | ✅ | ⬜ pending |
 | 40-01-02 | 01 | 1 | SAFE-01 | unit | `go test ./internal/api/... -run TestRestart -count=1` | ✅ | ⬜ pending |
-| 40-02-01 | 02 | 1 | SAFE-03 | unit | `go test ./internal/selfupdate/... -run TestCleanup -count=1` | ✅ | ⬜ pending |
-| 40-02-02 | 02 | 1 | SAFE-04 | unit | `go test ./internal/selfupdate/... -run TestRecovery -count=1` | ✅ | ⬜ pending |
-| 40-02-03 | 02 | 1 | SAFE-01 | unit | `go test ./internal/api/... -run TestPortRetry -count=1` | ✅ | ⬜ pending |
+| 40-02-01 | 02 | 2 | SAFE-03 | unit | `go test ./internal/lifecycle/... -run TestCleanup -count=1` | ✅ | ⬜ pending |
+| 40-02-02 | 02 | 2 | SAFE-04 | unit | `go test ./internal/lifecycle/... -run TestRecovery -count=1` | ✅ | ⬜ pending |
+| 40-02-03 | 02 | 2 | SAFE-01 | unit | `go test ./internal/api/... -run TestPortRetry -count=1` | ✅ | ⬜ pending |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
