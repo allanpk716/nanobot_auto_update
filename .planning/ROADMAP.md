@@ -64,7 +64,7 @@
 
 - [x] **Phase 36: PoC Validation** - 独立测试程序验证 minio/selfupdate 在 Windows 上的可行性 (completed 2026-03-29)
 - [x] **Phase 37: CI/CD Pipeline** - GoReleaser + GitHub Actions 自动构建发布 (completed 2026-03-29)
-- [x] **Phase 38: Self-Update Core** - internal/selfupdate/ 包实现自更新核心逻辑 (completed 2026-03-30)
+- [x] **Phase 38: Self-Update Core** - internal/selfupdate/ 包实现自更新核心逻辑 (completed 2026-03-30)
 - [ ] **Phase 39: HTTP API Integration** - 自更新 API 端点 + Help 接口更新
 - [ ] **Phase 40: Safety & Recovery** - 重启机制、通知、备份清理与验证
 
@@ -121,10 +121,11 @@ Plans:
   2. 自更新与 nanobot 更新互斥，并发请求返回 409 Conflict
   3. GET /api/v1/self-update/check 只读检查最新版本，返回当前版本和最新版本信息
   4. Help 接口包含自更新相关端点的使用说明
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 39-01: TBD
+- [ ] 39-01-PLAN.md — SelfUpdateHandler (interfaces, HandleCheck, HandleUpdate) + InstanceManager mutex methods + Server routes + main.go integration
+- [ ] 39-02-PLAN.md — Help endpoint self_update_check and self_update entries + test
 
 ### Phase 40: Safety & Recovery
 **Goal**: 更新后程序能自动重启，用户收到通知，异常情况下能自动恢复旧版本
@@ -150,9 +151,9 @@ Phases execute in numeric order: 36 → 37 → 38 → 39 → 40
 | 36. PoC Validation | 1/1 | Complete    | 2026-03-29 |
 | 37. CI/CD Pipeline | 1/1 | Complete    | 2026-03-29 |
 | 38. Self-Update Core | 2/2 | Complete    | 2026-03-30 |
-| 39. HTTP API Integration | 0/? | Not started | - |
+| 39. HTTP API Integration | 0/2 | Planned | - |
 | 40. Safety & Recovery | 0/? | Not started | - |
 
 ---
 
-*Last updated: 2026-03-30 (Phase 38 planned)*
+*Last updated: 2026-03-30 (Phase 39 planned)*
