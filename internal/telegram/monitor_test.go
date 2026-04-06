@@ -2,7 +2,7 @@ package telegram
 
 import (
 	"context"
-	"strings"
+	"log/slog"
 	"sync"
 	"testing"
 	"time"
@@ -10,7 +10,6 @@ import (
 	"github.com/HQGroup/nanobot-auto-updater/internal/logbuffer"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"log/slog"
 )
 
 // --- Mock types ---
