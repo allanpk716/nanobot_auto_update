@@ -75,10 +75,18 @@
 - ✓ STRT-02: 通知在 auto-start goroutine 内执行（非阻塞）
 - ✓ STRT-03: 未配置 Pushover 时优雅降级（返回 nil）
 
+**v0.9 Telegram Monitor Core** — 2026-04-06 (Phase 42):
+- ✓ TELE-01: "Starting Telegram bot" 触发监控窗口
+- ✓ TELE-02: "Telegram bot commands registered" 检测连接成功
+- ✓ TELE-03: "httpx.ConnectError" 检测连接失败
+- ✓ TELE-04: 30 秒超时通知
+- ✓ TELE-05: 成功 Pushover 通知
+- ✓ TELE-06: 失败 Pushover 通知
+- ✓ TELE-08: 历史日志条目过滤 (startTime 前忽略)
+
 ### Active
 
-- [ ] 检测日志中 "Starting Telegram bot" 触发 Telegram 连接监控
-- [ ] 30 秒内检测 Telegram 连接成功/失败，失败时 Pushover 通知
+- [ ] Telegram monitor 集成到实例生命周期 (Phase 43: TELE-07, TELE-09)
 
 ### Out of Scope
 
@@ -264,11 +272,11 @@ self_update:
 ## Current State
 
 **Shipped:** v0.8 Self-Update (2026-03-30)
-**Total:** 8 milestones shipped, 41 phases, ~16,900 LOC Go
+**Total:** 8 milestones shipped, 42 phases, ~17,100 LOC Go
 
-**v0.9 In Progress:** Phase 41 complete — startup notification wired. Phase 42-43 remaining (Telegram monitor).
+**v0.9 In Progress:** Phase 42 complete — Telegram monitor core (patterns, state machine, notifications). Phase 43 remaining (integration).
 
-*Last updated: 2026-04-06 after Phase 41 completion*
+*Last updated: 2026-04-06 after Phase 42 completion*
 
 ## Evolution
 
