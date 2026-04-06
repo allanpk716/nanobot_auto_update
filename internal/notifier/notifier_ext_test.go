@@ -259,8 +259,180 @@ func TestFormatUpdateResultMessage_Formatting(t *testing.T) {
 	}
 }
 
-// testLogger 创建一个用于测试的 logger
+// testLogger creates a logger for testing
+// Returns a logger that discards all log output to avoid test noise
 func testLogger() *slog.Logger {
-	// 返回一个丢弃所有日志的 logger,避免测试输出噪音
 	return slog.New(slog.DiscardHandler)
+}
+
+// --- Startup Notification Tests (Phase 41-01) ---
+
+// TestFormatStartupMessage_AllSuccess verifies message when all instances started successfully
+func TestFormatStartupMessage_AllSuccess(t *testing.T) {
+	n := &Notifier{
+		enabled: false,
+		logger:  testLogger(),
+	}
+
+	result := &instance.AutoStartResult{
+		Started: []string{"gw", "wk1", "wk2"},
+		Failed:  nil,
+		Skipped: []string{},
+	}
+
+	title, message := n.formatStartupMessage(result)
+
+	if title != "Nanobot startup completed" {
+		t.Errorf("expected title %q, got %q", "Nanobot startup completed", title)
+	}
+	if !strings.Contains(message, "All 3 instances started successfully") {
+		t.Errorf("message should contain %q, got %q", "All 3 instances started successfully", message)
+	}
+}
+
+// TestFormatStartupMessage_PartialFailure verifies message with mixed started/failed
+func TestFormatStartupMessage_PartialFailure(t *testing.T) {
+	n := &Notifier{
+		enabled: false,
+		logger:  testLogger(),
+	}
+
+	result := &instance.AutoStartResult{
+		Started: []string{"gw", "wk1"},
+		Failed: []*instance.InstanceError{
+			{
+				InstanceName: "bad",
+				Port:         8090,
+				Err:          errors.New("port in use"),
+			},
+		},
+		Skipped: []string{},
+	}
+
+	title, message := n.formatStartupMessage(result)
+
+	if title != "Nanobot startup partially failed" {
+		t.Errorf("expected title %q, got %q", "Nanobot startup partially failed", title)
+	}
+	if !strings.Contains(message, "Started: 2/3") {
+		t.Errorf("message should contain %q, got %q", "Started: 2/3", message)
+	}
+	if !strings.Contains(message, "OK gw") {
+		t.Errorf("message should contain %q, got %q", "OK gw", message)
+	}
+	if !strings.Contains(message, "OK wk1") {
+		t.Errorf("message should contain %q, got %q", "OK wk1", message)
+	}
+	if !strings.Contains(message, "FAIL bad:") {
+		t.Errorf("message should contain %q, got %q", "FAIL bad:", message)
+	}
+	if !strings.Contains(message, "port in use") {
+		t.Errorf("message should contain %q, got %q", "port in use", message)
+	}
+}
+
+// TestFormatStartupMessage_AllFailed verifies message when all instances failed
+func TestFormatStartupMessage_AllFailed(t *testing.T) {
+	n := &Notifier{
+		enabled: false,
+		logger:  testLogger(),
+	}
+
+	result := &instance.AutoStartResult{
+		Started: []string{},
+		Failed: []*instance.InstanceError{
+			{
+				InstanceName: "gw",
+				Port:         18790,
+				Err:          errors.New("connection refused"),
+			},
+			{
+				InstanceName: "wk1",
+				Port:         18791,
+				Err:          errors.New("timeout"),
+			},
+		},
+		Skipped: []string{},
+	}
+
+	title, message := n.formatStartupMessage(result)
+
+	if title != "Nanobot startup failed" {
+		t.Errorf("expected title %q, got %q", "Nanobot startup failed", title)
+	}
+	if !strings.Contains(message, "Started: 0/2") {
+		t.Errorf("message should contain %q, got %q", "Started: 0/2", message)
+	}
+	if !strings.Contains(message, "FAIL gw:") {
+		t.Errorf("message should contain %q, got %q", "FAIL gw:", message)
+	}
+	if !strings.Contains(message, "FAIL wk1:") {
+		t.Errorf("message should contain %q, got %q", "FAIL wk1:", message)
+	}
+}
+
+// TestFormatStartupMessage_SkippedNotIncluded verifies skipped instances never appear in message
+func TestFormatStartupMessage_SkippedNotIncluded(t *testing.T) {
+	n := &Notifier{
+		enabled: false,
+		logger:  testLogger(),
+	}
+
+	result := &instance.AutoStartResult{
+		Started: []string{"gw"},
+		Failed: []*instance.InstanceError{
+			{
+				InstanceName: "bad",
+				Err:          errors.New("failed"),
+			},
+		},
+		Skipped: []string{"manual1", "manual2", "manual3", "manual4", "manual5"},
+	}
+
+	title, message := n.formatStartupMessage(result)
+
+	if title == "" {
+		t.Error("expected non-empty title")
+	}
+	if strings.Contains(message, "manual") {
+		t.Errorf("message should NOT contain any skipped instance names, got %q", message)
+	}
+}
+
+// TestNotifyStartupResult_Disabled verifies disabled notifier returns nil without panic
+func TestNotifyStartupResult_Disabled(t *testing.T) {
+	n := &Notifier{
+		enabled: false,
+		logger:  testLogger(),
+	}
+
+	result := &instance.AutoStartResult{
+		Started: []string{"gw", "wk1"},
+		Failed:  nil,
+		Skipped: []string{},
+	}
+
+	err := n.NotifyStartupResult(result)
+	if err != nil {
+		t.Errorf("expected nil error for disabled notifier, got %v", err)
+	}
+}
+
+// TestNotifyStartupResult_AllSkipped verifies no notification when all instances skipped
+func TestNotifyStartupResult_AllSkipped(t *testing.T) {
+	n := &Notifier{
+		enabled: false,
+		logger:  testLogger(),
+	}
+
+	result := &instance.AutoStartResult{
+		Started: []string{},
+		Failed:  nil,
+		Skipped: []string{"a", "b", "c"},
+	}
+
+	err := n.NotifyStartupResult(result)
+	if err != nil {
+		t.Errorf("expected nil error for all-skipped result, got %v", err)
+	}
 }
