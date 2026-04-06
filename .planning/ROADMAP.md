@@ -65,11 +65,11 @@ Plans:
   1. Instances that never produce a "Starting Telegram bot" log line run normally without any monitor overhead or spurious notifications
   2. When an instance is stopped (for update or shutdown), any in-progress Telegram monitor for that instance is immediately cancelled and no timeout or failure notification is sent
   3. The full end-to-end flow works: instance starts, logs "Starting Telegram bot", monitor activates, connection succeeds or fails, user receives the corresponding Pushover notification
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 43-01: TBD
-- [ ] 43-02: TBD
+- [ ] 43-01-PLAN.md — Wire TelegramMonitor into InstanceLifecycle (lifecycle.go + manager.go + main.go)
+- [ ] 43-02-PLAN.md — TDD: Unit tests for monitor lifecycle integration (TELE-07, TELE-09)
 
 <details>
 <summary>v1.0 Single Instance Auto-Update (Phases 01-04) - SHIPPED 2026-02-18</summary>
@@ -137,7 +137,7 @@ Phases execute in numeric order: 41 -> 42 -> 43
 |-------|-----------|----------------|--------|-----------|
 | 41. Startup Notification | v0.9 | 2/2 | Complete    | 2026-04-06 |
 | 42. Telegram Monitor Core | v0.9 | 2/2 | Complete    | 2026-04-06 |
-| 43. Telegram Monitor Integration | v0.9 | 0/? | Not started | - |
+| 43. Telegram Monitor Integration | v0.9 | 0/2 | Not started | - |
 
 ---
-*Last updated: 2026-04-06 (Phase 42 planned)*
+*Last updated: 2026-04-06 (Phase 43 planned)*
