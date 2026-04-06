@@ -1,14 +1,14 @@
-# Architecture Patterns: Self-Update Integration (v0.8)
+# Architecture: Instance Startup Notifications and Telegram Connection Monitoring (v0.9)
 
-**Domain:** Self-updating Go Windows service (nanobot-auto-updater)
-**Researched:** 2026-03-29
+**Domain:** Go Windows service -- adding Pushover notifications for instance startup results and log-pattern-based Telegram connection monitoring.
+**Researched:** 2026-04-06
 **Overall confidence:** HIGH
 
 ## Executive Summary
 
-The self-update feature requires adding one new internal package (`internal/selfupdate/`) and modifying four existing files (`main.go`, `server.go`, `help.go`, `config.go`). The `creativeprojects/go-selfupdate` library handles the core binary replacement with built-in rollback support. The integration follows the same dependency-injection pattern already used by TriggerHandler and UpdateLogger: create the component in `main.go`, inject into the API handler, test via interface mocking.
+This milestone adds two notification features to the existing nanobot-auto-updater: (1) Pushover notifications when instances start (success or failure), and (2) detection of Telegram connection status by monitoring log output for specific patterns, with a 30-second timeout and failure notification.
 
-The most significant architectural decision is the restart-after-update strategy. Since this is a long-running Windows service (not a CLI tool), the update handler must respond to the client first, then initiate graceful shutdown. A self-spawned child process starts the new binary after the old one exits. A separate CI/CD pipeline (GitHub Actions + GoReleaser) handles the build-and-release side, producing correctly-named release assets that `go-selfupdate` can discover.
+Both features integrate into the existing architecture without structural changes. The instance startup notification hooks into the existing `InstanceManager.StartAllInstances()` return path in `main.go`, iterating the `AutoStartResult` and sending a summary notification. The Telegram connection monitor is a new `TelegramMonitor` component that subscribes to the existing `LogBuffer` per-instance, watches for the trigger pattern "Starting Telegram bot", starts a 30-second timer, and checks for success/failure patterns. Both features reuse the existing `Notifier` interface for Pushover delivery.
 
 ---
 
@@ -17,68 +17,77 @@ The most significant architectural decision is the restart-after-update strategy
 ### Existing Component Inventory
 
 ```
-cmd/nanobot-auto-updater/main.go     -- Entry point, wires all components
-internal/api/server.go               -- HTTP mux, handler registration
-internal/api/trigger.go              -- POST /api/v1/trigger-update handler
-internal/api/query.go                -- GET /api/v1/update-logs handler
-internal/api/help.go                 -- GET /api/v1/help handler
-internal/api/auth.go                 -- Bearer token middleware
-internal/config/config.go            -- Main config struct + Load()
-internal/config/api.go               -- APIConfig struct
-internal/notifier/notifier.go        -- Pushover notification sender
-internal/updater/updater.go          -- nanobot updater (uv tool install)
-internal/updatelog/updatelog.go      -- JSONL log persistence
+cmd/nanobot-auto-updater/main.go       -- Entry point, wires all components
+internal/api/server.go                  -- HTTP mux, handler registration
+internal/instance/manager.go           -- InstanceManager: StartAllInstances(), TriggerUpdate()
+internal/instance/lifecycle.go         -- InstanceLifecycle: StartAfterUpdate(), GetLogBuffer()
+internal/logbuffer/buffer.go           -- Ring buffer: Write(), Subscribe(), GetHistory()
+internal/logbuffer/subscriber.go       -- Channel-based subscriber pattern (capacity 100)
+internal/notifier/notifier.go          -- Pushover: Notify(), IsEnabled()
+internal/notification/manager.go       -- Network connectivity notification manager
+internal/lifecycle/starter.go          -- StartNanobotWithCapture() with log capture goroutines
+internal/health/monitor.go             -- Periodic health checks for all instances
 ```
 
-### Existing Dependency Injection Pattern
-
-The project follows a consistent wiring pattern in `main.go`:
+### Existing Data Flow: Instance Startup
 
 ```
-main.go creates:
-  -> logger (slog.Logger)
-  -> config (*config.Config) via config.Load()
-  -> updateLogger (*updatelog.UpdateLogger) via updatelog.NewUpdateLogger()
-  -> instanceManager (*instance.InstanceManager) via instance.NewInstanceManager()
-  -> notif (*notifier.Notifier) via notifier.NewWithConfig()
-  -> apiServer (*api.Server) via api.NewServer(cfg, im, cfg, Version, logger, updateLogger, notif)
+main.go (goroutine)
+  -> instanceManager.StartAllInstances(ctx)
+     -> lifecycle.StopAllNanobots()           // Clean slate
+     -> for each instance:
+           inst.StartAfterUpdate(ctx)
+              -> logBuffer.Clear()            // INST-05
+              -> lifecycle.StartNanobotWithCapture()
+                 -> cmd.Start()               // Start process
+                 -> go captureLogs(stdout)    // Goroutine: pipe -> LogBuffer.Write()
+                 -> go captureLogs(stderr)    // Goroutine: pipe -> LogBuffer.Write()
+     -> return AutoStartResult{Started, Failed, Skipped}
 ```
 
-All components receive `*slog.Logger` as the first argument. Handlers receive dependencies through constructor injection. Testing uses interface-based mocking (e.g., `TriggerUpdater` interface, `Notifier` interface defined locally in `trigger.go`).
+### Existing Data Flow: Log Capture to Ring Buffer
 
-### Key Existing Patterns to Reuse
+```
+Nanobot Process (stdout/stderr)
+  -> os.Pipe()
+  -> captureLogs goroutine (lifecycle/starter.go)
+  -> logBuffer.Write(LogEntry{Timestamp, Source, Content})
+     -> ring buffer store (fixed array [5000])
+     -> non-blocking fan-out to all subscribers
+        -> subscriber channels (capacity 100)
+           -> SSE handler (existing, for web UI)
+           -> [NEW] TelegramMonitor subscriber
+```
 
-| Pattern | Where Used | How to Apply |
-|---------|-----------|--------------|
-| Interface in handler file | `trigger.go` defines `TriggerUpdater`, `Notifier` | Define `SelfUpdateChecker`/`SelfUpdateExecutor` in handler file |
-| Nil-safe component | `healthMonitor`, `updateLogger` checked for nil | Check `selfUpdater != nil` before registering routes |
-| Constructor with `logger.With("source", ...)` | All handlers | Same for SelfUpdateHandler |
-| Async notification + panic recovery | TriggerHandler start/complete notifications | Same for self-update start/complete |
-| `atomic.Bool` concurrency control | TriggerHandler update-in-progress | Same for self-update-in-progress |
-| Bearer token middleware reuse | All auth-protected routes | Wrap self-update routes with `authMiddleware` |
+### Existing Patterns to Reuse
+
+| Pattern | Where Used | How to Apply for v0.9 |
+|---------|-----------|----------------------|
+| `Notifier` interface (duck typing) | `notification/manager.go`, `api/trigger.go` | Both new features call `notif.Notify()` via the same interface |
+| Async notification + panic recovery | `notification/manager.go:sendNotification()`, `api/trigger.go:Handle()` | Same pattern: `go func() { defer recover(); notif.Notify() }()` |
+| Channel-based LogBuffer subscriber | `logbuffer/subscriber.go` | `TelegramMonitor` calls `logBuffer.Subscribe()`, reads `<-chan LogEntry` |
+| Nil-safe Notifier checks | `notification/manager.go:sendNotification()` checks `nm.notifier.IsEnabled()` | Both features check `notif.IsEnabled()` before sending |
+| Context-aware logging | All components: `logger.With("component", "...")` | New `TelegramMonitor` uses same pattern |
+| Graceful degradation | InstanceManager: failed instances don't block others | Telegram monitor failure must not affect instance startup |
+| TDD with interfaces | `trigger.go` defines local interfaces, tests use mocks | `TelegramMonitor` accepts `LogSubscriber` interface for testing |
 
 ---
 
-## Recommended Architecture for Self-Update
+## Recommended Architecture
 
 ### New Components
 
 | Component | Package | Responsibility |
 |-----------|---------|---------------|
-| `SelfUpdater` | `internal/selfupdate/` | Check GitHub latest release, download, replace exe, signal restart |
-| `SelfUpdateHandler` | `internal/api/` | HTTP handler for check/update endpoints |
-| GitHub Actions Workflow | `.github/workflows/release.yml` | Build + publish release on tag push |
-| GoReleaser Config | `.goreleaser.yaml` | Build configuration for Windows amd64 binary |
+| `TelegramMonitor` | `internal/telegram/` | Subscribe to LogBuffer, detect "Starting Telegram bot", track 30s timeout, notify on failure |
+| `sendStartupNotification` | `main.go` (or helper in `notification/`) | Format and send AutoStartResult summary via Pushover |
 
 ### Modified Components
 
 | Component | Change | Why |
 |-----------|--------|-----|
-| `main.go` | Create SelfUpdater, pass to api.NewServer; add restart channel to shutdown logic | Wire new component; enable restart-after-update |
-| `api/server.go` | Accept SelfUpdater interface, register new routes | Add self-update API endpoints |
-| `api/help.go` | Add self-update endpoints to help response | Document new API endpoints |
-| `config/config.go` | Add `SelfUpdateConfig` to Config struct | Self-update settings (repo slug, enabled) |
-| `go.mod` | Add `creativeprojects/go-selfupdate` dependency | Core self-update library |
+| `main.go` | Add startup notification call after `StartAllInstances()`, create and start `TelegramMonitor` per instance | Wire new notification features into the startup flow |
+| No other files modified | | Integration is minimal, touches only main.go |
 
 ### Component Boundaries
 
@@ -87,527 +96,469 @@ All components receive `*slog.Logger` as the first argument. Handlers receive de
                                  |
                     +------------+------------+------------+
                     |            |            |            |
-              SelfUpdater   apiServer    notif (exist)  restartCh
-                    |            |
+              instanceManager  apiServer  notif (exist)  [NEW]
+                    |            |            |         startupNotif()
+                    |            |            |         (after auto-start)
                     |     +------+------+
                     |     |      |      |
-                    |  SelfUpdate  TriggerHandler (exist)
-                    |  Handler     QueryHandler (exist)
+                    |   SelfUpdate  TriggerHandler (exist)
+                    |   Handler     QueryHandler (exist)
                     |     |
             +-------+-------+
             |               |
-     go-selfupdate     notifier.Notifier
-     (external lib)    (update notifications)
-```
+     selfupdate (exist)  notifier.Notifier
+                        (update notifications)
 
-### Data Flow: Version Check (GET /api/v1/self-update/check)
-
-```
-1. Client -> GET /api/v1/self-update/check
-2. AuthMiddleware validates Bearer token
-3. SelfUpdateCheckHandler.Handle()
-   a. Call SelfUpdater.CheckLatest(ctx)
-4. SelfUpdater.CheckLatest()
-   a. selfupdate.DetectLatest(ctx, repository) -> latest release info
-   b. Compare latest.Version() with current Version (from ldflags)
-   c. Return CheckResult{CurrentVersion, LatestVersion, UpdateAvailable, ReleaseNotes}
-5. Handler returns JSON response
-```
-
-### Data Flow: Self-Update (POST /api/v1/self-update)
-
-```
-1. Client -> POST /api/v1/self-update
-2. AuthMiddleware validates Bearer token
-3. SelfUpdateHandler.Handle()
-   a. Check update not already in progress (atomic.Bool)
-   b. Send start notification (async goroutine + panic recovery)
-   c. Call SelfUpdater.CheckAndUpdate(ctx)
-4. SelfUpdater.CheckAndUpdate()
-   a. selfupdate.DetectLatest(ctx, repository) -> get latest release info
-   b. Compare versions -> if no update needed, return status "up_to_date"
-   c. If update available:
-      i.   Log update start (logger.Info)
-      ii.  Call selfupdate.UpdateTo(ctx, release, exePath)
-           - Library creates .new file with new binary
-           - Library renames current exe to .old (backup)
-           - Library renames .new to original name
-           - On failure: library rolls back (.old -> original)
-      iii. Return UpdateResult{PreviousVersion, NewVersion, Success}
-5. Handler receives result:
-   a. Send completion notification (async goroutine + panic recovery)
-   b. Write JSON response to client
-   c. If update succeeded: signal restartCh to trigger graceful shutdown
-6. main.go receives restartCh signal:
-   a. Run existing shutdown sequence (stop all components)
-   b. Self-spawn new process: exec.Command(exePath, os.Args[1:]...).Start()
-   c. os.Exit(0)
+            +--- [NEW: TelegramMonitor] ---+
+            |                               |
+    logBuffer.Subscribe()          notifier.Notifier
+    (<-chan LogEntry)              (failure notifications)
 ```
 
 ---
 
-## New Internal Package: `internal/selfupdate/`
+## Feature 1: Instance Startup Notification
 
-### File Structure
+### Design
+
+After `instanceManager.StartAllInstances()` returns `*AutoStartResult` in `main.go`, send a Pushover notification summarizing the results. This is a one-shot notification, not a long-running component.
+
+### Data Flow
 
 ```
-internal/selfupdate/
-  selfupdate.go        -- SelfUpdater struct, CheckLatest(), CheckAndUpdate()
-  selfupdate_test.go   -- Unit tests with mock source
+1. main.go goroutine:
+   autoStartResult := instanceManager.StartAllInstances(ctx)
+
+2. [NEW] sendStartupNotification(notif, autoStartResult, logger)
+   a. Check notif.IsEnabled() -- skip if Pushover not configured
+   b. If autoStartResult.Failed is empty AND len(Started) > 0:
+      Send success notification:
+        Title: "Nanobot 启动完成"
+        Message: "成功: X 个实例\n耗时: Ys"
+   c. If autoStartResult.Failed is not empty:
+      Send failure notification:
+        Title: "Nanobot 启动失败"
+        Message: "成功: X\n失败: Y\n失败实例: ..."
+   d. Send async (goroutine + panic recovery) -- same pattern as trigger.go
+```
+
+### Implementation Location
+
+A standalone function in `main.go` or a helper function extracted to a new file in `notification/` package. Given the simplicity (one function, no state), keeping it in `main.go` is the lightest option. If it grows, extract later.
+
+```go
+// In main.go, after autoStartResult := instanceManager.StartAllInstances(ctx)
+sendStartupNotification(notif, autoStartResult, logger)
+```
+
+### Key Decision: Notify on Success AND Failure
+
+Unlike the update notification pattern (which only notifies on failure), startup notifications should fire on both success and failure. Rationale: the user needs confirmation that instances started correctly, especially after a reboot or service restart. The cost of one extra Pushover message on success is low; the cost of missing a "failed to start" event is high.
+
+However, if Pushover is not configured, skip silently (same graceful degradation as existing patterns).
+
+---
+
+## Feature 2: Telegram Connection Monitor
+
+### Design
+
+A new `TelegramMonitor` struct that subscribes to each instance's `LogBuffer` and watches for Telegram connection patterns. When "Starting Telegram bot" appears, it starts a 30-second timer. If "Telegram bot @xxx connected" appears within 30 seconds, the timer is cancelled (success). If the timer fires without a success pattern, a Pushover notification is sent.
+
+### Data Flow
+
+```
+1. main.go:
+   For each instance that was started:
+     tm := telegram.NewTelegramMonitor(inst.GetLogBuffer(), notif, inst.Name(), logger)
+     go tm.Start()
+     // Store tm references for shutdown
+
+2. TelegramMonitor.Start():
+   a. ch := logBuffer.Subscribe()    // Get <-chan LogEntry
+   b. defer logBuffer.Unsubscribe(ch)
+   c. for entry := range ch:
+        if strings.Contains(entry.Content, "Starting Telegram bot"):
+          Start 30-second timer (time.AfterFunc)
+          Set state = "waiting"
+        if state == "waiting" && matchSuccessPattern(entry.Content):
+          Cancel timer
+          Set state = "connected"
+          Log success
+        // Timer fires -> onTimeout()
+          Send Pushover notification: "Telegram 连接超时"
+          Set state = "timeout"
+
+3. On instance restart (via StartAllInstances or trigger-update):
+   - Old TelegramMonitor's logBuffer.Clear() happens before StartAfterUpdate()
+   - Old subscriber continues receiving new logs
+   - OR: Stop old monitor, create new one after restart
+```
+
+### New Internal Package: `internal/telegram/`
+
+```
+internal/telegram/
+  monitor.go        -- TelegramMonitor struct, Start(), Stop()
+  monitor_test.go   -- Unit tests with mock LogBuffer subscriber
+  patterns.go       -- Pattern constants and matching functions
 ```
 
 ### Core Types
 
 ```go
-// selfupdate.go
+// telegram/monitor.go
 
-// CheckResult holds the result of a version check
-type CheckResult struct {
-    CurrentVersion  string
-    LatestVersion   string
-    UpdateAvailable bool
-    ReleaseNotes    string
+// LogSubscriber is the interface for subscribing to log entries.
+// Defined here for testability -- LogBuffer satisfies this via duck typing.
+type LogSubscriber interface {
+    Subscribe() <-chan logbuffer.LogEntry
+    Unsubscribe(ch <-chan logbuffer.LogEntry)
 }
 
-// UpdateResult holds the result of an update attempt
-type UpdateResult struct {
-    PreviousVersion string
-    NewVersion      string
-    Success         bool
-    Error           error
-}
-
-// SelfUpdater handles self-update operations
-type SelfUpdater struct {
-    logger      *slog.Logger
-    repository  selfupdate.Repository
-    current     string            // current version (from ldflags)
-    exePath     string            // path to current executable
-    updating    atomic.Bool       // prevent concurrent updates
-    notifier    Notifier          // update notifications (interface)
-    shutdownCh  chan struct{}     // signal main goroutine to restart
-}
-
-// Notifier interface for dependency injection (matches api.Notifier pattern)
+// Notifier interface for sending failure notifications.
+// Matches the existing notifier.Notifier duck typing pattern.
 type Notifier interface {
+    IsEnabled() bool
     Notify(title, message string) error
 }
-```
 
-### Key Design Decisions
-
-**1. Use `creativeprojects/go-selfupdate` directly.**
-
-The library handles: GitHub Release API interaction, platform-specific binary detection (expects `nanobot-auto-updater_windows_amd64.zip`), archive decompression, atomic binary replacement with built-in rollback, and checksum validation. Rolling a custom solution would require reimplementing all of this with the same edge cases.
-
-**2. Separate check and update endpoints.**
-
-`GET /api/v1/self-update/check` is read-only and safe (no side effects). `POST /api/v1/self-update` triggers the actual replacement. This lets callers preview before committing, and matches the RESTful pattern of the existing API.
-
-**3. Shutdown channel pattern for restart signaling.**
-
-The SelfUpdater receives a `chan struct{}` that signals `main.go` to begin graceful shutdown. The main goroutine's `<-sigChan` block expands to also listen on this channel via `select`. This keeps OS-specific signal logic in `main.go` where it belongs, not in the selfupdate package.
-
-```go
-// In main.go, replace:
-<-sigChan
-
-// With:
-select {
-case <-sigChan:
-    logger.Info("Shutdown signal received")
-case <-restartCh:
-    logger.Info("Restart signal received (self-update)")
-    // Self-spawn before exit
-    restartProcess(exePath, os.Args[1:])
+// TelegramMonitor watches instance logs for Telegram connection patterns.
+// After detecting "Starting Telegram bot", it waits up to 30 seconds
+// for a success indication. If none arrives, it sends a Pushover alert.
+type TelegramMonitor struct {
+    logBuffer   LogSubscriber
+    notifer     Notifier
+    instanceName string
+    timeout     time.Duration    // Default: 30 seconds
+    logger      *slog.Logger
+    ctx         context.Context
+    cancel      context.CancelFunc
 }
 ```
 
-**4. Self-spawn restart strategy.**
+### Pattern Matching Logic
 
-After successful binary replacement, before calling `os.Exit`:
 ```go
-func restartProcess(exePath string, args []string) error {
-    cmd := exec.Command(exePath, args...)
-    cmd.Stdout = os.Stdout
-    cmd.Stderr = os.Stderr
-    cmd.SysProcAttr = &windows.SysProcAttr{
-        HideWindow:    true,
-        CreationFlags: windows.CREATE_NO_WINDOW,
+// telegram/patterns.go
+
+const (
+    // TriggerPattern is the log line that indicates Telegram bot is starting
+    TriggerPattern = "Starting Telegram bot"
+
+    // SuccessPatterns indicate Telegram connected successfully
+    // Matched via strings.Contains (case-sensitive, partial match)
+    SuccessPattern1 = "Telegram bot @"     // e.g., "Telegram bot @mybot connected"
+    SuccessPattern2 = "telegram"           // Fallback: any telegram success indicator
+
+    // DefaultTimeout is the default wait time for connection confirmation
+    DefaultTimeout = 30 * time.Second
+)
+
+// IsTrigger returns true if the log line indicates Telegram bot is starting.
+func IsTrigger(line string) bool {
+    return strings.Contains(line, TriggerPattern)
+}
+
+// IsSuccess returns true if the log line indicates Telegram connected.
+func IsSuccess(line string) bool {
+    // Check for known success patterns
+    // "Telegram bot @xxx connected" or similar
+    return strings.Contains(line, "bot @") &&
+           (strings.Contains(line, "connected") || strings.Contains(line, "started"))
+}
+```
+
+**Note on patterns**: The exact log patterns depend on what nanobot actually outputs. Before implementation, verify the exact strings by checking a running nanobot's stdout. The patterns above are estimates. The implementation should make patterns easily configurable.
+
+### State Machine
+
+```
+  [idle] --(trigger pattern)--> [waiting] --(success pattern)--> [connected]
+                                   |
+                                   +--(30s timeout)--> [timed_out] --> send notification --> [idle]
+                                   |
+                                   +--(new trigger pattern)--> restart timer --> [waiting]
+```
+
+State transitions:
+- `idle -> waiting`: Log line matches trigger pattern
+- `waiting -> connected`: Log line matches success pattern within timeout
+- `waiting -> timed_out`: Timer fires, send notification, return to idle
+- `waiting -> waiting`: Another trigger pattern seen (restart timer)
+- Any state -> idle: Monitor receives new trigger after previous cycle
+
+### Integration with Instance Lifecycle
+
+The TelegramMonitor lifecycle is tied to instance startup:
+
+1. **On auto-start** (main.go): After `StartAllInstances()` succeeds for an instance, create and start a `TelegramMonitor` for that instance.
+2. **On trigger-update** (trigger.go flow): After `UpdateAll()` restarts instances, the monitors from step 1 are still subscribed to the same LogBuffer. The LogBuffer.Clear() in `StartAfterUpdate()` resets the buffer but subscribers keep receiving new entries. The existing monitor continues working.
+3. **On manual restart** (web UI restart endpoint): Same as trigger-update -- the LogBuffer is the same object, monitor keeps receiving.
+
+This means we do NOT need to create/destroy TelegramMonitors on every restart. A single monitor per instance, created once at startup, is sufficient. The `LogBuffer.Clear()` does not affect subscribers (confirmed by the existing code comment in `buffer.go` line 105: "Subscribers continue receiving new logs after Clear()").
+
+### Shutdown
+
+```go
+// TelegramMonitor.Stop() cancels the context, which:
+// 1. Stops the subscriber goroutine (exits range loop)
+// 2. Cancels any pending timeout timer
+// 3. Unsubscribes from LogBuffer
+
+func (tm *TelegramMonitor) Stop() {
+    tm.cancel()
+}
+```
+
+In `main.go` shutdown sequence, stop all TelegramMonitors alongside other components (health monitor, notification manager, etc.).
+
+---
+
+## Updated main.go Wiring
+
+### After Auto-Start
+
+```go
+// Existing auto-start goroutine in main.go
+go func() {
+    defer func() {
+        if r := recover(); r != nil {
+            logger.Error("auto-start goroutine panic", ...)
+        }
+    }()
+
+    autoStartCtx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+    defer cancel()
+
+    autoStartResult := instanceManager.StartAllInstances(autoStartCtx)
+
+    // [NEW] Send startup notification
+    sendStartupNotification(notif, autoStartResult, logger)
+
+    // [NEW] Start Telegram monitors for instances that started successfully
+    for _, startedName := range autoStartResult.Started {
+        logBuf, _ := instanceManager.GetLogBuffer(startedName)
+        tm := telegram.NewTelegramMonitor(logBuf, notif, startedName, logger)
+        telegramMonitors = append(telegramMonitors, tm)
+        go tm.Start()
     }
-    return cmd.Start()
-}
+}()
 ```
 
-This uses the existing `windows.SysProcAttr` pattern already present in `internal/updater/updater.go`. The old process exits cleanly, the new process starts with the same arguments.
-
-**5. Backup file management by the library.**
-
-`go-selfupdate/update.Apply()` creates `.old` files. On Windows, it cannot delete `.old` files (running process lock), so it hides them instead. On next startup, the application should check for and clean up `.old` files as a startup task in `main.go`.
-
----
-
-## New HTTP API Endpoints
-
-### GET /api/v1/self-update/check
-
-```
-Auth: Bearer Token (required)
-Response: {
-  "current_version": "v0.7.0",
-  "latest_version": "v0.8.0",
-  "update_available": true,
-  "release_notes": "## What's Changed\n..."
-}
-```
-
-### POST /api/v1/self-update
-
-```
-Auth: Bearer Token (required)
-Response (success): {
-  "status": "update_scheduled",
-  "previous_version": "v0.7.0",
-  "new_version": "v0.8.0",
-  "message": "Update downloaded. Server will restart shortly."
-}
-Response (up to date): {
-  "status": "up_to_date",
-  "current_version": "v0.7.0"
-}
-Response (conflict): {
-  "status": "update_in_progress",
-  "error": "An update is already in progress"
-}
-```
-
-### Route Registration (in server.go)
+### Shutdown Sequence Update
 
 ```go
-// Self-update endpoints (auth-protected, nil-safe)
-if selfUpdater != nil {
-    checkHandler := NewSelfUpdateCheckHandler(selfUpdater, logger)
-    updateHandler := NewSelfUpdateHandler(selfUpdater, logger)
-    mux.Handle("GET /api/v1/self-update/check",
-        authMiddleware(http.HandlerFunc(checkHandler.Handle)))
-    mux.Handle("POST /api/v1/self-update",
-        authMiddleware(http.HandlerFunc(updateHandler.Handle)))
+// Stop Telegram monitors [NEW]
+for _, tm := range telegramMonitors {
+    tm.Stop()
 }
 ```
 
-Following the existing nil-safe pattern: if SelfUpdater is nil (self-update disabled in config), routes are not registered.
+### Complete Component Wiring
 
----
-
-## CI/CD: GitHub Actions + GoReleaser
-
-### Why GoReleaser Over Raw Build Steps
-
-GoReleaser handles: cross-compilation, naming conventions, checksum generation, and release creation automatically. It produces the exact archive naming format `go-selfupdate` requires (`{cmd}_{goos}_{goarch}.zip`). The alternative -- manual build steps in the workflow YAML -- requires more code and is error-prone for asset naming.
-
-### .goreleaser.yaml (minimal)
-
-```yaml
-builds:
-  - main: ./cmd/nanobot-auto-updater
-    binary: nanobot-auto-updater
-    goos:
-      - windows
-    goarch:
-      - amd64
-    ldflags:
-      - -s -w -X main.Version={{.Version}}
-    env:
-      - CGO_ENABLED=0
-
-archives:
-  - format: zip
-    name_template: >-
-      {{ .ProjectName }}_
-      {{- tolower .Os }}_
-      {{- .Arch }}
-
-checksum:
-  name_template: "checksums.txt"
-
-release:
-  github:
-    owner: HQGroup
-    name: nanobot-auto-updater
 ```
-
-This produces: `nanobot-auto-updater_windows_amd64.zip` containing `nanobot-auto-updater.exe`, which matches the naming convention `go-selfupdate` expects.
-
-### .github/workflows/release.yml
-
-```yaml
-name: Release
-on:
-  push:
-    tags:
-      - 'v*'
-
-permissions:
-  contents: write
-
-jobs:
-  release:
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - uses: actions/setup-go@v5
-        with:
-          go-version: '1.24'
-      - uses: goreleaser/goreleaser-action@v6
-        with:
-          distribution: goreleaser
-          version: latest
-          args: release --clean
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-```
-
-### Release Process
-
-```bash
-git tag v0.8.0
-git push origin v0.8.0
-# GitHub Actions automatically builds, packages, creates release with assets
+main.go creates:
+  -> logger (slog.Logger)
+  -> config (*config.Config) via config.Load()
+  -> updateLogger (*updatelog.UpdateLogger)
+  -> instanceManager (*instance.InstanceManager)
+  -> notif (*notifier.Notifier)           // reused by both new features
+  -> selfUpdater (*selfupdate.Updater)
+  -> apiServer (*api.Server)
+  -> healthMonitor (*health.HealthMonitor)
+  -> networkMonitor (*network.NetworkMonitor)
+  -> notificationManager (*notification.NotificationManager)
+  -> telegramMonitors []*telegram.TelegramMonitor   // [NEW] one per instance
 ```
 
 ---
 
 ## Patterns to Follow
 
-### Pattern 1: Interface-Based Handler Injection
+### Pattern 1: Subscribe to LogBuffer for Pattern Detection
 
-**What:** Define a local interface in the handler file for the SelfUpdater dependency.
-**When:** Always (matches existing `TriggerUpdater` and `Notifier` patterns in `trigger.go`).
+**What:** Use the existing `LogBuffer.Subscribe()` channel to receive log entries in real-time.
+**When:** Any component that needs to react to log content.
+**Why:** Non-blocking, already handles slow subscribers (drops entries), clean lifecycle via context cancellation.
 
 ```go
-// In api/selfupdate.go
-type SelfUpdateChecker interface {
-    CheckLatest(ctx context.Context) (*selfupdate.CheckResult, error)
-}
+ch := logBuffer.Subscribe()
+defer logBuffer.Unsubscribe(ch)
 
-type SelfUpdateExecutor interface {
-    CheckAndUpdate(ctx context.Context) (*selfupdate.UpdateResult, error)
+for entry := range ch {
+    if isInteresting(entry.Content) {
+        handlePattern(entry)
+    }
 }
 ```
 
-### Pattern 2: Nil-Safe Component Registration
+### Pattern 2: Timer-Based Timeout with State Tracking
 
-**What:** Only register routes if the SelfUpdater component is non-nil.
-**When:** When self-update may be disabled via config.
-**Why:** Matches existing nil-safe patterns (healthMonitor, updateLogger).
+**What:** Use `time.AfterFunc` for the 30-second Telegram connection timeout.
+**When:** When waiting for a specific event within a time window.
+**Why:** `AfterFunc` is more efficient than `time.After` for long waits because it does not allocate a channel. It can also be cancelled (`Timer.Stop()`).
 
-### Pattern 3: Async Notification with Panic Recovery
+```go
+var timer *time.Timer
+state := "idle"
 
-**What:** Send update start/completion notifications in a goroutine with defer/recover.
-**When:** After triggering update and after update completes.
-**Why:** Matches existing TriggerHandler pattern exactly -- notification failure must not block the update flow.
+for entry := range ch {
+    if IsTrigger(entry.Content) && state != "waiting" {
+        if timer != nil {
+            timer.Stop()
+        }
+        state = "waiting"
+        timer = time.AfterFunc(30*time.Second, func() {
+            // Handle timeout
+            notif.Notify("Telegram connection timeout", ...)
+            state = "idle"
+        })
+    }
+    if IsSuccess(entry.Content) && state == "waiting" {
+        timer.Stop()
+        state = "connected"
+    }
+}
+```
 
-### Pattern 4: Atomic Bool for Concurrency Control
+### Pattern 3: One Monitor Per Instance (Not Per Restart)
 
-**What:** Use `sync/atomic.Bool` to prevent concurrent self-updates.
-**When:** At the start of the update handler.
-**Why:** Self-update is a single-instance operation. Matches existing `atomic.Bool` pattern in `instance/manager.go`.
+**What:** Create one `TelegramMonitor` per instance at application startup, not on every restart.
+**When:** Monitoring long-lived instances whose LogBuffer persists across restarts.
+**Why:** `LogBuffer.Clear()` does not remove subscribers. The same subscriber continues receiving new entries after restart. Creating new monitors on every restart would leak goroutines and subscribers.
 
-### Pattern 5: Context-Aware Logging
+### Pattern 4: Interface-Based Testing
 
-**What:** Pre-inject component name via `logger.With("source", "selfupdate")`.
-**When:** In every constructor.
-**Why:** All log output includes the source automatically. Matches existing pattern.
+**What:** Define `LogSubscriber` and `Notifier` interfaces in the `telegram` package.
+**When:** Testing `TelegramMonitor` without real LogBuffer or Pushover.
+**Why:** Follows the project's established duck-typing pattern. `LogBuffer` satisfies `LogSubscriber` implicitly. Tests inject mock channel.
 
 ---
 
 ## Anti-Patterns to Avoid
 
-### Anti-Pattern 1: Using inconshreveable/go-update Directly
+### Anti-Pattern 1: Polling LogBuffer History Instead of Subscribing
 
-**What:** Using the original `go-update` library instead of `creativeprojects/go-selfupdate`.
-**Why bad:** `go-update` is unmaintained (last update 2016). It only handles binary replacement, not GitHub Release discovery, asset selection, or decompression.
-**Instead:** Use `creativeprojects/go-selfupdate` which wraps `go-update` and adds GitHub Release API integration, asset matching, decompression, and proper naming conventions.
+**What:** Periodically calling `logBuffer.GetHistory()` to scan for patterns.
+**Why bad:** Polling is wasteful (scanning all 5000 entries repeatedly), has latency gaps between polls, and scales poorly with instance count.
+**Instead:** Use `Subscribe()` to receive entries in real-time via channel.
 
-### Anti-Pattern 2: Downloading exe via Raw HTTP
+### Anti-Pattern 2: Creating New TelegramMonitor on Every Instance Restart
 
-**What:** Implementing your own HTTP download + file write for the update.
-**Why bad:** Misses edge cases (atomic replacement, Windows file locking, checksum validation, archive decompression, rollback on failure).
-**Instead:** Let `selfupdate.UpdateTo()` handle download + decompression + replacement with rollback.
+**What:** In `StartAfterUpdate()`, destroying old monitor and creating new one.
+**Why bad:** The LogBuffer is the same object; the old subscriber still works. Creating new monitors on restart leaks goroutines and subscriber entries.
+**Instead:** Create once at startup. The monitor's subscriber survives `LogBuffer.Clear()` calls.
 
-### Anti-Pattern 3: Blocking the HTTP Handler During Restart
+### Anti-Pattern 3: Blocking Notification Send in Log Processing Loop
 
-**What:** Calling `os.Exit(0)` directly in the handler goroutine.
-**Why bad:** The HTTP response never reaches the client. The connection is abruptly terminated.
-**Instead:** Send the HTTP response first, then signal shutdown via channel. A separate goroutine in `main.go` initiates the restart sequence.
+**What:** Calling `notif.Notify()` synchronously inside the `for entry := range ch` loop.
+**Why bad:** Pushover HTTP call can take seconds. If it blocks, the subscriber channel fills up (capacity 100), entries get dropped, and the monitor misses the success pattern.
+**Instead:** Send notifications in a separate goroutine with panic recovery (same pattern as `notification/manager.go:sendNotification()`).
 
-### Anti-Pattern 4: Mixing CI/CD and Go Code in Same Phase
+### Anti-Pattern 4: Hard-Coding Log Patterns Without Verification
 
-**What:** Implementing GoReleaser config, GitHub Actions workflow, and Go self-update code all in one phase.
-**Why bad:** CI/CD pipeline can be tested independently (push a tag). Self-update Go code is tested with mocks. Mixing them creates a phase that is harder to validate incrementally.
-**Instead:** Separate into distinct phases. CI/CD first (can be tested with a dummy tag), then Go code (tested with mocks), then E2E integration.
-
----
-
-## Configuration Extension
-
-### New Config Section
-
-```yaml
-# config.yaml addition
-self_update:
-  enabled: true                                # Enable/disable self-update API
-  repository: "HQGroup/nanobot-auto-updater"   # GitHub owner/repo slug
-```
-
-### Config Struct Extension
-
-```go
-// In config/config.go or new file config/selfupdate.go
-
-type SelfUpdateConfig struct {
-    Enabled    bool   `yaml:"enabled" mapstructure:"enabled"`
-    Repository string `yaml:"repository" mapstructure:"repository"`
-}
-
-// Add to Config struct
-type Config struct {
-    Instances  []InstanceConfig   `yaml:"instances" mapstructure:"instances"`
-    Pushover   PushoverConfig     `yaml:"pushover" mapstructure:"pushover"`
-    API        APIConfig          `yaml:"api" mapstructure:"api"`
-    Monitor    MonitorConfig      `yaml:"monitor" mapstructure:"monitor"`
-    HealthCheck HealthCheckConfig `yaml:"health_check" mapstructure:"health_check"`
-    SelfUpdate SelfUpdateConfig   `yaml:"self_update" mapstructure:"self_update"` // NEW
-}
-```
-
-Defaults in `defaults()`: `enabled: true`, `repository: "HQGroup/nanobot-auto-updater"`.
+**What:** Assuming log pattern strings without checking actual nanobot output.
+**Why bad:** If the pattern is wrong (case, spacing, wording), the monitor never triggers or never detects success.
+**Instead:** Before implementation, capture actual nanobot stdout to verify exact pattern strings. Make patterns configurable constants in a separate file (`patterns.go`).
 
 ---
 
-## Restart Strategy Detail
-
-Three options for restart-after-update, in order of preference:
-
-### Option A: Self-Spawn (Recommended)
-
-After graceful shutdown completes, spawn the new binary:
-```go
-cmd := exec.Command(exePath, os.Args[1:]...)
-cmd.SysProcAttr = &windows.SysProcAttr{
-    HideWindow:    true,
-    CreationFlags: windows.CREATE_NO_WINDOW,
-}
-cmd.Start()
-os.Exit(0)
-```
-
-**Pros:** No external dependency. Uses existing `windows.SysProcAttr` pattern.
-**Cons:** Brief overlap where old and new process coexist. Old process must fully exit before new binds to the same port.
-
-**Mitigation for port conflict:** Add retry logic in `main.go` for HTTP server port binding. If port is in use (old process still shutting down), retry with backoff (100ms, 200ms, 400ms) up to 3 attempts. This is a startup concern, not a self-update concern -- it just happens to be triggered by self-update.
-
-### Option B: External Process Manager
-
-If the application runs under NSSM or Windows Service, the process manager restarts automatically after `os.Exit(0)`.
-
-**Pros:** Clean. No process management code.
-**Cons:** Requires external setup. Not portable.
-
-### Option C: Delayed Restart Script
-
-Write a temporary batch script that waits for the old process to exit, then starts the new exe.
-
-**Pros:** Guaranteed no port conflict.
-**Cons:** Fragile. Requires managing temp script files. Violates project convention of avoiding new scripts.
-
-**Recommendation:** Option A with port-binding retry in `main.go`.
-
----
-
-## Suggested Build Order (Phase Dependencies)
+## Suggested Build Order
 
 ```
-Phase 1: CI/CD Pipeline (NO Go code changes)
-  .goreleaser.yaml
-  .github/workflows/release.yml
-  Test: push v0.7.1-test tag, verify release appears with correct assets
-  Dependencies: NONE
-  Rationale: Establish the release pipeline first so there is something
-             to update from. Independent of all Go code changes.
+Phase 1: Instance Startup Notification (LOW complexity)
+  Files:
+    cmd/nanobot-auto-updater/main.go  -- add sendStartupNotification() function
+  Test: manual verification (start app, check Pushover notification)
+  Dependencies: NONE (uses existing Notifier, AutoStartResult)
+  Rationale: Simplest possible change. One function in main.go.
+             Tests the notification pipeline end-to-end before
+             adding the more complex Telegram monitor.
 
-Phase 2: SelfUpdater Core Component + Config
-  internal/selfupdate/selfupdate.go
-  internal/selfupdate/selfupdate_test.go
-  internal/config/selfupdate.go (or extend config.go)
-  Test: unit tests with mock source
-  Dependencies: go.mod update (add go-selfupdate dependency)
-  Rationale: Core logic first, then wire into existing system.
-             Config can be combined since it is small.
+Phase 2: Telegram Monitor Core Component
+  Files:
+    internal/telegram/monitor.go      -- TelegramMonitor struct
+    internal/telegram/patterns.go     -- Pattern constants and matching
+    internal/telegram/monitor_test.go -- Unit tests with mock subscriber
+  Test: unit tests with mock channel, verified patterns
+  Dependencies: NONE (self-contained package, uses LogBuffer interface)
+  Rationale: Pure logic with no integration points. Can be tested
+             fully with mocks. Pattern matching is the core value
+             and should be validated in isolation first.
 
-Phase 3: HTTP API Integration
-  internal/api/selfupdate.go (new handler file)
-  internal/api/server.go (route registration, add selfUpdater param)
-  internal/api/help.go (add endpoint docs)
-  cmd/nanobot-auto-updater/main.go (wire SelfUpdater)
-  Test: handler unit tests with mock SelfUpdater
-  Dependencies: Phase 2
-  Rationale: Wire everything together. Follows the exact pattern of
-             how TriggerHandler was integrated (Phase 28).
+Phase 3: Telegram Monitor Integration
+  Files:
+    cmd/nanobot-auto-updater/main.go  -- create monitors, wire into startup/shutdown
+  Test: manual E2E (start app with nanobot, verify monitor triggers)
+  Dependencies: Phase 1, Phase 2
+  Rationale: Integration is minimal (main.go only). Phase 1 already
+             proved the notification pipeline works. Phase 2 proved
+             the monitor logic works. This phase just connects them.
 
-Phase 4: Restart Mechanism + Notification Integration
-  Extend main.go shutdown logic (add restartCh to select)
-  Add self-update notifications (via existing Notifier)
-  Add .old file cleanup on startup
-  Test: E2E test with test-updater.exe pattern
-  Dependencies: Phase 3
-  Rationale: Restart mechanism is the riskiest part; isolate it so
-             it can be tested thoroughly.
-
-Phase 5: E2E Validation
-  Full integration test: trigger self-update via API, verify restart
-  Test: manual + automated E2E
+Phase 4: E2E Validation
+  Test: full integration test
   Dependencies: ALL previous phases
   Rationale: Final validation after all pieces are in place.
 ```
 
 ### Phase Ordering Rationale
 
-1. **CI/CD first** because it produces no code changes and can be validated independently. If the pipeline has issues (naming, permissions), fix them before writing any self-update code.
-2. **Core component second** because the API handler and main.go wiring both depend on the SelfUpdater type existing.
-3. **HTTP API third** because it is pure integration glue following well-established project patterns. Low risk.
-4. **Restart mechanism fourth** because it touches the shutdown sequence and is the only part that could break the running service. Isolated for focused testing.
-5. **E2E last** because it validates the complete flow end-to-end.
+1. **Startup notification first** because it is the simplest change (one function, no new packages, no new goroutines beyond the existing async notification pattern). It validates that the Pushover notification path works in the startup context before we build something more complex on top of it.
+
+2. **Telegram monitor core second** because it is a self-contained package with zero coupling to the rest of the application. It depends only on the `LogSubscriber` interface (satisfied by `LogBuffer`). Can be developed and tested in complete isolation.
+
+3. **Integration third** because it is just wiring in `main.go` -- create the monitors, store references, stop on shutdown. Minimal surface area for bugs.
+
+4. **E2E last** for final validation.
+
+### Phase Complexity Assessment
+
+| Phase | New Files | Modified Files | New Goroutines | Risk |
+|-------|-----------|---------------|----------------|------|
+| 1: Startup Notif | 0 | 1 (main.go) | 1 (async notif) | LOW |
+| 2: Telegram Core | 3 | 0 | 0 (tested via mocks) | LOW |
+| 3: Integration | 0 | 1 (main.go) | N (one per instance) | LOW-MED |
+| 4: E2E | 0 | 0 | 0 | LOW |
+
+---
+
+## Configuration Impact
+
+No new configuration is required. Both features use existing settings:
+
+- **Pushover notifications**: Uses existing `pushover.api_token` and `pushover.user_key` from `config.yaml`. If not configured, features degrade gracefully (same as network connectivity notifications).
+- **Telegram monitor timeout**: Hard-coded at 30 seconds. If configurability is needed later, add a `monitor.telegram_timeout` field to `config.yaml`.
+- **Log patterns**: Defined as constants in `internal/telegram/patterns.go`. If patterns vary across nanobot versions, make them configurable later.
 
 ---
 
 ## Scalability Considerations
 
-| Concern | Behavior | Notes |
-|---------|----------|-------|
-| Concurrent self-update requests | `atomic.Bool` prevents; only one at a time | Single-instance operation by nature |
-| Release asset download size | ~15MB (Go binary) | One-time download per update |
-| Restart downtime | ~2-5 seconds | Process restart + port binding retry |
-| GitHub API rate limits | 60 requests/hour (unauthenticated) | Only one check per API call; not a concern |
+| Concern | At 1 instance | At 5 instances | At 20 instances |
+|---------|--------------|----------------|-----------------|
+| Telegram monitors | 1 goroutine + 1 subscriber | 5 goroutines + 5 subscribers | 20 goroutines + 20 subscribers |
+| Startup notification | 1 Pushover message | 1 Pushover message | 1 Pushover message |
+| Pattern matching per entry | 2 string.Contains calls | 2 per monitor per entry | 2 per monitor per entry |
+| Memory per monitor | ~1 KB (state + timer) | ~5 KB total | ~20 KB total |
 
-Self-update is inherently a single-instance operation. There is no "scale" concern -- the updater updates itself, not multiple copies.
+String matching is O(n) per log entry where n is the length of the pattern. Since patterns are short (<30 chars) and log entries are typically <500 chars, this is negligible even at 20 instances.
+
+The subscriber channel capacity (100 entries) provides adequate buffering. If an instance produces >100 log lines in the time it takes to process one entry, some entries will be dropped (existing LogBuffer behavior). This is acceptable because the Telegram monitor only needs to see the trigger and success patterns once -- missing intermediate log lines does not affect correctness.
 
 ---
 
 ## Sources
 
-- [creativeprojects/go-selfupdate](https://github.com/creativeprojects/go-selfupdate) -- Primary library, actively maintained, Windows-tested, rollback support (HIGH confidence)
-- [go-selfupdate/update package docs](https://pkg.go.dev/github.com/creativeprojects/go-selfupdate/update) -- Apply() step-by-step including Windows .old file handling (HIGH confidence)
-- [go-selfupdate package docs](https://pkg.go.dev/github.com/creativeprojects/go-selfupdate) -- Full API reference for DetectLatest, UpdateSelf, UpdateTo (HIGH confidence)
-- [softprops/action-gh-release](https://github.com/softprops/action-gh-release) -- GitHub Action for creating releases (HIGH confidence)
-- [GoReleaser GitHub Actions docs](https://goreleaser.com/ci/actions/) -- Official workflow integration guide (HIGH confidence)
-- [GoReleaser goreleaser-action](https://github.com/goreleaser/goreleaser-action) -- Official GitHub Action (HIGH confidence)
-- [Stack Overflow: Self-update while running](https://stackoverflow.com/questions/55247194/how-to-self-update-application-while-running) -- Windows rename-running-exe pattern (MEDIUM confidence)
-- [inconshreveable/go-update](https://github.com/inconshreveable/go-update) -- Original library, unmaintained since 2016; NOT recommended, listed for comparison only (LOW confidence)
+- Code review of `internal/logbuffer/buffer.go` -- Write() fan-out, Subscribe()/Unsubscribe() lifecycle, Clear() does not affect subscribers (HIGH confidence)
+- Code review of `internal/lifecycle/starter.go` -- captureLogs() goroutine, StartNanobotWithCapture() flow (HIGH confidence)
+- Code review of `internal/instance/manager.go` -- StartAllInstances() return type AutoStartResult, graceful degradation pattern (HIGH confidence)
+- Code review of `internal/notification/manager.go` -- Async notification with panic recovery pattern (HIGH confidence)
+- Code review of `internal/notifier/notifier.go` -- Notifier interface, IsEnabled(), Notify() (HIGH confidence)
+- Code review of `cmd/nanobot-auto-updater/main.go` -- Component wiring, shutdown sequence (HIGH confidence)
+- `.planning/quick/260406-fge-PLAN.md` -- Context on nanobot Telegram connectivity issue, OpenClash proxy environment (HIGH confidence -- project documentation)
 
 ---
 
-*Architecture research for: v0.8 Self-Update milestone*
-*Researched: 2026-03-29*
+*Architecture research for: v0.9 Instance Startup Notifications and Telegram Connection Monitoring*
+*Researched: 2026-04-06*

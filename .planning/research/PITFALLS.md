@@ -1,511 +1,470 @@
-# Domain Pitfalls: Self-Update via GitHub Releases
+# Domain Pitfalls: Instance Startup Notifications and Telegram Connection Monitoring
 
-**Domain:** Adding self-update capability to a Windows Go application (nanobot-auto-updater)
-**Researched:** 2026-03-29
-**Overall confidence:** HIGH (verified with library source code and official docs)
+**Domain:** Adding log-pattern monitoring with timeout and instance lifecycle notifications to an existing Go Windows service (nanobot-auto-updater)
+**Researched:** 2026-04-06
+**Overall confidence:** HIGH (derived from codebase analysis and verified Go concurrency patterns)
 
 ## Critical Pitfalls
 
-Mistakes that cause rewrites, data loss, or bricked installations.
+Mistakes that cause rewrites, notification spam, or silent monitoring failures.
 
 ---
 
-### Pitfall 1: Windows Running Executable File Lock
+### Pitfall 1: Log Pattern Scanner Race with LogBuffer Write
 
 **What goes wrong:**
-On Windows, a running `.exe` is memory-mapped by the OS and cannot be overwritten or deleted. Attempting `os.Rename(newExe, currentExe)` while the process is running will fail with "Access Denied" or "The process cannot access the file because it is being used by another process."
+A new log-pattern scanner subscribes to LogBuffer to detect "Starting Telegram bot". The scanner goroutine reads LogEntry from the subscriber channel, but the LogBuffer's non-blocking send (`select + default`) can drop entries when the channel is full (capacity 100). If the "Starting Telegram bot" line is dropped, the Telegram connection monitor never activates, and a real connection failure goes undetected.
 
 **Why it happens:**
-- Windows locks the executable file for the entire lifetime of the process (not just during startup)
-- Unlike POSIX systems, Windows does not allow unlinking an open file
-- `go-update` works around this by renaming the running exe (which IS allowed) to `.exe.old`, then renaming the new exe into place
+- LogBuffer.Write() uses non-blocking send: slow subscribers get entries dropped at WARN level
+- The existing subscriber pattern was designed for SSE streaming (loss of one log line is acceptable for UI display)
+- A log-pattern monitor has different requirements: missing a single trigger line means the entire monitoring feature silently fails
+- The scanner goroutine might be slow because it does string matching on every entry, or because it was blocked sending a Pushover notification synchronously
 
-**Consequences:**
-- Update silently fails, application stays on old version
-- If retry logic is wrong, infinite retry loop consuming resources
-- Partial replacement leaves filesystem in inconsistent state
+**How to avoid:**
+1. The pattern scanner goroutine must NEVER block on anything other than reading from the subscriber channel -- no synchronous notification sends, no file I/O, no network calls
+2. When the trigger pattern is detected, hand off to a SEPARATE goroutine for the timeout monitoring and notification logic
+3. Consider using a dedicated channel (not the subscriber channel) for pattern detection, or use a callback hook in LogBuffer.Write() instead of the subscriber pattern
+4. If using the subscriber channel, ensure the scanner goroutine is always ready to receive (use `select` with only the channel read, no additional cases that could block)
 
-**Prevention:**
-Use `go-update` library which implements the correct Windows pattern internally:
-1. Write new binary to `.exe.new`
-2. Rename running `.exe` to `.exe.old` (Windows allows this even for running executables)
-3. Rename `.exe.new` to original `.exe` name
-4. On Windows, `.exe.old` cannot be deleted (still locked), so it is hidden instead
+**Warning signs:**
+- LogBuffer WARN logs showing "Subscriber channel full, dropping log" during instance startup
+- Telegram connection monitor never activates even though nanobot output contains "Starting Telegram bot"
+- Tests pass in isolation but fail under load (multiple instances starting simultaneously)
 
-**Detection:**
-- Log the result of every rename operation
-- If `os.Rename` returns an access-denied error, the process is likely still holding the file
-- Windows error code 32 (ERROR_SHARING_VIOLATION) indicates file-in-use
-
-**Phase to address:** Phase implementing self-update binary replacement (core update logic)
-
-**Sources:**
-- [go-update apply.go source](https://github.com/inconshreveable/go-update/blob/master/apply.go) -- Read full source, confirms rename-old/rename-new pattern (HIGH confidence)
-- [Stack Overflow: How to self-update application while running](https://stackoverflow.com/questions/55247194/how-to-self-update-application-while-running) -- Confirms rename trick (HIGH confidence)
-- [SuperUser: Why can I rename a running executable but not delete it](https://superuser.com/questions/488127/why-can-i-rename-a-running-executable-but-not-delete-it) -- Windows OS behavior explanation (HIGH confidence)
+**Phase to address:**
+Phase implementing log-pattern scanner -- the scanner must be designed from the start with the non-blocking constraint in mind.
 
 ---
 
-### Pitfall 2: Rollback Failure Leaves No Executable (Bricked Install)
+### Pitfall 2: time.AfterFunc Callback Accesses Shared State Without Mutex
 
 **What goes wrong:**
-The update process renames `app.exe` to `app.exe.old`, then tries to rename `app.new.exe` to `app.exe`. If the second rename fails (disk full, permission error, crash, power loss), there is NO `app.exe` at the expected path. The application cannot restart, and the rollback code never runs because the process has already exited or crashed.
+The Telegram connection monitor uses `time.AfterFunc(30*time.Second, callback)` to implement the 30-second timeout. The callback function captures a pointer to the monitor state (e.g., `monitor.pendingInstances`). The main goroutine and the AfterFunc callback goroutine both read/write this state without synchronization, causing a data race.
 
 **Why it happens:**
-- `go-update`'s Apply() function handles this internally and attempts rollback
-- But rollback itself can fail (double failure), leaving the filesystem with only `.exe.old`
-- Power loss or process crash between step 2 and step 3 has no recovery path
-- The `RollbackError(err)` function exists specifically to detect this double-failure case
+- `time.AfterFunc` runs its callback in a NEW goroutine (documented behavior)
+- The callback closure captures variables by reference -- the outer goroutine may have modified them by the time the callback runs
+- The existing NotificationManager (network monitor) already has this pattern correctly: `confirmAndNotify` is called from AfterFunc and accesses state protected by `nm.mu.Lock()`
+- But a NEW component may forget to follow this pattern
 
-**Consequences:**
-- Application cannot start at all after update attempt
-- Manual intervention required (rename `.exe.old` back to `.exe`)
-- If running as a service, the service fails to start on every reboot
-- Users may not know how to recover
+**How to avoid:**
+1. Any state accessed by the AfterFunc callback MUST be protected by a mutex (the same pattern as NotificationManager)
+2. Lock the mutex at the start of the callback, defer unlock
+3. Check if the state is still relevant (the instance may have already been stopped/restarted by the time the 30 seconds elapse)
+4. Follow the exact pattern from `internal/notification/manager.go`: `confirmAndNotify` acquires the lock, checks if the state is still current, then proceeds or aborts
 
-**Prevention:**
-1. Always use `go-update`'s `OldSavePath` option to keep the old binary at a known backup location (not just the default `.exe.old`)
-2. After `Apply()`, ALWAYS check `RollbackError(err)` -- this is the only way to detect the double-failure state
-3. Implement a startup validation check: on launch, check if a backup `.exe.bak` exists alongside the running exe. If the current version is invalid, the backup can be restored
-4. Consider adding a minimal "watchdog" batch script or separate process that checks if the main exe starts successfully, and restores from backup if not
+**Warning signs:**
+- `go test -race` detects data race in timeout callback
+- Intermittent nil pointer dereference in AfterFunc callback
+- Notification sent for a stale instance (instance was restarted during the 30s window)
 
-**Detection:**
-- `RollbackError(err)` returns non-nil when both the update and rollback failed
-- Application fails to start entirely after update
-- Service recovery shows "executable not found" error
-
-**Phase to address:** Phase implementing backup/rollback logic
-
-**Sources:**
-- [go-update apply.go source](https://github.com/inconshreveable/go-update/blob/master/apply.go) -- RollbackError type and double-failure handling documented in comments (HIGH confidence)
-- [cosmofy Issue #58: self-update overwrites running executable](https://github.com/metaist/cosmofy/issues/58) -- Real-world report of this failure mode (MEDIUM confidence)
+**Phase to address:**
+Phase implementing Telegram connection timeout monitor -- mutex must be in the initial design.
 
 ---
 
-### Pitfall 3: GitHub API Rate Limiting (60 req/hr Unauthenticated)
+### Pitfall 3: Notification Spam on Service Restart Loop
 
 **What goes wrong:**
-The self-update check endpoint calls `api.github.com/repos/{owner}/{repo}/releases/latest` to find the latest version. Without authentication, GitHub allows only 60 requests per hour per IP address. If the check is called too frequently (health endpoint polling, multiple instances behind same NAT), the API returns 403 and update checks fail silently.
+The nanobot-auto-updater service restarts (due to self-update or manual restart). Each restart triggers auto-start of all instances. Each instance start sends a Pushover notification. If the service restarts in a loop (e.g., self-update keeps failing), the user receives dozens of identical notifications within minutes. Pushover free tier limits at 7,500 messages/month -- a restart loop could exhaust this quota in hours.
 
 **Why it happens:**
-- GitHub unauthenticated rate limit is 60 requests/hour per originating IP (confirmed May 2025)
-- The application may have multiple components checking for updates independently
-- Other tools on the same machine may also consume GitHub API quota
-- No error handling for 403 rate-limit responses leads to "update check failed, no new version" being treated as "already up to date"
+- The new feature adds startup notifications for every instance on every application start
+- The existing v0.7 notification system only sends notifications on explicit update triggers (not on every startup)
+- There is no cooldown or deduplication for startup notifications
+- The self-update mechanism (v0.8) can cause restart loops if the new binary keeps crashing
+- Multiple instances = multiple notifications per restart
 
-**Consequences:**
-- Self-update feature silently stops working
-- Users unaware that updates are available
-- Debugging is difficult (no visible error, just no update detected)
+**How to avoid:**
+1. Implement a startup notification cooldown: track the last time a startup notification was sent per instance. If the same instance sent a notification less than N minutes ago, suppress the duplicate
+2. The cooldown value should be configurable, with a sensible default (e.g., 5 minutes)
+3. Consider aggregating all instance startup results into a SINGLE notification rather than one per instance
+4. On startup, send one summary notification ("3 instances started, 0 failed") instead of 3 individual notifications
+5. Store the cooldown state in memory (a simple `map[string]time.Time` with mutex) -- no need for persistence since service restart resets the cooldown (which is correct behavior)
 
-**Prevention:**
-1. Cache the latest release info locally with a TTL (e.g., check once per hour maximum, cache in a local file)
-2. Add explicit error handling for HTTP 403 responses -- log rate limit remaining headers (`X-RateLimit-Remaining`)
-3. Consider adding optional GitHub token support in config for higher limits (5000/hr authenticated)
-4. The existing `cron` scheduler (already in the project) can control check frequency
-5. Default to checking no more than once per hour, make the interval configurable
+**Warning signs:**
+- User reports receiving many notifications in short succession
+- Pushover API returns rate-limit errors (500ms between calls minimum)
+- Log shows notification sent every few seconds during a restart loop
 
-**Detection:**
-- Log `X-RateLimit-Remaining` header from every GitHub API response
-- If remaining count drops below 10, log a warning
-- If response is 403 with rate-limit headers, log an error with reset time
-
-**Phase to address:** Phase implementing GitHub release checker / version comparison
-
-**Sources:**
-- [GitHub API Rate Limits - Community Discussion #170662](https://github.com/orgs/community/discussions/170662) -- Confirms 60/hr unauthenticated, 5000/hr authenticated (HIGH confidence)
-- [GitHub Changelog May 2025: Updated rate limits](https://github.blog/changelog/2025-05-08-updated-rate-limits-for-unauthenticated-requests/) -- Official announcement (HIGH confidence)
+**Phase to address:**
+Phase implementing startup notifications -- the cooldown/aggregation must be designed before writing the first notification send call.
 
 ---
 
-### Pitfall 4: Concurrent Self-Update Requests Race Condition
+### Pitfall 4: Telegram Connection Monitor Activates on Historical Logs
 
 **What goes wrong:**
-Two API calls to the self-update endpoint arrive simultaneously. Both check "am I on latest version?", both see "no", both download the new binary, both attempt to replace the running executable. The second replacement can interfere with the first, leading to corruption or the second attempt failing because the file layout changed mid-operation.
+The log-pattern scanner subscribes to LogBuffer, and the Subscribe() method replays ALL historical entries first (see `subscriberLoop` in subscriber.go). If the LogBuffer already contains "Starting Telegram bot" from a previous run, the scanner detects it and starts a 30-second timeout monitor for a Telegram connection that is already established (or already failed). This results in a spurious "Telegram connection failed" notification 30 seconds after the auto-updater restarts.
 
 **Why it happens:**
-- The project already uses `sync/atomic.Bool` for `updateInProgress` in the nanobot trigger-update handler (Phase 28)
-- But the self-update endpoint is a NEW endpoint with its OWN concurrency control
-- If the concurrency guard is forgotten or uses a different lock than the nanobot update guard, both operations could run simultaneously
+- LogBuffer.Subscribe() sends history logs before real-time logs (by design, for SSE UI)
+- The subscriber loop iterates `GetHistory()` and sends each entry to the channel
+- The pattern scanner does not distinguish between historical entries and real-time entries
+- On application restart, LogBuffer is cleared (Clear() is called before start), BUT the race window exists: if the instance starts and outputs "Starting Telegram bot" before the scanner subscribes, the entry is already in the buffer and will be replayed
 
-**Consequences:**
-- Two downloads of the same binary wasting bandwidth
-- File corruption during replacement
-- One update overwriting the other's backup file
-- Inconsistent state (which version is actually running?)
+**How to avoid:**
+1. Add a `timestamp` or `sequence` filter: only process log entries that were written AFTER the scanner was initialized
+2. Store a `startTime time.Time` when the scanner is created, and ignore any LogEntry with `Timestamp.Before(startTime)`
+3. Alternatively, add a LogBuffer method that subscribes WITHOUT history replay (a "real-time only" subscribe)
+4. This is the most robust approach: the pattern scanner only cares about NEW log entries, never historical ones
 
-**Prevention:**
-1. Reuse the existing `Atomic.Bool` pattern from `internal/instance` for self-update guard
-2. Consider: should nanobot update and self-update be mutually exclusive? (yes -- both may stop/start instances)
-3. Use a SINGLE mutex for ALL update operations (nanobot update + self-update)
-4. Return HTTP 409 Conflict immediately if another update is in progress (existing pattern from trigger-update handler)
+**Warning signs:**
+- After restarting auto-updater, a spurious "Telegram connection failed" notification arrives 30 seconds later
+- The notification mentions an instance that has been running successfully for hours
+- The 30-second timeout fires for a Telegram connection that is actually working
 
-**Detection:**
-- `go test -race` catches data races in tests
-- Log warnings when concurrent access is detected
-- API returns 409 status code to caller
-
-**Phase to address:** Phase implementing self-update HTTP API endpoint
-
-**Sources:**
-- Existing codebase: `internal/api/trigger.go` line ~106 already returns 409 for concurrent nanobot updates (HIGH confidence)
-- Existing codebase: `internal/instance` uses `sync/atomic.Bool` for update guard (HIGH confidence)
+**Phase to address:**
+Phase implementing log-pattern scanner -- the history-replay filter must be part of the initial scanner design.
 
 ---
 
-### Pitfall 5: Download Verification Failure (Corrupted Binary)
+### Pitfall 5: Instance Stop/Restart During Active Telegram Monitor
 
 **What goes wrong:**
-The downloaded binary is corrupted (network error, partial download, man-in-the-middle) and the application replaces itself with a broken executable. The new version crashes on startup, and depending on the backup strategy, the user may have lost the working version.
+The Telegram connection monitor is active (waiting for "connected" pattern within 30 seconds). During this window, the user triggers an update (via API or cron). The update stops the instance, which kills the nanobot process. The log capture goroutine detects EOF and exits. The "connected" pattern never appears. After 30 seconds, the timeout fires and sends a "Telegram connection failed" notification -- but the failure is EXPECTED because the instance was intentionally stopped.
 
 **Why it happens:**
-- Network interruptions during download can leave partial files
-- DNS spoofing or MITM attacks could serve a malicious binary
-- GitHub CDN redirects can fail mid-stream
-- `go-update` does checksum verification but ONLY if `opts.Checksum` is provided -- it is optional, not mandatory
+- The update trigger (cron or API) does not coordinate with the Telegram connection monitor
+- The monitor has no awareness of instance lifecycle (stop/update/start)
+- The 30-second timeout cannot distinguish between "genuinely failed to connect" and "instance was stopped for update"
+- The stop/start cycle takes ~30-60 seconds, which overlaps perfectly with the 30-second monitor window
 
-**Consequences:**
-- Application replaced with corrupted binary
-- Service enters crash loop
-- Without proper backup, manual recovery required
-- In worst case: malicious binary executed
+**How to avoid:**
+1. The Telegram connection monitor must be notified when an instance is about to be stopped
+2. Implement a cancellation mechanism: when StopForUpdate() is called, cancel any active Telegram monitor for that instance
+3. Use `context.Context` cancellation: pass a cancellable context to the monitor, and cancel it when the instance stops
+4. In the AfterFunc callback, check if the monitor was cancelled before sending the notification
+5. The monitor should also be cancelled when the instance is restarted (a new monitor starts for the new startup)
 
-**Prevention:**
-1. ALWAYS pass `opts.Checksum` to `go-update`'s `Apply()` -- never skip verification
-2. As of June 2025, GitHub Releases API returns `asset.digest` (SHA256) for every uploaded asset -- use this as the checksum source
-3. If `asset.digest` is unavailable (older releases), also upload a `checksums.txt` file as a release asset
-4. Verify checksum BEFORE calling `Apply()`, not after (go-update does this internally when Checksum is provided)
-5. Download to a temp file first, verify hash, then pass to `Apply()`
+**Warning signs:**
+- Spurious "Telegram connection failed" notifications arriving ~30 seconds after a cron-triggered update
+- Notifications arrive during the update window (between stop and start)
+- Users confused by failure notifications when the update eventually succeeds
 
-**Detection:**
-- `go-update` returns checksum mismatch error immediately
-- Log the expected vs actual hash on failure
-- Never proceed with update if hash verification fails
-
-**Phase to address:** Phase implementing download + verification logic
-
-**Sources:**
-- [go-update doc.go](https://github.com/inconshreveable/go-update/blob/master/doc.go) -- "go-update validates SHA256 checksums by default" when Checksum is provided (HIGH confidence)
-- [GitHub Changelog June 2025: Releases now expose digests](https://github.blog/changelog/2025-06-03-releases-now-expose-digests-for-release-assets/) -- Official feature announcement (HIGH confidence)
-- [GitHub Community Discussion #23512: Release checksums](https://github.com/orgs/community/discussions/23512) -- How to retrieve checksums via API (HIGH confidence)
+**Phase to address:**
+Phase implementing Telegram connection timeout -- the cancellation mechanism must be designed alongside the timeout.
 
 ---
 
-### Pitfall 6: Version Comparison Logic Error
+### Pitfall 6: Scanner Goroutine Leak on Instance Restart
 
 **What goes wrong:**
-The application checks the latest GitHub Release tag and decides whether to update. String comparison of version numbers (`"v0.9" > "v0.10"` is TRUE in lexicographic order) leads to skipping valid updates or unnecessarily re-downloading the same version.
+Each time an instance starts, a new log-pattern scanner goroutine is created. When the instance is stopped and restarted, a NEW scanner is created but the OLD one is never properly cleaned up. Over multiple update cycles, goroutines accumulate. After 100 update cycles, there are 100 idle scanner goroutines per instance, each holding a subscriber channel in the LogBuffer.
 
 **Why it happens:**
-- Lexicographic string comparison does not work for semantic versions
-- Tag format may vary (`v0.8.0` vs `0.8.0` vs `v0.8`)
-- Pre-release versions need special handling (`v0.9.0-alpha` vs `v0.9.0`)
-- The `Version` variable in `main.go` is set via ldflags at build time -- if not set, it defaults to `"dev"`, which will always compare incorrectly
+- The existing LogBuffer.Unsubscribe() exists but requires the caller to track the channel and call Unsubscribe
+- If the scanner goroutine is blocked on something (e.g., waiting for the 30-second timeout), it cannot respond to the Unsubscribe cancellation
+- The captureLogs goroutine already uses `detachedCtx` (context.Background()) to survive parent cancellation -- this means the scanner goroutine attached to it may also outlive expectations
+- The existing pattern in InstanceLifecycle.StartAfterUpdate() calls `logBuffer.Clear()` but does NOT unsubscribe existing subscribers
 
-**Consequences:**
-- Self-update never triggers (thinks it's already up to date)
-- Self-update triggers every check (thinks it needs to update)
-- Pre-release versions installed on production systems
+**How to avoid:**
+1. Use context.Context for scanner lifecycle management (same pattern as captureLogs)
+2. When creating a scanner, pass a cancellable context. Store the cancel function alongside the scanner
+3. When the instance stops or restarts, cancel the context. The scanner goroutine should check `ctx.Done()` and exit cleanly
+4. In the scanner goroutine, always `defer LogBuffer.Unsubscribe(ch)` to ensure cleanup
+5. Track active scanners per instance in InstanceLifecycle: `scannerCancel context.CancelFunc` field
 
-**Prevention:**
-1. Use `creativeprojects/go-selfupdate` which has built-in semver comparison, OR implement proper semver parsing with `golang.org/x/mod/semver`
-2. Strip the `v` prefix before comparison
-3. Always set `Version` via ldflags in CI/CD (`-X main.Version={{tag}}`)
-4. Handle the `"dev"` case: if current version is `"dev"`, always allow update
-5. Only consider full releases, not pre-releases (GitHub API supports `prerelease` flag)
+**Warning signs:**
+- `runtime.NumGoroutine()` steadily increases after each update cycle
+- LogBuffer WARN logs showing "Subscriber channel full" with increasing channel capacity
+- Memory usage grows over days/weeks of operation
 
-**Detection:**
-- Unit tests with version comparison edge cases: v0.9.0 vs v0.10.0, v0.8.0 vs v0.8.0
-- Log the comparison result: "current=v0.7.0, latest=v0.8.0, update_needed=true"
-
-**Phase to address:** Phase implementing version checker
-
-**Sources:**
-- [creativeprojects/go-selfupdate](https://github.com/creativeprojects/go-selfupdate) -- Built-in semver comparison (HIGH confidence)
-- [Existing codebase: cmd/nanobot-auto-updater/main.go line 28](file://cmd/nanobot-auto-updater/main.go) -- `var Version = "dev"` (HIGH confidence)
+**Phase to address:**
+Phase implementing log-pattern scanner -- context lifecycle must be designed in the initial scanner struct.
 
 ---
 
 ## Moderate Pitfalls
 
-### Pitfall 7: Windows `.exe.old` File Accumulation
+### Pitfall 7: String Matching Too Narrow or Too Broad
 
 **What goes wrong:**
-After each successful self-update, Windows cannot delete the old `.exe.old` file because the process is still running. `go-update` hides it instead. Over time, hidden `.old` files accumulate in the application directory, consuming disk space. After many updates, this could be significant.
+The scanner looks for the exact string "Starting Telegram bot" but nanobot outputs a slightly different format in a new version (e.g., "Starting telegram bot" with lowercase, or "Telegram bot starting" with different word order). Alternatively, the pattern is too broad (e.g., just "Telegram") and matches log lines that are not the actual startup indicator.
 
-**Prevention:**
-1. On application startup, check for `.exe.old` or `.exe.bak` files and attempt cleanup
-2. The old file can be deleted on startup because the process is now running from the NEW binary, and the OLD binary is no longer in use
-3. Implement startup cleanup: `os.Remove(exePath + ".old")` during initialization
+**How to avoid:**
+1. Use `strings.Contains()` with a case-insensitive match for robustness: check for "starting telegram" or "telegram bot" as a substring
+2. Make the trigger pattern configurable in config.yaml so it can be updated without code changes
+3. Log every pattern match at DEBUG level so mismatches can be diagnosed
+4. Test against actual nanobot output -- look at real log lines in the LogBuffer to verify the exact format
+5. Consider matching on multiple patterns: "Starting Telegram bot" to start monitoring, AND a positive pattern like "Telegram bot connected" or "Bot @xxx started" to detect success
 
-**Sources:**
-- [go-update apply.go source](https://github.com/inconshreveable/go-update/blob/master/apply.go) -- "On Windows, the removal of /path/to/target.old always fails, so instead Apply hides the old file" (HIGH confidence)
-- [go-update Issue #1: old exe not deleted on Windows](https://github.com/inconshreveable/go-update/issues/1) -- Known issue (HIGH confidence)
+**Warning signs:**
+- Telegram monitor never activates even though nanobot starts its Telegram channel
+- False positives from unrelated log lines mentioning "Telegram"
+
+**Phase to address:**
+Phase implementing log-pattern scanner -- pattern should be verified against real nanobot output.
 
 ---
 
-### Pitfall 8: GitHub Actions Workflow Not Triggering on Tag Push
+### Pitfall 8: 30-Second Timeout Too Short or Too Long
 
 **What goes wrong:**
-Developer pushes a tag (`git tag v0.8.0 && git push --tags`) but the GitHub Actions workflow never runs. The release binary is never built or published.
+The 30-second timeout for Telegram connection is a fixed guess. Under OpenClash proxy (the known environment), the connection may take longer due to proxy hops. If too short, every startup triggers a false failure notification. If too long, real failures are not detected promptly, and the user is unaware for 30+ seconds.
 
-**Why it happens:**
-- `on.push.tags` pattern does not match the tag format (e.g., using `v*` but pushing `0.8.0`)
-- Tag pushed by another workflow (bot) does not re-trigger workflows (GitHub anti-loop protection)
-- Missing `permissions: contents: write` in workflow YAML
-- Using `on.release` instead of `on.push.tags` -- release must be created separately first
+**How to avoid:**
+1. Make the timeout configurable in config.yaml (e.g., `telegram.monitor_timeout: 30s`)
+2. Start with 30 seconds as default but allow override
+3. Measure actual connection times over a week of operation and tune
+4. Consider a two-phase approach: warn at 15 seconds, fail at 30 seconds
+5. The existing OpenClash proxy environment may cause higher latency -- account for this
 
-**Prevention:**
-1. Use `on.push.tags: ['v*']` pattern (matches `v0.8.0`, `v0.9.0`, etc.)
-2. Add `permissions: contents: write` to workflow
-3. Test the workflow with a `workflow_dispatch` trigger before relying on tag push
-4. Always push tags from local machine (`git tag v0.8.0 && git push origin v0.8.0`), not from CI
-
-**Sources:**
-- [GitHub Community Discussion #27028: Workflow not triggering with tag push](https://github.com/orgs/community/discussions/27028) -- Common issue with tag triggers (HIGH confidence)
-- [GitHub Docs: Events that trigger workflows](https://docs.github.com/actions/using-workflows/events-that-trigger-workflows) -- Official docs (HIGH confidence)
+**Phase to address:**
+Phase implementing Telegram connection monitor.
 
 ---
 
-### Pitfall 9: Missing `GOOS`/`GOARCH` in CI Build Step
+### Pitfall 9: Notification Not Sent on Instance Startup FAILURE
 
 **What goes wrong:**
-GitHub Actions runs on Linux runners by default. Without explicitly setting `GOOS=windows GOARCH=amd64`, the build produces a Linux binary. The binary is uploaded to GitHub Release, downloaded by the self-updater, and the application crashes because it is not a Windows executable.
+The startup notification feature is designed to notify on success AND failure. But the failure path is easy to miss: if `StartNanobotWithCapture()` returns an error (process exits immediately, port verification fails), the notification must still be sent. The error handling in `StartAllInstances()` catches the error but the notification hook may not be wired into the error path.
 
-**Why it happens:**
-- Default runner OS is `ubuntu-latest`
-- `go build` without env vars builds for the host platform
-- The binary LOOKS valid (same size, no obvious corruption) but won't run on Windows
-- No validation step in the workflow to verify the binary is a Windows PE executable
+**How to avoid:**
+1. The notification must be sent from the same location that handles the startup error (in StartAllInstances or InstanceLifecycle)
+2. Do NOT rely on the caller to send the notification -- wire it directly into the start flow
+3. Follow the existing pattern from TriggerHandler: the notification is sent whether the operation succeeds or fails
+4. Test the failure path explicitly: start an instance with an invalid command and verify the failure notification arrives
 
-**Prevention:**
-1. Explicitly set `GOOS: windows` and `GOARCH: amd64` as env vars in the build step
-2. Add a validation step: `file nanobot-auto-updater.exe` should show "PE32+ executable"
-3. Consider using GoReleaser which handles cross-compilation automatically
-4. For this project (single target: Windows amd64), manual `go build` with explicit env vars is simpler than GoReleaser
-
-**Sources:**
-- [Rob Allen: Using GitHub Actions to add Go binaries to a release](https://akrabat.com/using-github-actions-to-add-go-binaries-to-a-release/) -- Practical guide (MEDIUM confidence)
-- [GoReleaser vs Manual Build Discussion](https://www.reddit.com/r/golang/comments/zwb5zl/is_goreleaser_still_the_way_to_deploy_a_binary_to/) -- Community consensus (MEDIUM confidence)
+**Phase to address:**
+Phase implementing startup notifications.
 
 ---
 
-### Pitfall 10: Version Not Injected via ldflags in CI Build
+### Pitfall 10: Pushover Notification Send Blocks Startup Flow
 
 **What goes wrong:**
-The GitHub Actions workflow compiles the binary without setting the `Version` variable via ldflags. The binary reports version `"dev"` (the default in `main.go`). The self-update checker compares `"dev"` against GitHub Release versions and the comparison logic breaks or always triggers updates.
+The Pushover notification is sent synchronously during instance startup. The HTTP call to Pushover API takes 1-5 seconds. For multiple instances starting sequentially, this adds 1-5 seconds PER INSTANCE to the total startup time. With 3 instances, that is 3-15 seconds of additional delay.
 
 **Why it happens:**
-- The `go build` command in CI does not include `-ldflags "-X main.Version=v0.8.0"`
-- Developer forgets to extract the version from the git tag
-- The tag name format differs from what the ldflags extraction expects
+- The existing pattern in TriggerHandler and NotificationManager already uses async goroutines for notification sends
+- But the NEW startup notification code may be placed in a synchronous path (e.g., inside StartAllInstances loop)
+- The existing pattern has the correct solution: `go func() { defer recover(); notifier.Notify() }()`
 
-**Prevention:**
-1. In the workflow, extract the tag name: `VERSION=${GITHUB_REF_NAME}` (available in tag-triggered workflows)
-2. Pass to build: `go build -ldflags "-X main.Version=$VERSION" -o nanobot-auto-updater.exe ./cmd/nanobot-auto-updater`
-3. Add a post-build verification step: run `./nanobot-auto-updater.exe --version` and check output matches the tag
-4. Handle the `"dev"` default in version comparison: treat `"dev"` as always needing update
+**How to avoid:**
+1. ALWAYS send Pushover notifications asynchronously using a goroutine with panic recovery
+2. Follow the exact pattern from `internal/notification/manager.go` sendNotification():
+   ```go
+   go func() {
+       defer func() {
+           if r := recover(); r != nil {
+               logger.Error("notification goroutine panic", "panic", r, "stack", string(debug.Stack()))
+           }
+       }()
+       if err := notifier.Notify(title, message); err != nil {
+           logger.Error("notification failed", "error", err)
+       }
+   }()
+   ```
+3. This is a non-negotiable pattern in this codebase -- violation breaks the "non-blocking" principle
 
-**Sources:**
-- Existing codebase: `cmd/nanobot-auto-updater/main.go` line 28 -- `var Version = "dev"` (HIGH confidence)
-- Existing codebase: `Makefile` or `build.ps1` may already have ldflags patterns (MEDIUM confidence)
+**Phase to address:**
+Phase implementing startup notifications -- must be async from the first line of implementation.
 
 ---
 
-### Pitfall 11: Self-Update Triggers During Nanobot Instance Operation
+### Pitfall 11: Multiple Simultaneous Telegram Monitors for Same Instance
 
 **What goes wrong:**
-Self-update is triggered while nanobot instances are running and being managed. The updater replaces its own binary, then needs to restart. During restart, nanobot instances lose their parent process and may be left in an inconsistent state (running but unmanaged, or killed unexpectedly).
+Instance starts, scanner detects "Starting Telegram bot", starts a 30-second Telegram connection monitor. Before the 30 seconds expire, the instance crashes and restarts. A NEW "Starting Telegram bot" line is detected. A SECOND monitor is started for the same instance. After 30 seconds, BOTH monitors fire -- the first one sends a "failed" notification (because the original connection attempt died with the crash), and the second one may send another notification.
 
-**Why it happens:**
-- Self-update and nanobot instance management share the same process
-- Restarting the updater means all goroutines (health monitor, network monitor, instance management) stop
-- Instances started via `cmd /c` may or may not survive parent process exit depending on how they were launched
+**How to avoid:**
+1. Track the active monitor per instance using a map: `map[string]context.CancelFunc` (instance name -> cancel function)
+2. When a new "Starting Telegram bot" is detected, cancel the previous monitor for that instance BEFORE starting a new one
+3. The AfterFunc callback should check if it is still the "current" monitor before sending notification
+4. Use a generation counter or unique ID per monitor to detect stale callbacks
 
-**Prevention:**
-1. Before self-update, stop all managed nanobot instances gracefully (reuse existing `StopAllInstances` logic)
-2. Perform the self-update binary replacement
-3. Restart the updater process (which will auto-start instances on boot via existing Phase 24 logic)
-4. Add a "maintenance mode" flag to prevent new operations during self-update
-5. Document that self-update causes a brief downtime of instance management
-
-**Sources:**
-- Existing codebase: `internal/instance` -- `StartAllInstances` / `StopAllInstances` already exist (HIGH confidence)
-- Existing codebase: `cmd/nanobot-auto-updater/main.go` -- Auto-start on launch is already implemented (HIGH confidence)
+**Phase to address:**
+Phase implementing Telegram connection monitor.
 
 ---
 
 ## Minor Pitfalls
 
-### Pitfall 12: Antivirus/SmartScreen Blocking New Binary
+### Pitfall 12: LogBuffer.Clear() Destroys Scanner Context
 
 **What goes wrong:**
-Windows Defender or SmartScreen flags the newly downloaded binary as unrecognized and blocks execution. The self-updater replaces the exe, restarts, but the new version is quarantined or blocked.
+InstanceLifecycle.StartAfterUpdate() calls `logBuffer.Clear()` before starting the instance. This resets the buffer but does NOT affect subscribers (subscribers map unchanged per the code comment). However, if the scanner relied on the buffer being non-empty for some initialization logic, Clear() could break assumptions.
 
 **Prevention:**
-- Log antivirus interference explicitly
-- Consider code signing the binary (long-term)
-- Document that users may need to whitelist the application
-- The rollback mechanism should detect "binary quarantined" and restore from backup
+- Do not rely on LogBuffer contents for scanner initialization
+- The scanner should use the real-time stream exclusively (or with the timestamp filter described in Pitfall 4)
+- Clear() is fine -- it clears history but subscribers keep receiving new entries
 
 ---
 
-### Pitfall 13: GitHub Release Asset Naming Convention Mismatch
+### Pitfall 13: Missing Notifier Nil Check
 
 **What goes wrong:**
-The self-updater looks for an asset named `nanobot-auto-updater-windows-amd64.exe` in the GitHub Release, but the CI workflow uploads it as `nanobot-auto-updater.exe` or `nanobot-auto-updater_windows_x86_64.exe`. The download fails because the expected asset name does not exist.
+The startup notification code calls `notifier.Notify()` but the notifier may be nil (if Pushover is not configured). The existing notifier handles this internally (`IsEnabled()` check in Notify), but if a DIFFERENT notification interface is used without the nil-check, a nil pointer dereference occurs.
 
 **Prevention:**
-1. Define the asset naming convention early and document it
-2. Use the same naming pattern in both CI workflow (upload) and self-update checker (download)
-3. Consider searching release assets by pattern rather than exact name
-4. Test the full CI-to-self-update cycle end-to-end
+- Follow the existing pattern: check `if notifier != nil` before calling, AND use the Notifier interface that handles IsEnabled() internally
+- See `internal/api/trigger.go` line 77: `if h.notifier != nil { ... }`
 
 ---
 
-### Pitfall 14: Process Restart After Self-Update
+### Pitfall 14: Test-only Notifier Mock Missing New Methods
 
 **What goes wrong:**
-After replacing the binary, the application needs to restart to use the new version. Using `exec.Command(os.Args[0])` to relaunch itself may fail because the old process's binary path now points to the new binary. On Windows, the old process is still running from the old (renamed) binary, but `os.Args[0]` may point to the new name.
+The existing test mock for Notifier (recordingNotifier in trigger_test.go) implements `Notify(title, message) error`. If new notification methods are added to the Notifier interface (e.g., a specialized startup notification method), existing tests break because the mock no longer satisfies the interface.
 
 **Prevention:**
-1. Use the existing binary path (from `os.Executable()`) to find the new binary location
-2. Start the new process BEFORE exiting the old one
-3. Ensure the new process starts successfully before the old process exits
-4. Consider: `exec.Command(exePath, os.Args[1:]...)` where `exePath` is resolved from `os.Executable()`
-5. On Windows, the new process can start while the old process is still running (different binary files)
-
-**Sources:**
-- [Go Forum: Auto restart after self-update](https://forum.golangbridge.org/t/auto-restart-after-self-update/34792) -- Community discussion with code examples (MEDIUM confidence)
+- Keep the Notifier interface minimal: single method `Notify(title, message) error`
+- Build notification content (title, message formatting) at the caller level, not in the Notifier
+- Do NOT add specialized methods like `NotifyStartup()` or `NotifyTelegramFailure()` to the interface
+- The duck-typing pattern in this codebase explicitly favors minimal single-method interfaces
 
 ---
 
-### Pitfall 15: Config File Compatibility Across Versions
+## Technical Debt Patterns
 
-**What goes wrong:**
-New version of the updater expects different config fields or structure. After self-update, the application fails to start because the existing `config.yaml` does not match the new version's expectations.
+Shortcuts that seem reasonable but create long-term problems.
 
-**Prevention:**
-1. Maintain config backward compatibility (project already does this well with legacy mode detection)
-2. Add new config fields with sensible defaults (never required without migration)
-3. Test new version against OLD config files in CI
-4. Document any config changes in release notes
-
-**Sources:**
-- Existing codebase: `internal/config` -- Already implements backward compatibility (HIGH confidence)
-
----
-
-## Phase-Specific Warnings
-
-| Phase Topic | Likely Pitfall | Mitigation | Severity |
-|-------------|---------------|------------|----------|
-| GitHub Actions CI/CD workflow | Missing `GOOS=windows GOARCH=amd64` (Pitfall 9) | Explicit env vars in build step + `file` validation | HIGH |
-| GitHub Actions CI/CD workflow | Version not injected via ldflags (Pitfall 10) | Extract tag name, pass to `-ldflags`, verify output | HIGH |
-| GitHub Actions CI/CD workflow | Workflow not triggering on tag push (Pitfall 8) | Use `on.push.tags: ['v*']`, test with `workflow_dispatch` | HIGH |
-| GitHub Release checker | API rate limiting at 60 req/hr (Pitfall 3) | Cache release info with 1hr TTL, log rate limit headers | HIGH |
-| GitHub Release checker | Version comparison logic error (Pitfall 6) | Use semver library, handle "dev" default | HIGH |
-| Self-update binary replacement | Windows file lock on running exe (Pitfall 1) | Use `go-update` library which handles this correctly | CRITICAL |
-| Self-update binary replacement | Rollback failure leaves no exe (Pitfall 2) | Use `OldSavePath`, check `RollbackError`, startup cleanup | CRITICAL |
-| Self-update binary replacement | Download verification failure (Pitfall 5) | Always pass Checksum to `Apply()`, use `asset.digest` | CRITICAL |
-| Self-update HTTP API | Concurrent update race condition (Pitfall 4) | Reuse `Atomic.Bool` pattern, mutual exclusion with nanobot update | HIGH |
-| Self-update HTTP API | Process restart after update (Pitfall 14) | Use `os.Executable()` for path, start new before exit | MEDIUM |
-| Backup/rollback | `.exe.old` file accumulation (Pitfall 7) | Cleanup old files on startup | LOW |
-| Backup/rollback | Self-update during instance operation (Pitfall 11) | Stop instances first, restart after update | MEDIUM |
-| Integration | Antivirus blocking new binary (Pitfall 12) | Document, log, rollback on failure | LOW |
-| Integration | Asset naming mismatch (Pitfall 13) | Document naming convention, test full cycle | MEDIUM |
-| Integration | Config incompatibility (Pitfall 15) | Backward-compatible config, test with old config | LOW |
+| Shortcut | Immediate Benefit | Long-term Cost | When Acceptable |
+|----------|-------------------|----------------|-----------------|
+| Fixed 30s timeout hardcoded | Faster to implement | Cannot tune for proxy environments, false alarms | MVP only, then make configurable |
+| Per-instance notification (no aggregation) | Simpler code | 3 instances = 3 notifications, spammy | Never -- always aggregate into single notification |
+| Scanner pattern hardcoded in Go | No config parsing needed | Pattern change requires code rebuild | MVP only, then make configurable |
+| No notification deduplication | Simpler code | Restart loop floods user | Never -- at minimum, track last-sent timestamps |
+| Skip cancel on instance stop | Less wiring | Spurious failure notifications during updates | Never -- must cancel monitors on stop |
 
 ## Integration Gotchas
 
-Mistakes when connecting self-update to the existing system.
+Common mistakes when connecting to existing components.
 
 | Integration Point | Common Mistake | Correct Approach |
 |-------------------|----------------|------------------|
-| Self-update + nanobot update | Both run simultaneously | Single mutex for ALL update operations (both types) |
-| Self-update + instance management | Update without stopping instances | Stop all instances before self-update, auto-start after restart |
-| Self-update API + auth | New endpoint without auth | Reuse existing Bearer Token auth middleware from Phase 28 |
-| Self-update + notifications | No notification on self-update | Reuse existing Pushover notifier for self-update success/failure |
-| Self-update + update logs | Self-update not logged | Record self-update in existing UpdateLog system |
-| CI/CD + version injection | Build without ldflags | Always pass `-ldflags "-X main.Version=$TAG"` |
-| CI/CD + checksums | No checksum uploaded as release asset | Use GitHub native `asset.digest` (since June 2025) or upload `checksums.txt` |
-| CI/CD + asset naming | Binary name mismatch between upload and download | Define and document naming convention: `nanobot-auto-updater-windows-amd64.exe` |
+| LogBuffer + scanner | Use Subscribe() with history replay | Add timestamp filter or real-time-only subscribe |
+| NotificationManager + startup | Send notification synchronously in start loop | Async goroutine with panic recovery (existing pattern) |
+| InstanceLifecycle + Telegram monitor | No coordination between stop and monitor | Cancel active monitor on StopForUpdate() |
+| Notifier + startup notification | Add new methods to Notifier interface | Keep single Notify(title, message) interface, format at caller |
+| AutoStart + notification | Send one notification per instance | Aggregate all results into single summary notification |
+| time.AfterFunc + state | Access monitor state without mutex | Lock mutex in callback, same as NotificationManager pattern |
+| Config + new features | Add required fields without defaults | All new config fields must have sensible defaults for backward compat |
+
+## Performance Traps
+
+Patterns that work at small scale but fail as usage grows.
+
+| Trap | Symptoms | Prevention | When It Breaks |
+|------|----------|------------|----------------|
+| Per-line string scan on every log entry | CPU spike during verbose nanobot output | Only scan lines written AFTER "Starting Telegram bot" detected -- stop scanning once monitor is active | 10+ instances with verbose logging |
+| Subscriber channel (capacity 100) for pattern scanner | Dropped trigger lines under burst logging | Use dedicated callback or larger channel for scanner | Burst of 100+ lines in <1ms (nanobot startup output) |
+| Unbounded goroutine creation for notification sends | Goroutine leak over weeks of operation | Use sync.WaitGroup or worker pool for notification goroutines | After weeks of continuous operation with frequent restarts |
+| strings.Contains on every log line for all patterns | Linear scan overhead per line | Compile pattern once, short-circuit after trigger found | Minimal impact -- strings.Contains is fast for short patterns |
+
+## Security Mistakes
+
+Domain-specific security issues.
+
+| Mistake | Risk | Prevention |
+|---------|------|------------|
+| Log injection: nanobot output contains crafted "Starting Telegram bot" | False trigger of Telegram monitor, spurious notifications | Trust nanobot output (same machine, no external injection vector). LOW risk. |
+| Pushover token logged | Credential exposure | Never log Pushover tokens; existing codebase handles this correctly |
+| Notification content includes sensitive data | Information leak via Pushover | Keep notification content minimal: instance name, status, no ports/commands |
+
+## UX Pitfalls
+
+Common user experience mistakes in this domain.
+
+| Pitfall | User Impact | Better Approach |
+|---------|-------------|-----------------|
+| Success notification on every startup | Notification fatigue, user ignores notifications | Only notify on failure (existing pattern from v0.5: "conditional notification mode") |
+| No notification when Telegram fails silently | User unaware bot is down for hours | This IS the feature we are building -- ensure it works reliably |
+| Vague notification message: "Telegram connection failed" | User does not know which instance or what to do | Include instance name, port, and hint: "Check proxy/network settings" |
+| Notification arrives 30s after failure (too slow) | User already aware via other means | 30s is acceptable for background monitoring; not a real-time alert system |
 
 ## "Looks Done But Isn't" Checklist
 
 Things that appear complete but are missing critical pieces.
 
-- [ ] **Self-update replaces binary** -- But does it verify checksum? Without `opts.Checksum`, go-update skips verification
-- [ ] **Rollback restores old version** -- But does it check `RollbackError(err)`? The double-failure case is silent without this check
-- [ ] **CI builds and uploads binary** -- But is `GOOS=windows GOARCH=amd64` set? Linux runners build Linux binaries by default
-- [ ] **CI sets version via ldflags** -- But does `--version` output match the tag? Verify post-build
-- [ ] **Self-update API works** -- But is it protected by Bearer Token auth? Unprotected endpoint = anyone can trigger update
-- [ ] **Self-update checks for new version** -- But is it rate-limited? GitHub 60/hr limit can be hit quickly
-- [ ] **Self-update restarts process** -- But do instances survive? Stop instances before self-update, auto-start after restart
-- [ ] **Old binary cleaned up** -- But on Windows, `.exe.old` persists until next startup. Cleanup must happen on startup, not after update
-- [ ] **Workflow triggers on tag push** -- But does `on.push.tags` pattern match? `v*` vs `V*` vs `*`
+- [ ] **Startup notification sends on success**: But does it ALSO send on failure? Verify both paths tested
+- [ ] **Telegram monitor detects "Starting Telegram bot"**: But does it handle case sensitivity? Test with actual nanobot output
+- [ ] **30-second timeout fires on failure**: But is it cancelled when instance stops? Verify no spurious notification during update
+- [ ] **Scanner subscribes to LogBuffer**: But does it ignore historical entries? Test after application restart
+- [ ] **Notification is async (goroutine)**: But does it have panic recovery? Every goroutine MUST have `defer recover()`
+- [ ] **Notifier nil check**: But does the new code path check `if notifier != nil`? Follow existing pattern
+- [ ] **Multiple instances**: Does the code handle 2+ instances starting simultaneously? Test with multi-instance config
+- [ ] **Pushover not configured**: Does the feature gracefully degrade when Pushover is disabled? Must not crash or block
 
 ## Recovery Strategies
 
+When pitfalls occur despite prevention, how to recover.
+
 | Pitfall | Recovery Cost | Recovery Steps |
 |---------|---------------|----------------|
-| Bricked install (no exe) | CRITICAL | 1. Locate `.exe.old` or `.exe.bak` in application directory<br>2. Rename back to original exe name<br>3. Start application<br>4. If backup missing: download manually from GitHub Releases |
-| Corrupted binary (failed checksum) | LOW | 1. Update was rejected before replacement<br>2. Check network connectivity<br>3. Retry update<br>4. No recovery needed -- old binary untouched |
-| Rate limited (GitHub 403) | LOW | 1. Wait for rate limit reset (check `X-RateLimit-Reset` header)<br>2. Add GitHub token to config for higher limits<br>3. Increase check interval |
-| Concurrent update conflict | LOW | 1. API returns 409 immediately<br>2. Caller retries after current update completes<br>3. No data loss |
-| CI build missing GOOS | MEDIUM | 1. Add env vars to workflow<br>2. Delete incorrect release asset<br>3. Re-push tag or manually trigger workflow |
-| Process restart failure | MEDIUM | 1. Check if new process started: `tasklist`<br>2. If not, check logs for restart error<br>3. Manually start: `nanobot-auto-updater.exe`<br>4. Auto-start logic should handle this on reboot |
+| Notification spam (restart loop) | LOW | Add cooldown in next version; user can disable Pushover temporarily |
+| Spurious Telegram failure notification | LOW | Add cancel-on-stop in next version; user can ignore the one-off notification |
+| Scanner goroutine leak | MEDIUM | Fix with proper context cancellation; requires redeployment; leak is slow (does not crash immediately) |
+| Missed Telegram failure (dropped log line) | HIGH | Redesign scanner to use callback instead of subscriber channel; requires code change |
+| False positive from historical logs | LOW | Add timestamp filter; one-time spurious notification, no lasting damage |
+| Multiple monitors for same instance | LOW | Add cancel-previous logic; extra notification in the meantime is the only symptom |
+
+## Pitfall-to-Phase Mapping
+
+How roadmap phases should address these pitfalls.
+
+| Pitfall | Prevention Phase | Verification |
+|---------|------------------|--------------|
+| Scanner race with LogBuffer write | Log-pattern scanner phase | `go test -race`; test with burst of log lines exceeding channel capacity |
+| AfterFunc shared state race | Telegram monitor phase | `go test -race`; verify callback acquires mutex |
+| Notification spam on restart | Startup notification phase | Test: restart service 5 times rapidly, count notifications received |
+| Historical log false trigger | Log-pattern scanner phase | Test: start scanner AFTER instance already output trigger line |
+| Instance stop during active monitor | Telegram monitor phase | Test: trigger update while Telegram monitor is active, verify no spurious notification |
+| Scanner goroutine leak | Log-pattern scanner phase | Test: run 100 update cycles, check `runtime.NumGoroutine()` stabilizes |
+| String matching too narrow | Log-pattern scanner phase | Test against actual nanobot output captured in LogBuffer |
+| 30s timeout too short | Telegram monitor phase | Test with configurable timeout; verify under proxy environment |
+| Missing failure notification | Startup notification phase | Test: start instance with invalid command, verify failure notification |
+| Notification blocks startup | Startup notification phase | Benchmark: verify startup time unchanged with Pushover configured vs not |
+| Multiple monitors same instance | Telegram monitor phase | Test: crash and restart instance during 30s window, verify single notification |
 
 ## Existing Patterns to Reuse
 
-The project already has patterns that should be extended for self-update:
+The project already has patterns that should be extended for these features.
 
-| Existing Pattern | Location | How to Reuse for Self-Update |
-|-----------------|----------|------------------------------|
-| `sync/atomic.Bool` update guard | `internal/instance` | Extend to guard self-update AND nanobot update together |
-| Bearer Token auth middleware | `internal/api/auth.go` | Wrap self-update endpoint with same middleware |
-| `TriggerUpdater` interface | `internal/api/trigger.go` | Define similar interface for self-update (mock-friendly testing) |
-| Pushover notification | `internal/notifier` | Send notification on self-update success/failure |
-| UpdateLog recording | `internal/updatelog` | Record self-update operations with `triggeredBy: "self-update"` |
-| `--version` flag | `cmd/nanobot-auto-updater/main.go` | Already works with ldflags, just needs CI integration |
-| Graceful shutdown | `cmd/nanobot-auto-updater/main.go` | Extend to handle self-update restart scenario |
-| JSON error responses (RFC 7807) | `internal/api/trigger.go` | Use same error format for self-update API responses |
+| Existing Pattern | Location | How to Reuse |
+|-----------------|----------|--------------|
+| Async notification with panic recovery | `internal/notification/manager.go:sendNotification()` | Copy exact goroutine pattern for startup and Telegram notifications |
+| `time.AfterFunc` with mutex-protected state | `internal/notification/manager.go:confirmAndNotify()` | Same pattern for Telegram timeout: lock mutex in callback, verify state is current |
+| Notifier nil check | `internal/api/trigger.go:77` | Always check `if notifier != nil` before calling |
+| Notifier interface (single method) | `internal/api/trigger.go:30-32` | Do NOT extend interface -- keep `Notify(title, message) error` |
+| Context cancellation for goroutines | `internal/lifecycle/starter.go:captureLogs()` | Use same pattern for scanner goroutine lifecycle |
+| LogBuffer subscriber pattern | `internal/logbuffer/subscriber.go` | Subscribe/Unsubscribe for real-time log stream; add timestamp filter |
+| Graceful degradation | `internal/notifier/notifier.go:IsEnabled()` | All notification paths must handle disabled Pushover gracefully |
+| Instance error wrapping | `internal/instance/errors.go` | Wrap Telegram monitor errors in InstanceError for consistency |
 
 ## Sources
 
-**go-update Library:**
-- [inconshreveable/go-update apply.go](https://github.com/inconshreveable/go-update/blob/master/apply.go) -- Full source code read, confirms Windows rename pattern and rollback logic (HIGH confidence)
-- [inconshreveable/go-update doc.go](https://github.com/inconshreveable/go-update/blob/master/doc.go) -- SHA256 checksum verification documentation (HIGH confidence)
-- [go-update Issue #1: old exe not deleted on Windows](https://github.com/inconshreveable/go-update/issues/1) -- Known Windows cleanup issue (HIGH confidence)
+**Go Concurrency and Timer Patterns:**
+- [Go Race Detector](https://go.dev/blog/race-detector) -- Official blog on using `-race` flag (HIGH confidence)
+- [time.AfterFunc runs callback in new goroutine](https://www.reddit.com/r/golang/comments/13echul/can_the_timer_returned_by_timeafterfunc_be_safely/) -- AfterFunc behavior documentation (HIGH confidence)
+- [Go Timer Reset race conditions](https://groups.google.com/g/golang-codereviews/c/ky9VwFpPzpg) -- Official Go code review on Reset safety (HIGH confidence)
+- [100 Go Mistakes and How to Avoid Them](https://100go.co/) -- Community compilation of common mistakes (HIGH confidence)
 
-**Windows Executable Replacement:**
-- [Stack Overflow: How to self-update application while running](https://stackoverflow.com/questions/55247194/how-to-self-update-application-while-running) -- Rename trick (HIGH confidence)
-- [SuperUser: Why can I rename a running executable but not delete it](https://superuser.com/questions/488127/why-can-i-rename-a-running-executable-but-not-delete-it) -- OS behavior (HIGH confidence)
-- [cosmofy Issue #58: self-update overwrites running executable](https://github.com/metaist/cosmofy/issues/58) -- Real-world failure report (MEDIUM confidence)
+**Notification Patterns:**
+- [Pushover API rate limits](https://pushover.net/api) -- 7,500 messages/month free, 500ms between calls (HIGH confidence)
+- [Building a queue for Pushover API](https://stackoverflow.com/questions/34246132/building-a-queue-for-sending-notifications-to-the-pushover-api) -- Rate limiting strategy (MEDIUM confidence)
 
-**GitHub API Rate Limits:**
-- [GitHub Community Discussion #170662](https://github.com/orgs/community/discussions/170662) -- 60/hr unauthenticated limit (HIGH confidence)
-- [GitHub Changelog May 2025](https://github.blog/changelog/2025-05-08-updated-rate-limits-for-unauthenticated-requests/) -- Official rate limit update (HIGH confidence)
-- [GitHub Changelog June 2025: Releases now expose digests](https://github.blog/changelog/2025-06-03-releases-now-expose-digests-for-release-assets/) -- Native SHA256 for release assets (HIGH confidence)
-
-**GitHub Actions:**
-- [GitHub Docs: Events that trigger workflows](https://docs.github.com/actions/using-workflows/events-that-trigger-workflows) -- Official trigger documentation (HIGH confidence)
-- [GitHub Community Discussion #27028: Workflow not triggering](https://github.com/orgs/community/discussions/27028) -- Common trigger issue (HIGH confidence)
-- [Rob Allen: Using GitHub Actions for Go binaries](https://akrabat.com/using-github-actions-to-add-go-binaries-to-a-release/) -- Practical GOOS/GOARCH guide (MEDIUM confidence)
-
-**Self-Update Patterns:**
-- [creativeprojects/go-selfupdate](https://github.com/creativeprojects/go-selfupdate) -- Alternative library with built-in GitHub Releases support (HIGH confidence)
-- [Reddit r/golang: Self-updating binaries discussion](https://www.reddit.com/r/golang/comments/1poccfb/selfupdating_binaries_what_is_current_stage_and/) -- Community best practices (MEDIUM confidence)
-- [Go Forum: Auto restart after self-update](https://forum.golangbridge.org/t/auto-restart-after-self-update/34792) -- Restart pattern code examples (MEDIUM confidence)
+**String Matching:**
+- [Benchmarking: Substrings vs Regex in Go](https://betterprogramming.pub/benchmarking-in-go-substrings-vs-regular-expressions-a84de7f0eb02) -- strings.Contains is the right choice for simple substring matching (HIGH confidence)
+- [strings.Contains wraps strings.Index](http://www.ebmesem.com/2015/06/17/on-go-string-cruise.html) -- No performance difference, Contains is more readable (HIGH confidence)
 
 **Existing Codebase (highest confidence):**
-- `cmd/nanobot-auto-updater/main.go` -- Version variable, startup logic, graceful shutdown
-- `internal/api/trigger.go` -- Update handler pattern, 409 conflict, auth middleware
-- `internal/api/auth.go` -- Bearer Token middleware
-- `internal/api/server.go` -- Route registration pattern
-- `internal/updater/updater.go` -- Existing update logic (nanobot, not self)
-- `internal/instance` -- StartAllInstances, StopAllInstances, Atomic.Bool guard
+- `internal/notification/manager.go` -- AfterFunc + mutex pattern, async notification with panic recovery
+- `internal/logbuffer/subscriber.go` -- Subscribe/Unsubscribe pattern with history replay
+- `internal/logbuffer/buffer.go` -- Non-blocking subscriber send (select+default drop pattern)
+- `internal/lifecycle/starter.go` -- Log capture goroutine lifecycle with context cancellation
+- `internal/instance/lifecycle.go` -- Instance start/stop with LogBuffer.Clear() and PID tracking
+- `internal/instance/manager.go` -- StartAllInstances with graceful degradation pattern
+- `internal/notifier/notifier.go` -- IsEnabled() and Notify() with graceful degradation
+- `internal/api/trigger.go` -- Async notification pattern, Notifier interface definition
+- `cmd/nanobot-auto-updater/main.go` -- Auto-start goroutine with panic recovery and context timeout
+
+**Context from Project:**
+- `.planning/quick/260406-fge-nanobot-telegram-httpx-connecterror-open/260406-fge-PLAN.md` -- Telegram connection fails under OpenClash proxy due to TLS MITM; relevant for timeout calibration (HIGH confidence)
 
 ---
-*Pitfalls research for: Self-Update via GitHub Releases for Windows Go Application*
-*Researched: 2026-03-29*
+*Pitfalls research for: Instance Startup Notifications and Telegram Connection Monitoring for nanobot-auto-updater*
+*Researched: 2026-04-06*
