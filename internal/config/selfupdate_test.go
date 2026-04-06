@@ -11,8 +11,8 @@ import (
 
 func TestSelfUpdateConfig_Defaults(t *testing.T) {
 	cfg := New()
-	assert.Equal(t, "HQGroup", cfg.SelfUpdate.GithubOwner)
-	assert.Equal(t, "nanobot-auto-updater", cfg.SelfUpdate.GithubRepo)
+	assert.Equal(t, "allanpk716", cfg.SelfUpdate.GithubOwner)
+	assert.Equal(t, "nanobot_auto_update", cfg.SelfUpdate.GithubRepo)
 }
 
 func TestSelfUpdateConfig_ViperLoad(t *testing.T) {

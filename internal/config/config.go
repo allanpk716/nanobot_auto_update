@@ -43,8 +43,8 @@ func (c *Config) defaults() {
 	c.HealthCheck.Interval = 1 * time.Minute
 
 	// SelfUpdate defaults (UPDATE-07)
-	c.SelfUpdate.GithubOwner = "HQGroup"
-	c.SelfUpdate.GithubRepo = "nanobot-auto-updater"
+	c.SelfUpdate.GithubOwner = "allanpk716"
+	c.SelfUpdate.GithubRepo = "nanobot_auto_update"
 }
 
 // validateUniqueNames checks for duplicate instance names.

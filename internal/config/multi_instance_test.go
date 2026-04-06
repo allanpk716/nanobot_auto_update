@@ -162,8 +162,8 @@ func TestConfigValidateWithInstances(t *testing.T) {
 					Interval: 1 * time.Minute,
 				},
 				SelfUpdate: SelfUpdateConfig{
-					GithubOwner: "HQGroup",
-					GithubRepo:  "nanobot-auto-updater",
+					GithubOwner: "allanpk716",
+					GithubRepo:  "nanobot_auto_update",
 				},
 			},
 			expectError: false,
