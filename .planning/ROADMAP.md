@@ -23,7 +23,7 @@
 
 ## Phase Details
 
-### 🚧 v0.9 Startup Notification & Telegram Monitor (In Progress)
+### v0.9 Startup Notification & Telegram Monitor (In Progress)
 
 **Milestone Goal:** Users receive Pushover notifications when instances start up (success or failure) and when Telegram bot connections succeed or fail, enabling remote awareness of service health without manual log checking.
 
@@ -51,12 +51,11 @@ Plans:
   3. When "httpx.ConnectError" appears in logs within 30 seconds of the trigger, the monitor sends a failure Pushover notification and exits the monitoring state
   4. When 30 seconds elapse after the trigger with neither success nor failure pattern detected, the monitor sends a timeout failure Pushover notification
   5. Log entries written before the monitor subscribed (historical replay) do not trigger the monitoring state or produce false notifications
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 42-01: TBD
-- [ ] 42-02: TBD
-- [ ] 42-03: TBD
+- [ ] 42-01-PLAN.md — TDD: Pattern matching + monitor state machine with mock-based tests (TELE-01 through TELE-06, TELE-08)
+- [ ] 42-02-PLAN.md — TDD: Edge case + concurrency stress tests with race detector validation
 
 #### Phase 43: Telegram Monitor Integration
 **Goal**: Telegram monitoring is active for all running instances with correct per-instance lifecycle (start on instance start, cancel on instance stop)
@@ -137,9 +136,8 @@ Phases execute in numeric order: 41 -> 42 -> 43
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
 | 41. Startup Notification | v0.9 | 2/2 | Complete    | 2026-04-06 |
-| 42. Telegram Monitor Core | v0.9 | 0/? | Not started | - |
+| 42. Telegram Monitor Core | v0.9 | 0/2 | Not started | - |
 | 43. Telegram Monitor Integration | v0.9 | 0/? | Not started | - |
 
 ---
-
-*Last updated: 2026-04-06 (Phase 41 planned)*
+*Last updated: 2026-04-06 (Phase 42 planned)*
