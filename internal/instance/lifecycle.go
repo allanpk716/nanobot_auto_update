@@ -9,23 +9,35 @@ import (
 	"github.com/HQGroup/nanobot-auto-updater/internal/config"
 	"github.com/HQGroup/nanobot-auto-updater/internal/lifecycle"
 	"github.com/HQGroup/nanobot-auto-updater/internal/logbuffer"
+	"github.com/HQGroup/nanobot-auto-updater/internal/telegram"
 )
+
+// Notifier interface for dependency injection (duck typing, per D-03)
+// Satisfied by *notifier.Notifier without direct import.
+type Notifier interface {
+	IsEnabled() bool
+	Notify(title, message string) error
+}
 
 // InstanceLifecycle wraps lifecycle operations with instance-specific context.
 // Each instance has its own logger with instance name pre-injected for traceability.
 // INST-01: Each instance has its own LogBuffer for log capture
 // Uses PID-based process management instead of port detection.
 type InstanceLifecycle struct {
-	config    config.InstanceConfig
-	logger    *slog.Logger
-	logBuffer *logbuffer.LogBuffer // INST-01: LogBuffer for this instance
-	pid       int32                // Process ID of the running instance (0 if not running)
+	config           config.InstanceConfig
+	logger           *slog.Logger
+	logBuffer        *logbuffer.LogBuffer           // INST-01: LogBuffer for this instance
+	pid              int32                          // Process ID of the running instance (0 if not running)
+	notifier         Notifier                       // D-03: injected via constructor, immutable (D-04)
+	telegramMonitor  *telegram.TelegramMonitor       // D-01: per-instance monitor
+	monitorCancel    context.CancelFunc              // cancel monitor goroutine's context
 }
 
 // NewInstanceLifecycle creates an instance lifecycle manager with context-aware logging.
 // The logger is enriched with instance name and component fields.
 // INST-01: Creates LogBuffer for this instance
-func NewInstanceLifecycle(cfg config.InstanceConfig, baseLogger *slog.Logger) *InstanceLifecycle {
+// D-03: Accepts Notifier for Telegram monitor integration
+func NewInstanceLifecycle(cfg config.InstanceConfig, baseLogger *slog.Logger, notifier Notifier) *InstanceLifecycle {
 	// Inject instance context into logger for all log messages
 	instanceLogger := baseLogger.With("instance", cfg.Name).With("component", "instance-lifecycle")
 
@@ -36,6 +48,7 @@ func NewInstanceLifecycle(cfg config.InstanceConfig, baseLogger *slog.Logger) *I
 		config:    cfg,
 		logger:    instanceLogger,
 		logBuffer: logBuffer,
+		notifier:  notifier,
 	}
 }
 
@@ -45,6 +58,9 @@ func NewInstanceLifecycle(cfg config.InstanceConfig, baseLogger *slog.Logger) *I
 // Uses PID-based process management: if pid > 0, stops the process directly by PID.
 func (il *InstanceLifecycle) StopForUpdate(ctx context.Context) error {
 	il.logger.Info("Starting stop-before-update process")
+
+	// D-01: Stop monitor before stopping process
+	il.stopTelegramMonitor()
 
 	// If we don't have a PID, the instance was never started
 	if il.pid == 0 {
@@ -107,6 +123,10 @@ func (il *InstanceLifecycle) StartAfterUpdate(ctx context.Context) error {
 	// Save the PID for future process management
 	il.pid = int32(pid)
 	il.logger.Info("Instance started successfully with log capture", "pid", pid)
+
+	// D-01: Start Telegram monitor after successful process start
+	il.startTelegramMonitor()
+
 	return nil
 }
 
@@ -154,4 +174,44 @@ func (il *InstanceLifecycle) IsRunning() bool {
 // GetPID returns the process ID of the instance (0 if not running).
 func (il *InstanceLifecycle) GetPID() int32 {
 	return il.pid
+}
+
+// startTelegramMonitor creates and starts the Telegram monitor for this instance.
+// Called after successful process start in StartAfterUpdate (D-01).
+func (il *InstanceLifecycle) startTelegramMonitor() {
+	monitor := telegram.NewTelegramMonitor(
+		il.logBuffer,
+		il.notifier,
+		il.config.Name,
+		telegram.DefaultTimeout,
+		il.logger,
+	)
+	monitorCtx, cancel := context.WithCancel(context.Background())
+	il.telegramMonitor = monitor
+	il.monitorCancel = cancel
+
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				il.logger.Error("telegram monitor goroutine panic",
+					"panic", r)
+			}
+		}()
+		monitor.Start(monitorCtx)
+		il.logger.Debug("telegram monitor goroutine exited")
+	}()
+
+	il.logger.Info("Telegram monitor started for instance")
+}
+
+// stopTelegramMonitor cancels the Telegram monitor for this instance.
+// Called before stopping the process in StopForUpdate (D-01).
+func (il *InstanceLifecycle) stopTelegramMonitor() {
+	if il.telegramMonitor != nil {
+		il.telegramMonitor.Stop()   // cancels internal timer + context
+		il.monitorCancel()          // cancel caller's context (unblocks Start channel read)
+		il.telegramMonitor = nil
+		il.monitorCancel = nil
+		il.logger.Info("Telegram monitor stopped")
+	}
 }
