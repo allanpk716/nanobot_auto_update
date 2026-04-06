@@ -13,6 +13,19 @@ import (
 	"github.com/HQGroup/nanobot-auto-updater/internal/logbuffer"
 )
 
+// mockNotifier is a test stub for the Notifier interface.
+type mockNotifier struct {
+	enabled bool
+}
+
+func (m *mockNotifier) IsEnabled() bool                         { return m.enabled }
+func (m *mockNotifier) Notify(title, message string) error      { return nil }
+
+// newTestNotifier returns a disabled notifier safe for unit tests.
+func newTestNotifier() Notifier {
+	return &mockNotifier{enabled: false}
+}
+
 func TestNewInstanceLifecycle_LoggerContextInjection(t *testing.T) {
 	cfg := config.InstanceConfig{
 		Name:         "test-instance",
@@ -25,7 +38,7 @@ func TestNewInstanceLifecycle_LoggerContextInjection(t *testing.T) {
 	handler := slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})
 	baseLogger := slog.New(handler)
 
-	il := NewInstanceLifecycle(cfg, baseLogger)
+	il := NewInstanceLifecycle(cfg, baseLogger, newTestNotifier())
 
 	// Verify the logger is injected
 	if il == nil {
@@ -53,7 +66,7 @@ func TestInstanceLifecycle_StopForUpdate(t *testing.T) {
 	}
 
 	baseLogger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
-	il := NewInstanceLifecycle(cfg, baseLogger)
+	il := NewInstanceLifecycle(cfg, baseLogger, newTestNotifier())
 
 	// Note: This test cannot easily mock lifecycle.IsNanobotRunning and lifecycle.StopNanobot
 	// without creating an interface-based abstraction.
@@ -100,7 +113,7 @@ func TestInstanceLifecycle_StartAfterUpdate(t *testing.T) {
 	}
 
 	baseLogger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
-	il := NewInstanceLifecycle(cfg, baseLogger)
+	il := NewInstanceLifecycle(cfg, baseLogger, newTestNotifier())
 
 	// Note: This test cannot easily mock lifecycle.StartNanobot without interface abstraction
 	// For integration testing, the actual process management should be tested
@@ -140,7 +153,7 @@ func TestInstanceLifecycle_StartAfterUpdate_DefaultTimeout(t *testing.T) {
 	}
 
 	baseLogger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
-	il := NewInstanceLifecycle(cfg, baseLogger)
+	il := NewInstanceLifecycle(cfg, baseLogger, newTestNotifier())
 
 	if il == nil {
 		t.Fatal("NewInstanceLifecycle returned nil")
@@ -159,7 +172,7 @@ func TestInstanceLifecycle_StopForUpdate_NotRunning(t *testing.T) {
 	}
 
 	baseLogger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
-	il := NewInstanceLifecycle(cfg, baseLogger)
+	il := NewInstanceLifecycle(cfg, baseLogger, newTestNotifier())
 
 	ctx := context.Background()
 	err := il.StopForUpdate(ctx)
@@ -180,7 +193,7 @@ func TestNewInstanceLifecycle_LogBuffer(t *testing.T) {
 	}
 
 	baseLogger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
-	il := NewInstanceLifecycle(cfg, baseLogger)
+	il := NewInstanceLifecycle(cfg, baseLogger, newTestNotifier())
 
 	if il == nil {
 		t.Fatal("NewInstanceLifecycle returned nil")
@@ -202,7 +215,7 @@ func TestInstanceLifecycle_GetLogBuffer(t *testing.T) {
 	}
 
 	baseLogger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
-	il := NewInstanceLifecycle(cfg, baseLogger)
+	il := NewInstanceLifecycle(cfg, baseLogger, newTestNotifier())
 
 	// GetLogBuffer should return non-nil buffer
 	buf := il.GetLogBuffer()
@@ -227,8 +240,8 @@ func TestInstanceLifecycle_IndependentLogBuffers(t *testing.T) {
 
 	baseLogger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
 
-	il1 := NewInstanceLifecycle(cfg1, baseLogger)
-	il2 := NewInstanceLifecycle(cfg2, baseLogger)
+	il1 := NewInstanceLifecycle(cfg1, baseLogger, newTestNotifier())
+	il2 := NewInstanceLifecycle(cfg2, baseLogger, newTestNotifier())
 
 	buf1 := il1.GetLogBuffer()
 	buf2 := il2.GetLogBuffer()
@@ -267,7 +280,7 @@ func TestInstanceLifecycle_StartClearsBuffer(t *testing.T) {
 	}
 
 	baseLogger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
-	il := NewInstanceLifecycle(cfg, baseLogger)
+	il := NewInstanceLifecycle(cfg, baseLogger, newTestNotifier())
 
 	// Write some logs to the buffer BEFORE starting
 	logBuffer := il.GetLogBuffer()
@@ -316,7 +329,7 @@ func TestInstanceLifecycle_StartWithCapture(t *testing.T) {
 	}
 
 	baseLogger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
-	il := NewInstanceLifecycle(cfg, baseLogger)
+	il := NewInstanceLifecycle(cfg, baseLogger, newTestNotifier())
 
 	// Get the buffer before start
 	logBuffer := il.GetLogBuffer()
@@ -350,7 +363,7 @@ func TestInstanceLifecycle_StopPreservesBuffer(t *testing.T) {
 	}
 
 	baseLogger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
-	il := NewInstanceLifecycle(cfg, baseLogger)
+	il := NewInstanceLifecycle(cfg, baseLogger, newTestNotifier())
 
 	// Write some logs to the buffer
 	logBuffer := il.GetLogBuffer()

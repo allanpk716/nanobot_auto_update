@@ -127,11 +127,8 @@ func main() {
 	cleanupCron.Start()
 	logger.Info("Update log cleanup scheduler started", "schedule", "0 3 * * *")
 
-	// Create InstanceManager
-	instanceManager := instance.NewInstanceManager(cfg, logger)
-
 	// Create Notifier (MONITOR-04, MONITOR-05, UNOTIF-01, UNOTIF-02)
-	// Created before API server so it can be injected into TriggerHandler
+	// Created before InstanceManager so it can be injected into lifecycle (D-05)
 	notif := notifier.NewWithConfig(
 		notifier.Config{
 			ApiToken: cfg.Pushover.ApiToken,
@@ -139,6 +136,9 @@ func main() {
 		},
 		logger,
 	)
+
+	// Create InstanceManager (after notifier so it can be injected, D-05)
+	instanceManager := instance.NewInstanceManager(cfg, logger, notif)
 
 	// Create self-update Updater (Phase 39)
 	selfUpdater := selfupdate.NewUpdater(

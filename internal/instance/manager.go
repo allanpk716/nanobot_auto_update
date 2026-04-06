@@ -26,14 +26,14 @@ type InstanceManager struct {
 }
 
 // NewInstanceManager 创建实例管理器
-func NewInstanceManager(cfg *config.Config, baseLogger *slog.Logger) *InstanceManager {
+func NewInstanceManager(cfg *config.Config, baseLogger *slog.Logger, notifier Notifier) *InstanceManager {
 	// 注入 component 字段
 	logger := baseLogger.With("component", "instance-manager")
 
 	// 为每个实例创建 InstanceLifecycle 包装器
 	instances := make([]*InstanceLifecycle, 0, len(cfg.Instances))
 	for _, instCfg := range cfg.Instances {
-		lifecycle := NewInstanceLifecycle(instCfg, baseLogger)
+		lifecycle := NewInstanceLifecycle(instCfg, baseLogger, notifier)
 		instances = append(instances, lifecycle)
 	}
 

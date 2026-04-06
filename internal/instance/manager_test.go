@@ -22,7 +22,7 @@ func TestTriggerUpdate_Concurrent(t *testing.T) {
 		},
 	}
 
-	manager := NewInstanceManager(cfg, logger)
+	manager := NewInstanceManager(cfg, logger, newTestNotifier())
 
 	// Manually set updating flag to simulate ongoing update
 	manager.isUpdating.Store(true)
@@ -54,7 +54,7 @@ func TestTriggerUpdate_ResetsFlag(t *testing.T) {
 		Instances: []config.InstanceConfig{},
 	}
 
-	manager := NewInstanceManager(cfg, logger)
+	manager := NewInstanceManager(cfg, logger, newTestNotifier())
 
 	ctx := context.Background()
 
@@ -83,7 +83,7 @@ func TestTriggerUpdate_ResetsFlagOnError(t *testing.T) {
 		Instances: []config.InstanceConfig{},
 	}
 
-	manager := NewInstanceManager(cfg, logger)
+	manager := NewInstanceManager(cfg, logger, newTestNotifier())
 
 	ctx := context.Background()
 
@@ -105,7 +105,7 @@ func TestTriggerUpdate_ContextCancellation(t *testing.T) {
 		Instances: []config.InstanceConfig{},
 	}
 
-	manager := NewInstanceManager(cfg, logger)
+	manager := NewInstanceManager(cfg, logger, newTestNotifier())
 
 	// Create cancelled context
 	ctx, cancel := context.WithCancel(context.Background())
@@ -131,7 +131,7 @@ func TestIsUpdating(t *testing.T) {
 		},
 	}
 
-	manager := NewInstanceManager(cfg, logger)
+	manager := NewInstanceManager(cfg, logger, newTestNotifier())
 
 	// Initially not updating
 	if manager.IsUpdating() {
@@ -164,7 +164,7 @@ func TestTriggerUpdate_CallsUpdateAll(t *testing.T) {
 		Instances: []config.InstanceConfig{},
 	}
 
-	manager := NewInstanceManager(cfg, logger)
+	manager := NewInstanceManager(cfg, logger, newTestNotifier())
 
 	ctx := context.Background()
 
@@ -192,7 +192,7 @@ func TestNewInstanceManager(t *testing.T) {
 		},
 	}
 
-	manager := NewInstanceManager(cfg, logger)
+	manager := NewInstanceManager(cfg, logger, newTestNotifier())
 
 	if manager == nil {
 		t.Fatal("NewInstanceManager returned nil")
@@ -222,7 +222,7 @@ func TestStopAllGracefulDegradation(t *testing.T) {
 		},
 	}
 
-	manager := NewInstanceManager(cfg, logger)
+	manager := NewInstanceManager(cfg, logger, newTestNotifier())
 	ctx := context.Background()
 	result := &UpdateResult{}
 
@@ -261,7 +261,7 @@ func TestStartAllGracefulDegradation(t *testing.T) {
 		},
 	}
 
-	manager := NewInstanceManager(cfg, logger)
+	manager := NewInstanceManager(cfg, logger, newTestNotifier())
 
 	// Use very short timeout to fail fast
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
@@ -376,7 +376,7 @@ func TestInstanceManager_GetLogBuffer(t *testing.T) {
 		},
 	}
 
-	manager := NewInstanceManager(cfg, logger)
+	manager := NewInstanceManager(cfg, logger, newTestNotifier())
 
 	// Test: GetLogBuffer returns correct buffer for existing instance
 	buf1, err := manager.GetLogBuffer("instance1")
@@ -451,7 +451,7 @@ func TestGetInstanceNames(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 			cfg := &config.Config{Instances: tt.instances}
-			manager := NewInstanceManager(cfg, logger)
+			manager := NewInstanceManager(cfg, logger, newTestNotifier())
 
 			got := manager.GetInstanceNames()
 
@@ -508,7 +508,7 @@ func TestStartAllInstances_AutoStartFlag(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			cfg := &config.Config{Instances: tt.instances}
-			manager := NewInstanceManager(cfg, logger)
+			manager := NewInstanceManager(cfg, logger, newTestNotifier())
 
 			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 			defer cancel()
@@ -543,7 +543,7 @@ func TestStartAllInstances_Order(t *testing.T) {
 	}
 
 	cfg := &config.Config{Instances: instances}
-	manager := NewInstanceManager(cfg, logger)
+	manager := NewInstanceManager(cfg, logger, newTestNotifier())
 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
@@ -569,7 +569,7 @@ func TestStartAllInstances_GracefulDegradation(t *testing.T) {
 	}
 
 	cfg := &config.Config{Instances: instances}
-	manager := NewInstanceManager(cfg, logger)
+	manager := NewInstanceManager(cfg, logger, newTestNotifier())
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -598,7 +598,7 @@ func TestStartAllInstances_Summary(t *testing.T) {
 	}
 
 	cfg := &config.Config{Instances: instances}
-	manager := NewInstanceManager(cfg, logger)
+	manager := NewInstanceManager(cfg, logger, newTestNotifier())
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
