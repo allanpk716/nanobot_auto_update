@@ -480,22 +480,16 @@ func TestMonitor_HistoricalReplayIgnored(t *testing.T) {
 
 **If this table is empty:** All claims in this research were verified or cited.
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **Should TELE-05 send a Pushover notification on success, or just log it?**
-   - What we know: REQUIREMENTS.md says "Telegram connection success sends Pushover notification" (TELE-05). Success criteria say "monitor sends a success Pushover notification."
-   - What's unclear: The existing codebase pattern for update notifications only sends on failure. Should Telegram success also notify?
-   - Recommendation: Yes, send success notification per TELE-05. This is explicit in requirements. Success notification provides confirmation that monitoring is working.
+   RESOLVED: Yes, send success notification per TELE-05. Explicit in requirements.
 
 2. **Exact log pattern strings need verification against real nanobot output**
-   - What we know: REQUIREMENTS.md specifies "Starting Telegram bot", "Telegram bot commands registered", "httpx.ConnectError".
-   - What's unclear: Whether these exact strings appear in nanobot stdout. STATE.md block list notes this: "Exact log patterns from python-telegram-bot need verification against real nanobot stdout."
-   - Recommendation: Isolate patterns in patterns.go. Implementation should make patterns trivially adjustable. Consider adding a debug log on every pattern match.
+   RESOLVED: Isolate patterns in patterns.go for trivial adjustment.
 
 3. **Should the monitor re-enter idle state after resolution for the same instance?**
-   - What we know: An instance could output "Starting Telegram bot" again after a reconnect attempt.
-   - What's unclear: Whether Phase 42 should handle repeated trigger cycles or just one-and-done.
-   - Recommendation: Return to stateIdle after resolution. This allows the monitor to catch reconnection attempts without restart. Single monitor per instance handles multiple connection cycles.
+   RESOLVED: Return to stateIdle after resolution. Allows multiple connection cycles.
 
 ## Environment Availability
 
