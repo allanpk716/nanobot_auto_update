@@ -70,6 +70,18 @@
 
 **v0.4 实时日志查看** — 2026-03-20:
 
+### Active
+
+- [ ] 实例启动后通过 Pushover 通知启动结果（成功或失败）
+- [ ] 检测日志中 "Starting Telegram bot" 触发 Telegram 连接监控
+- [ ] 30 秒内检测 Telegram 连接成功/失败，失败时 Pushover 通知
+
+### Out of Scope
+
+<!-- Explicit boundaries. Includes reasoning to prevent re-adding. -->
+
+(None for this milestone)
+
 ## Context
 
 **nanobot**: 一个 AI Agent 工具，托管在 GitHub (https://github.com/HKUDS/nanobot)，支持通过 uv 包管理器安装。
@@ -251,11 +263,12 @@ self_update:
 **Total:** 8 milestones shipped, 40 phases, ~16,830 LOC Go
 
 **Next Milestone Goals:**
-- 待定义 — 使用 `/gsd:new-milestone` 开始下一个里程碑
+- 实例启动通知（成功/失败 Pushover 通知）
+- Telegram 连接监控（检测日志触发、30 秒超时、失败通知）
 
 ---
 
-*Last updated: 2026-03-30 after v0.8 milestone archival*
+*Last updated: 2026-04-06 after v0.9 milestone started*
 
 ## Evolution
 
