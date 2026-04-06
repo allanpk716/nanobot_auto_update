@@ -35,11 +35,11 @@
   1. After auto-start completes, a single Pushover notification is sent containing each instance name and its start status (success or failed with error detail)
   2. The startup notification is sent asynchronously and does not delay or block the application startup sequence
   3. When Pushover is not configured (no token/user), the startup notification is silently skipped with no errors or warnings logged
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 41-01: TBD
-- [ ] 41-02: TBD
+- [ ] 41-01-PLAN.md — TDD: NotifyStartupResult method + formatStartupMessage with 6 test scenarios
+- [ ] 41-02-PLAN.md — Wire notification into main.go auto-start goroutine
 
 #### Phase 42: Telegram Monitor Core
 **Goal**: A self-contained Telegram monitor package detects connection patterns in real-time log output, manages a 30-second timeout state machine, and triggers Pushover notifications on success or failure
@@ -136,10 +136,10 @@ Phases execute in numeric order: 41 -> 42 -> 43
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
-| 41. Startup Notification | v0.9 | 0/? | Not started | - |
+| 41. Startup Notification | v0.9 | 0/2 | Planned | - |
 | 42. Telegram Monitor Core | v0.9 | 0/? | Not started | - |
 | 43. Telegram Monitor Integration | v0.9 | 0/? | Not started | - |
 
 ---
 
-*Last updated: 2026-04-06 (v0.9 roadmap created)*
+*Last updated: 2026-04-06 (Phase 41 planned)*
