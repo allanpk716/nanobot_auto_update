@@ -124,6 +124,7 @@ func TestMonitor_FailureDetected(t *testing.T) {
 	defer cancel()
 
 	go m.Start(ctx)
+	time.Sleep(10 * time.Millisecond) // Wait for goroutine to set startTime
 
 	// Write trigger then failure
 	sub.writeEntry("Starting Telegram bot...")
@@ -189,6 +190,7 @@ func TestMonitor_FailureNotification(t *testing.T) {
 	defer cancel()
 
 	go m.Start(ctx)
+	time.Sleep(10 * time.Millisecond) // Wait for goroutine to set startTime
 
 	sub.writeEntry("Starting Telegram bot...")
 	sub.writeEntry("httpx.ConnectError: connection refused")
