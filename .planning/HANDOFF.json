@@ -1,46 +1,36 @@
 {
   "version": "1.0",
-  "timestamp": "2026-03-29T01:44:47.117Z",
-  "phase": null,
-  "phase_name": "Milestone Planning Complete",
-  "phase_dir": null,
+  "timestamp": "2026-04-06T09:03:00.880Z",
+  "phase": "41",
+  "phase_name": "Startup Notification",
+  "phase_dir": ".planning/phases/41-startup-notification",
   "plan": null,
   "task": null,
-  "total_tasks": null,
+  "total_tasks": 4,
   "status": "paused",
   "completed_tasks": [
-    {"id": 1, "name": "Milestone goals gathered and confirmed", "status": "done", "commit": "6425266"},
-    {"id": 2, "name": "PROJECT.md updated with v0.7 milestone", "status": "done", "commit": "6425266"},
-    {"id": 3, "name": "STATE.md reset for v0.7", "status": "done", "commit": "6425266"},
-    {"id": 4, "name": "Requirements defined (UNOTIF-01 to UNOTIF-04)", "status": "done", "commit": "a156f20"},
-    {"id": 5, "name": "Roadmap created (Phases 34-35)", "status": "done", "commit": "09c9fbc"}
+    {"id": 0, "name": "Phase 41 Research", "status": "done", "commit": null},
+    {"id": 0, "name": "Phase 41 Validation Strategy", "status": "done", "commit": null},
+    {"id": 0, "name": "Phase 41 Planning (2 plans, 2 waves)", "status": "done", "commit": null},
+    {"id": 0, "name": "Phase 41 Plan Verification (passed)", "status": "done", "commit": null}
   ],
   "remaining_tasks": [
-    {"id": 6, "name": "Phase 34: Update Notification Integration", "status": "not_started"},
-    {"id": 7, "name": "Phase 35: Notification Integration Testing", "status": "not_started"}
+    {"id": 1, "name": "Plan 41-01 Task 1: Write 6 failing tests (formatStartupMessage + NotifyStartupResult)", "status": "not_started"},
+    {"id": 2, "name": "Plan 41-01 Task 2: Implement formatStartupMessage + NotifyStartupResult to pass tests", "status": "not_started"},
+    {"id": 3, "name": "Plan 41-02 Task 1: Wire NotifyStartupResult into main.go auto-start goroutine", "status": "not_started"},
+    {"id": 4, "name": "Plan 41-02 Task 2: Final verification - build + notifier tests", "status": "not_started"}
   ],
   "blockers": [],
   "human_actions_pending": [],
   "decisions": [
-    {"decision": "v0.7 version number (incremental from v0.6)", "rationale": "Small feature addition extending existing Pushover to update lifecycle", "phase": "milestone"},
-    {"decision": "Skip research for this milestone", "rationale": "Pushover infrastructure already exists, feature is straightforward integration", "phase": "milestone"},
-    {"decision": "2-phase structure: implementation + testing", "rationale": "Consistent with v0.6 pattern (Phases 30-33), focused scope", "phase": "roadmap"},
-    {"decision": "HTTP API trigger only, exclude cron-triggered updates", "rationale": "User explicitly asked about update API trigger notifications", "phase": "requirements"}
+    {"decision": "No CONTEXT.md — plan from research + requirements only", "rationale": "User chose to skip discuss-phase, proceed with research-only planning", "phase": "41"},
+    {"decision": "No extra goroutine for notification", "rationale": "auto-start already runs in a goroutine; synchronous Notify call inside it won't block main", "phase": "41"},
+    {"decision": "formatStartupMessage as method on Notifier struct", "rationale": "Better testability, matches existing pattern (formatUpdateResultMessage on Notifier)", "phase": "41"},
+    {"decision": "Skipped instances excluded from notification", "rationale": "auto_start=false is user's explicit choice; no need to report", "phase": "41"}
   ],
   "uncommitted_files": [
-    "cmd/nanobot-auto-updater/main.go (M)",
-    "internal/api/help.go (M)",
-    "internal/api/server.go (M)",
-    "internal/updatelog/logger.go (M)",
-    "internal/updatelog/logger_test.go (M)",
-    ".planning/phases/32-query-api/32-01-SUMMARY.md (??)",
-    ".planning/phases/32-query-api/32-02-SUMMARY.md (??)",
-    ".planning/phases/33-integration-and-testing/33-01-PLAN.md (??)",
-    ".planning/phases/33-integration-and-testing/33-02-PLAN.md (??)",
-    ".planning/phases/33-integration-and-testing/33-CONTEXT.md (??)",
-    "internal/api/query.go (??)",
-    "internal/api/query_test.go (??)"
+    ".planning/STATE.md"
   ],
-  "next_action": "Run /gsd:plan-phase 34 to plan Phase 34: Update Notification Integration. This phase injects Notifier into TriggerHandler and adds start/complete notifications.",
-  "context_notes": "Milestone v0.7 planning complete. All artifacts committed. The feature is a focused integration: pass existing Notifier to TriggerHandler, send start notification before TriggerUpdate(), send completion notification after with results. Non-blocking goroutine for sends. Graceful degradation when Pushover not configured. Key files to modify: internal/api/trigger.go (add Notifier field), internal/api/server.go (inject Notifier), cmd/nanobot-auto-updater/main.go (pass Notifier to NewServer). Some uncommitted files from v0.6 Phase 32-33 work remain in working tree."
+  "next_action": "Run /gsd-execute-phase 41 to execute both plans (TDD first, then wiring)",
+  "context_notes": "Phase 41 planning fully complete and verified. All 3 requirements (STRT-01/02/03) covered. Research confirmed minimal integration (~30-50 lines new code). No new dependencies, no new files. Two plans: Plan 01 (TDD: notifier method + 6 tests), Plan 02 (main.go wiring). Ready for execution."
 }
