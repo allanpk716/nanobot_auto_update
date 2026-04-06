@@ -221,7 +221,13 @@ func main() {
 			"timeout", autoStartTimeout)
 
 		// Execute auto-start
-		instanceManager.StartAllInstances(autoStartCtx)
+		result := instanceManager.StartAllInstances(autoStartCtx)
+		// STRT-01, STRT-02: Send aggregated startup notification
+		// STRT-03: NotifyStartupResult handles disabled notifier gracefully (returns nil)
+		// Notification runs inside existing auto-start goroutine (non-blocking to main)
+		if err := notif.NotifyStartupResult(result); err != nil {
+			logger.Error("Failed to send startup notification", "error", err)
+		}
 	}()
 
 	// Setup graceful shutdown signal handling
