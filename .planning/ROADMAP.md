@@ -54,8 +54,8 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 42-01-PLAN.md — TDD: Pattern matching + monitor state machine with mock-based tests (TELE-01 through TELE-06, TELE-08)
-- [ ] 42-02-PLAN.md — TDD: Edge case + concurrency stress tests with race detector validation
+- [x] 42-01-PLAN.md — TDD: Pattern matching + monitor state machine with mock-based tests (TELE-01 through TELE-06, TELE-08)
+- [x] 42-02-PLAN.md — TDD: Edge case + concurrency stress tests with race detector validation
 
 #### Phase 43: Telegram Monitor Integration
 **Goal**: Telegram monitoring is active for all running instances with correct per-instance lifecycle (start on instance start, cancel on instance stop)
@@ -136,7 +136,7 @@ Phases execute in numeric order: 41 -> 42 -> 43
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
 | 41. Startup Notification | v0.9 | 2/2 | Complete    | 2026-04-06 |
-| 42. Telegram Monitor Core | v0.9 | 0/2 | Not started | - |
+| 42. Telegram Monitor Core | v0.9 | 2/2 | Complete    | 2026-04-06 |
 | 43. Telegram Monitor Integration | v0.9 | 0/? | Not started | - |
 
 ---
