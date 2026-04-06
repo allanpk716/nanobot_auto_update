@@ -39,24 +39,24 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| STRT-01 | — | Pending |
-| STRT-02 | — | Pending |
-| STRT-03 | — | Pending |
-| TELE-01 | — | Pending |
-| TELE-02 | — | Pending |
-| TELE-03 | — | Pending |
-| TELE-04 | — | Pending |
-| TELE-05 | — | Pending |
-| TELE-06 | — | Pending |
-| TELE-07 | — | Pending |
-| TELE-08 | — | Pending |
-| TELE-09 | — | Pending |
+| STRT-01 | Phase 41 | Pending |
+| STRT-02 | Phase 41 | Pending |
+| STRT-03 | Phase 41 | Pending |
+| TELE-01 | Phase 42 | Pending |
+| TELE-02 | Phase 42 | Pending |
+| TELE-03 | Phase 42 | Pending |
+| TELE-04 | Phase 42 | Pending |
+| TELE-05 | Phase 42 | Pending |
+| TELE-06 | Phase 42 | Pending |
+| TELE-07 | Phase 43 | Pending |
+| TELE-08 | Phase 42 | Pending |
+| TELE-09 | Phase 43 | Pending |
 
 **Coverage:**
 - v0.9 requirements: 12 total
-- Mapped to phases: 0
-- Unmapped: 12 ⚠️
+- Mapped to phases: 12
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-04-06*
-*Last updated: 2026-04-06 after initial definition*
+*Last updated: 2026-04-06 after roadmap creation*
