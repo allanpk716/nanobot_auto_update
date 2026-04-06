@@ -144,6 +144,65 @@ func (n *Notifier) NotifyUpdateResult(result *instance.UpdateResult) error {
 	return n.Notify("Nanobot 多实例更新失败", message)
 }
 
+// formatStartupMessage formats AutoStartResult into (title, message) for startup notification
+// Skipped instances are intentionally excluded from the message
+func (n *Notifier) formatStartupMessage(result *instance.AutoStartResult) (string, string) {
+	totalAttempted := len(result.Started) + len(result.Failed)
+	if totalAttempted == 0 {
+		return "", ""
+	}
+
+	// All success case
+	if len(result.Failed) == 0 {
+		title := "Nanobot startup completed"
+		message := fmt.Sprintf("All %d instances started successfully", len(result.Started))
+		return title, message
+	}
+
+	// Has failures - determine title
+	var title string
+	if len(result.Started) == 0 {
+		title = "Nanobot startup failed"
+	} else {
+		title = "Nanobot startup partially failed"
+	}
+
+	var msg strings.Builder
+	msg.WriteString(fmt.Sprintf("Started: %d/%d\n", len(result.Started), totalAttempted))
+
+	for _, name := range result.Started {
+		msg.WriteString(fmt.Sprintf("  OK %s\n", name))
+	}
+
+	msg.WriteString("Failed:\n")
+	for _, err := range result.Failed {
+		msg.WriteString(fmt.Sprintf("  FAIL %s: %v\n", err.InstanceName, err.Err))
+	}
+
+	return title, msg.String()
+}
+
+// NotifyStartupResult sends a notification for auto-start results
+// Returns nil without sending if: result is nil, all instances were skipped, or notifier is disabled
+func (n *Notifier) NotifyStartupResult(result *instance.AutoStartResult) error {
+	if result == nil {
+		return nil
+	}
+
+	totalAttempted := len(result.Started) + len(result.Failed)
+	if totalAttempted == 0 {
+		n.logger.Debug("No instances to report in startup notification")
+		return nil
+	}
+
+	title, message := n.formatStartupMessage(result)
+	if title == "" {
+		return nil
+	}
+
+	return n.Notify(title, message)
+}
+
 // formatUpdateResultMessage formats UpdateResult into a user-friendly notification message
 func (n *Notifier) formatUpdateResultMessage(result *instance.UpdateResult) string {
 	var msg strings.Builder
