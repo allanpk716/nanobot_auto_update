@@ -70,9 +70,13 @@
 
 **v0.4 实时日志查看** — 2026-03-20:
 
+**v0.9 Startup Notification** — 2026-04-06 (Phase 41):
+- ✓ STRT-01: 实例启动后通过 Pushover 通知启动结果（成功或失败）
+- ✓ STRT-02: 通知在 auto-start goroutine 内执行（非阻塞）
+- ✓ STRT-03: 未配置 Pushover 时优雅降级（返回 nil）
+
 ### Active
 
-- [ ] 实例启动后通过 Pushover 通知启动结果（成功或失败）
 - [ ] 检测日志中 "Starting Telegram bot" 触发 Telegram 连接监控
 - [ ] 30 秒内检测 Telegram 连接成功/失败，失败时 Pushover 通知
 
@@ -260,15 +264,11 @@ self_update:
 ## Current State
 
 **Shipped:** v0.8 Self-Update (2026-03-30)
-**Total:** 8 milestones shipped, 40 phases, ~16,830 LOC Go
+**Total:** 8 milestones shipped, 41 phases, ~16,900 LOC Go
 
-**Next Milestone Goals:**
-- 实例启动通知（成功/失败 Pushover 通知）
-- Telegram 连接监控（检测日志触发、30 秒超时、失败通知）
+**v0.9 In Progress:** Phase 41 complete — startup notification wired. Phase 42-43 remaining (Telegram monitor).
 
----
-
-*Last updated: 2026-04-06 after v0.9 milestone started*
+*Last updated: 2026-04-06 after Phase 41 completion*
 
 ## Evolution
 
