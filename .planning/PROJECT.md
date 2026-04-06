@@ -2,7 +2,7 @@
 
 ## What This Is
 
-一个 Windows 后台监控服务，使用 Golang 开发，用于监控网络连通性并通过 HTTP API 触发 nanobot 工具的更新。**v0.8 自更新**：通过 GitHub Releases 自动检测、下载并替换更新 nanobot-auto-updater 自身，包括 CI/CD 自动构建、HTTP API 触发自更新、安全恢复机制。**v0.7 更新生命周期通知**：HTTP API 触发更新时发送 Pushover 通知，包括更新开始/完成通知、非阻塞发送、优雅降级。**v0.6 更新日志记录和查询**：持久化记录每次更新操作的详细日志，提供分页查询 API 和 7 天自动清理。**v0.5 核心监控和自动化**：启动时自动启动实例、实例健康监控、Google 连通性监控、HTTP API 触发更新和 help 接口。**v0.4 实时日志查看**：通过 SSE 流式传输和嵌入式 Web UI 实时查看 nanobot 实例的 stdout/stderr 输出。多实例管理保持不变。通过配置文件和 HTTP API 控制行为。
+一个 Windows 后台监控服务，使用 Golang 开发，用于监控网络连通性并通过 HTTP API 触发 nanobot 工具的更新。**v0.9 启动通知与 Telegram 监控**：实例启动结果聚合通知、Telegram 连接状态监控（日志模式检测 + 30s 超时状态机）和 Pushover 通知。**v0.8 自更新**：通过 GitHub Releases 自动检测、下载并替换更新 nanobot-auto-updater 自身，包括 CI/CD 自动构建、HTTP API 触发自更新、安全恢复机制。**v0.7 更新生命周期通知**：HTTP API 触发更新时发送 Pushover 通知，包括更新开始/完成通知、非阻塞发送、优雅降级。**v0.6 更新日志记录和查询**：持久化记录每次更新操作的详细日志，提供分页查询 API 和 7 天自动清理。**v0.5 核心监控和自动化**：启动时自动启动实例、实例健康监控、Google 连通性监控、HTTP API 触发更新和 help 接口。**v0.4 实时日志查看**：通过 SSE 流式传输和嵌入式 Web UI 实时查看 nanobot 实例的 stdout/stderr 输出。多实例管理保持不变。通过配置文件和 HTTP API 控制行为。
 
 ## Core Value
 
@@ -84,9 +84,13 @@
 - ✓ TELE-06: 失败 Pushover 通知
 - ✓ TELE-08: 历史日志条目过滤 (startTime 前忽略)
 
+**v0.9 Telegram Monitor Integration** — 2026-04-06 (Phase 43):
+- ✓ TELE-07: 未产生 trigger 日志的实例无监控开销 (TestMonitor_NoTriggerNoNotifications)
+- ✓ TELE-09: 实例停止时取消监控,不发送虚假通知 (TestMonitor_StopCancelsMonitor)
+
 ### Active
 
-- [ ] Telegram monitor 集成到实例生命周期 (Phase 43: TELE-07, TELE-09)
+(None)
 
 ### Out of Scope
 
@@ -101,6 +105,8 @@
 **uv**: Python 包管理器，用于安装和管理 Python 工具。
 
 **Pushover**: 推送通知服务，用于在更新失败时通知用户。
+
+**v0.9 Shipped:** 2026-04-06 — 启动通知与 Telegram 监控里程碑完成，3 个阶段 (41-43)，6 个计划。Phase 41: NotifyStartupResult 聚合通知 + auto-start 集成。Phase 42: TelegramMonitor 状态机 (模式检测 + AfterFunc 超时 + duck-typing 接口) + 8 并发压力测试。Phase 43: InstanceLifecycle 集成 (constructor chain + context 取消 + goroutine 生命周期)。12/12 需求满足。
 
 **v0.8 Shipped:** 2026-03-30 — 自更新里程碑完成，5 个阶段 (36-40)，8 个计划，12 个任务。Phase 36: minio/selfupdate PoC 验证。Phase 37: GoReleaser + GitHub Actions CI/CD。Phase 38: selfupdate 包 (GitHub Release 检查 + semver + SHA256 + ZIP 解压 + Apply)。Phase 39: HTTP API 集成 (SelfUpdateHandler + 互斥锁 + Help 条目)。Phase 40: 安全恢复 (通知 + self-spawn + .old 清理/恢复 + 端口重试)。21/21 需求满足。
 
@@ -224,6 +230,11 @@
 | Sync 完成通知 (os.Exit 前) | 避免 goroutine 被 os.Exit 杀死 (Pitfall 1) | ✓ Good — Phase 40 |
 | CheckUpdateState 内外函数分离 | checkUpdateStateInternal 返回决策字符串，CheckUpdateStateForPath 执行，可测试无 os.Exit | ✓ Good — Phase 40 |
 | net.Listen + http.Serve 替代 ListenAndServe | 启用端口绑定重试能力 | ✓ Good — Phase 40 |
+| NotifyStartupResult 方法 + formatStartupMessage | 聚合多实例启动结果为单条通知 | ✓ Good — Phase 41 |
+| TelegramMonitor 独立包 (internal/telegram) | 日志模式检测 + 30s AfterFunc 超时状态机 | ✓ Good — Phase 42 |
+| Duck-typed LogSubscriber/Notifier 接口 | 最小范围,单方法接口,避免循环导入 | ✓ Good — Phase 42 |
+| Notifier constructor chain (main→manager→lifecycle) | 注入式通知,与现有模式一致 | ✓ Good — Phase 43 |
+| TelegramMonitor lifecycle tied to InstanceLifecycle | 启动后创建,停止前取消,goroutine 安全 | ✓ Good — Phase 43 |
 
 ## Configuration
 
@@ -271,12 +282,10 @@ self_update:
 
 ## Current State
 
-**Shipped:** v0.8 Self-Update (2026-03-30)
-**Total:** 8 milestones shipped, 42 phases, ~17,100 LOC Go
+**Shipped:** v0.9 Startup Notification & Telegram Monitor (2026-04-06)
+**Total:** 9 milestones shipped, 45 phases, ~19,158 LOC Go
 
-**v0.9 In Progress:** Phase 42 complete — Telegram monitor core (patterns, state machine, notifications). Phase 43 remaining (integration).
-
-*Last updated: 2026-04-06 after Phase 42 completion*
+*Last updated: 2026-04-06 after v0.9 milestone completion*
 
 ## Evolution
 

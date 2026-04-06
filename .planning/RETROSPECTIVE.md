@@ -43,6 +43,47 @@
 
 ---
 
+## Milestone: v0.9 — Startup Notification & Telegram Monitor
+
+**Shipped:** 2026-04-06
+**Phases:** 3 | **Plans:** 6 | **Sessions:** 2
+
+### What Was Built
+- NotifyStartupResult + formatStartupMessage: 聚合多实例启动结果为单条 Pushover 通知 (6 TDD tests)
+- TelegramMonitor 状态机: 日志模式检测 (trigger/success/failure) + AfterFunc 30s 超时 + Pushover 通知
+- 8 并发/边界压力测试: panic recovery, 快速状态切换, timer 重启, context 取消, race-safe 交互
+- InstanceLifecycle 集成: Notifier constructor chain 注入 (main→manager→lifecycle) + context 取消 + goroutine 生命周期
+- 6 TDD lifecycle tests: TELE-07 零开销 + TELE-09 取消安全 + 成功通知验证
+
+### What Worked
+- Duck-typed 接口 (LogSubscriber/Notifier/Notifier in lifecycle.go): 最小范围单方法接口，避免循环导入
+- AfterFunc 替代 time.NewTimer + goroutine: 更简洁的超时状态机
+- Constructor chain 注入模式: 与 v0.7 Notifier + v0.8 SelfUpdateChecker 模式一致
+- 独立 context 管理: 每个实例有自己的 monitorCancel，停止时精确取消
+
+### What Was Inefficient
+- Phase 43 人工 UAT 最终跳过 — 自动化 mock 测试已充分验证
+- 预存在的 capture_test.go 编译错误继续从 v0.8 延续
+- Exact log patterns from python-telegram-bot 未在真实环境验证 (hardcoded strings)
+
+### Patterns Established
+- AfterFunc timeout state machine: 替代 goroutine+timer 模式，更简洁
+- Duck-typed local interface: 在 lifecycle.go 内部定义 Notifier 接口，最小化范围
+- Monitor lifecycle tied to instance: startTelegramMonitor/stopTelegramMonitor 对称管理
+
+### Key Lessons
+1. 日志模式监控用 strings.Contains + 状态机是最简方案，无需正则或复杂解析
+2. 实例级 context 取消是 goroutine 生命周期管理的正确方式 — Stop() 只需 cancel()
+3. 历史日志过滤 (startTime) 对订阅者模式至关重要，避免重放误触发
+4. 零开销监控 (stateIdle 初始态) 确保非 Telegram 实例无额外负担
+
+### Cost Observations
+- Model mix: 100% sonnet
+- Sessions: 2 (Phase 41, Phase 42-43)
+- Notable: 3 个阶段在 1 天内完成，duck-typing 模式成熟度高
+
+---
+
 ## Cross-Milestone Trends
 
 ### Process Evolution
@@ -56,6 +97,7 @@
 | v0.6 | ~2 | 4 | JSONL 持久化 + 查询 API |
 | v0.7 | ~1 | 2 | Notifier 注入模式 |
 | v0.8 | ~3 | 5 | PoC-first + CI/CD + 自更新 |
+| v0.9 | ~2 | 3 | AfterFunc state machine + duck-typing + lifecycle monitor |
 
 ### Cumulative Quality
 
@@ -68,6 +110,7 @@
 | v0.6 | ~70 | JSONL 持久化, 流式分页 |
 | v0.7 | ~77 | Notifier 接口, duck typing |
 | v0.8 | ~90+ | selfupdate, restartFn 注入, 内外函数分离 |
+| v0.9 | ~100+ | AfterFunc state machine, duck-typed local interface, instance-level context |
 
 ### Top Lessons (Verified Across Milestones)
 
@@ -75,3 +118,4 @@
 2. 注入模式 (TriggerUpdater, Notifier, SelfUpdateChecker) 统一了测试策略
 3. 非阻塞 + panic recovery 模式确保所有异步操作不影响主流程
 4. Windows 文件锁问题需要特殊处理 (1s pause, temp+rename)
+5. Duck-typed 最小接口 + constructor chain 是 Go 项目解耦的标准模式 (v0.7-v0.9 验证)
