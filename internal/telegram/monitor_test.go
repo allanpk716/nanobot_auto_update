@@ -300,3 +300,252 @@ func TestMonitor_StopCancelsTimer(t *testing.T) {
 	calls := notif.getCalls()
 	assert.Empty(t, calls, "Stop() should cancel timer, no timeout notification should fire")
 }
+
+// --- Edge case and concurrency stress tests (Plan 42-02) ---
+
+// panicNotifier mocks a notifier whose Notify() always panics.
+type panicNotifier struct {
+	mu        sync.Mutex
+	panicked  bool
+}
+
+func (p *panicNotifier) IsEnabled() bool { return true }
+
+func (p *panicNotifier) Notify(title, message string) error {
+	p.mu.Lock()
+	p.panicked = true
+	p.mu.Unlock()
+	panic("intentional test panic")
+}
+
+func (p *panicNotifier) didPanic() bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.panicked
+}
+
+// disabledNotifier mocks a notifier that is not enabled.
+type disabledNotifier struct{}
+
+func (d *disabledNotifier) IsEnabled() bool { return false }
+func (d *disabledNotifier) Notify(title, message string) error { return nil }
+
+func TestMonitor_RapidTriggerSuccessSequence(t *testing.T) {
+	sub := newMockLogSubscriber()
+	notif := &mockNotifier{enabled: true}
+
+	m := NewTelegramMonitor(sub, notif, "test-bot", 200*time.Millisecond, slog.Default())
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	go m.Start(ctx)
+	time.Sleep(10 * time.Millisecond) // Wait for goroutine startup
+
+	// Send all 4 entries rapidly: trigger, success, trigger, success
+	sub.writeEntry("Starting Telegram bot...")
+	sub.writeEntry("Telegram bot commands registered")
+	sub.writeEntry("Starting Telegram bot...")
+	sub.writeEntry("Telegram bot commands registered")
+
+	// Wait for processing and async notifications
+	time.Sleep(300 * time.Millisecond)
+
+	calls := notif.getCalls()
+	require.Len(t, calls, 2, "expected exactly 2 success notifications")
+	for _, c := range calls {
+		assert.Contains(t, c.Title, "Connected", "each notification should be a success")
+	}
+}
+
+func TestMonitor_RapidTriggerFailureSequence(t *testing.T) {
+	sub := newMockLogSubscriber()
+	notif := &mockNotifier{enabled: true}
+
+	m := NewTelegramMonitor(sub, notif, "test-bot", 200*time.Millisecond, slog.Default())
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	go m.Start(ctx)
+	time.Sleep(10 * time.Millisecond) // Wait for goroutine startup
+
+	// Send all 4 entries rapidly: trigger, failure, trigger, failure
+	sub.writeEntry("Starting Telegram bot...")
+	sub.writeEntry("httpx.ConnectError: connection refused")
+	sub.writeEntry("Starting Telegram bot...")
+	sub.writeEntry("httpx.ConnectError: timeout")
+
+	// Wait for processing and async notifications
+	time.Sleep(300 * time.Millisecond)
+
+	calls := notif.getCalls()
+	require.Len(t, calls, 2, "expected exactly 2 failure notifications")
+	for _, c := range calls {
+		assert.Contains(t, c.Title, "Failed", "each notification should be a failure")
+	}
+}
+
+func TestMonitor_TriggerFollowedByAnotherTrigger(t *testing.T) {
+	sub := newMockLogSubscriber()
+	notif := &mockNotifier{enabled: true}
+
+	m := NewTelegramMonitor(sub, notif, "test-bot", 200*time.Millisecond, slog.Default())
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	go m.Start(ctx)
+	time.Sleep(10 * time.Millisecond) // Wait for goroutine startup
+
+	// Send trigger, wait 50ms, send another trigger (timer should restart)
+	sub.writeEntry("Starting Telegram bot...")
+	time.Sleep(50 * time.Millisecond)
+	sub.writeEntry("Starting Telegram bot...")
+
+	// Wait for timeout to fire (200ms from second trigger, plus buffer)
+	time.Sleep(400 * time.Millisecond)
+
+	calls := notif.getCalls()
+	require.Len(t, calls, 1, "expected exactly 1 timeout notification (timer restarted on second trigger)")
+	assert.Contains(t, calls[0].Title, "Timeout", "should be a timeout notification")
+}
+
+func TestMonitor_NotificationPanicRecovery(t *testing.T) {
+	sub := newMockLogSubscriber()
+	notif := &panicNotifier{}
+
+	m := NewTelegramMonitor(sub, notif, "test-bot", 5*time.Second, slog.Default())
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	go m.Start(ctx)
+	time.Sleep(10 * time.Millisecond) // Wait for goroutine startup
+
+	// Send trigger + failure to trigger notification (which will panic)
+	sub.writeEntry("Starting Telegram bot...")
+	sub.writeEntry("httpx.ConnectError: connection refused")
+
+	// Sleep to allow notification goroutine to run and panic to be recovered
+	time.Sleep(100 * time.Millisecond)
+
+	// If we reach here, the monitor goroutine survived the panic
+	assert.True(t, notif.didPanic(), "Notify should have been called and panicked")
+	// Verify monitor is still functional by sending another trigger
+	sub.writeEntry("Starting Telegram bot...")
+	sub.writeEntry("Telegram bot commands registered")
+	time.Sleep(100 * time.Millisecond)
+	// No deadlock means the monitor survived the panic
+}
+
+func TestMonitor_DisabledNotifierSucceeds(t *testing.T) {
+	sub := newMockLogSubscriber()
+	notif := &disabledNotifier{}
+
+	m := NewTelegramMonitor(sub, notif, "test-bot", 5*time.Second, slog.Default())
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	go m.Start(ctx)
+	time.Sleep(10 * time.Millisecond) // Wait for goroutine startup
+
+	// Send trigger + success — notifier is disabled but should not panic
+	sub.writeEntry("Starting Telegram bot...")
+	sub.writeEntry("Telegram bot commands registered")
+
+	// Allow processing
+	time.Sleep(100 * time.Millisecond)
+
+	// No panic, no error — test passes by reaching this point
+}
+
+func TestMonitor_ContextCancelledBeforeTrigger(t *testing.T) {
+	sub := newMockLogSubscriber()
+	notif := &mockNotifier{enabled: true}
+
+	m := NewTelegramMonitor(sub, notif, "test-bot", 200*time.Millisecond, slog.Default())
+	ctx, cancel := context.WithCancel(context.Background())
+
+	done := make(chan struct{})
+	go func() {
+		m.Start(ctx)
+		close(done)
+	}()
+	time.Sleep(10 * time.Millisecond) // Wait for goroutine startup
+
+	// Cancel context before any log entry
+	cancel()
+
+	// Verify Start() returns promptly
+	select {
+	case <-done:
+		// Good — monitor exited
+	case <-time.After(500 * time.Millisecond):
+		t.Fatal("Start() did not return after context cancellation — possible goroutine leak")
+	}
+
+	calls := notif.getCalls()
+	assert.Empty(t, calls, "no notification should be sent when context is cancelled before trigger")
+}
+
+func TestMonitor_EmptyContentEntry(t *testing.T) {
+	sub := newMockLogSubscriber()
+	notif := &mockNotifier{enabled: true}
+
+	m := NewTelegramMonitor(sub, notif, "test-bot", 200*time.Millisecond, slog.Default())
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	go m.Start(ctx)
+	time.Sleep(10 * time.Millisecond) // Wait for goroutine startup
+
+	// Send entry with empty content
+	sub.writeEntry("")
+
+	// Wait longer than timeout — empty content should not trigger anything
+	time.Sleep(400 * time.Millisecond)
+
+	calls := notif.getCalls()
+	assert.Empty(t, calls, "empty content should not trigger any state change or notification")
+}
+
+func TestMonitor_ConcurrentTimerAndProcessEntry(t *testing.T) {
+	sub := newMockLogSubscriber()
+	notif := &mockNotifier{enabled: true}
+
+	// Use very short timeout to create race between timer and processEntry
+	m := NewTelegramMonitor(sub, notif, "test-bot", 50*time.Millisecond, slog.Default())
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	go m.Start(ctx)
+	time.Sleep(10 * time.Millisecond) // Wait for goroutine startup
+
+	// Send trigger, then immediately send success
+	// The race: will the 50ms timer fire before processEntry sees the success?
+	sub.writeEntry("Starting Telegram bot...")
+	sub.writeEntry("Telegram bot commands registered")
+
+	// Wait for either outcome
+	time.Sleep(200 * time.Millisecond)
+
+	calls := notif.getCalls()
+	// Either success notification or timeout notification — exactly 1
+	require.Len(t, calls, 1, "expected exactly 1 notification (either success or timeout)")
+	// Validate it's one of the expected outcomes
+	isSuccess := containsSubstring(calls[0].Title, "Connected")
+	isTimeout := containsSubstring(calls[0].Title, "Timeout")
+	assert.True(t, isSuccess || isTimeout,
+		"notification should be either Connected or Timeout, got: %s", calls[0].Title)
+}
+
+// containsSubstring checks if s contains substr (test helper).
+func containsSubstring(s, substr string) bool {
+	return len(s) >= len(substr) && (s == substr || len(s) > 0 && containsSubstringHelper(s, substr))
+}
+
+func containsSubstringHelper(s, substr string) bool {
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if s[i:i+len(substr)] == substr {
+			return true
+		}
+	}
+	return false
+}
