@@ -98,8 +98,8 @@
 6. 单元测试：进度状态并发安全、下载百分比计算、localhost 限制
 
 **Plans:**
-- [ ] 44-01-PLAN.md — selfupdate progress tracking (ProgressState + downloadWithProgress + atomic.Value)
-- [ ] 44-02-PLAN.md — web-config API + check progress enhancement (localhost-only endpoint + tests)
+- [x] 44-01-PLAN.md — selfupdate progress tracking (ProgressState + downloadWithProgress + atomic.Value)
+- [x] 44-02-PLAN.md — web-config API + check progress enhancement (localhost-only endpoint + tests)
 
 ---
 
