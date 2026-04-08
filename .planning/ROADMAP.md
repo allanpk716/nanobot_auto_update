@@ -119,8 +119,8 @@
 
 **Plans:** 2 plans
 
-- [ ] 45-01-PLAN.md — HTML/CSS 自更新区块 + JS 逻辑（token、版本、检测、触发、轮询）
-- [ ] 45-02-PLAN.md — 编译验证 + 浏览器功能测试
+- [x] 45-01-PLAN.md — HTML/CSS 自更新区块 + JS 逻辑（token、版本、检测、触发、轮询）
+- [x] 45-02-PLAN.md — 编译验证 + 浏览器功能测试
 
 **Depends on:** Phase 44
 
