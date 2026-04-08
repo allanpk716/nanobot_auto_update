@@ -90,7 +90,14 @@
 
 ### Active
 
-(None)
+**v0.10 管理界面自更新功能** — 2026-04-07:
+- UI-01: 自更新管理区域布局 (home.html 顶部区块)
+- UI-02: 当前版本显示 (标签样式)
+- UI-03: 检测更新 (版本号+发布日期+更新说明)
+- UI-04: 触发更新与进度显示 (checking→downloading%→installing→complete/failed)
+- UI-05: 下载进度百分比 (轮询 + 进度条)
+- API-01: 更新进度状态追踪 (ProgressState + io.TeeReader + atomic.Value)
+- API-02: Web UI Token API (localhost-only GET /api/v1/web-config)
 
 ### Out of Scope
 
@@ -106,9 +113,21 @@
 
 **Pushover**: 推送通知服务，用于在更新失败时通知用户。
 
+**v0.10 管理界面自更新功能 (Active)** — 2026-04-07:
+- 在 home.html 顶部新增自更新管理区域
+- 显示当前版本、检测最新版本（版本号+日期+说明）、一键触发更新
+- 更新过程实时显示阶段和下载进度百分比
+- Web UI 自动从配置获取认证 Token，无需手动输入
+- 2 个阶段 (44-45)，4 个计划
+
 **v0.9 Shipped:** 2026-04-06 — 启动通知与 Telegram 监控里程碑完成，3 个阶段 (41-43)，6 个计划。Phase 41: NotifyStartupResult 聚合通知 + auto-start 集成。Phase 42: TelegramMonitor 状态机 (模式检测 + AfterFunc 超时 + duck-typing 接口) + 8 并发压力测试。Phase 43: InstanceLifecycle 集成 (constructor chain + context 取消 + goroutine 生命周期)。12/12 需求满足。
 
-**v0.8 Shipped:** 2026-03-30 — 自更新里程碑完成，5 个阶段 (36-40)，8 个计划，12 个任务。Phase 36: minio/selfupdate PoC 验证。Phase 37: GoReleaser + GitHub Actions CI/CD。Phase 38: selfupdate 包 (GitHub Release 检查 + semver + SHA256 + ZIP 解压 + Apply)。Phase 39: HTTP API 集成 (SelfUpdateHandler + 互斥锁 + Help 条目)。Phase 40: 安全恢复 (通知 + self-spawn + .old 清理/恢复 + 端口重试)。21/21 需求满足。
+**v0.10 管理界面自更新功能** — 2026-04-07 (Active):
+- 在 home.html 顶部新增自更新管理区域
+- 显示当前版本、检测最新版本（版本号+日期+说明）、一键触发更新
+- 更新过程实时显示阶段和下载进度百分比
+- Web UI 自动从配置获取认证 Token，无需手动输入
+- 2 个阶段 (44-45)，4 个计划
 
 **v0.7 Shipped:** 2026-03-29 — 更新生命周期通知里程碑完成，2 个阶段 (34-35)，2 个计划，4 个任务。Phase 34: Notifier 注入 TriggerHandler + 异步通知 (开始/完成) + panic recovery。Phase 35: Notifier 接口重构 + recordingNotifier mock + 4 个 E2E 通知测试。审计结果: 4/4 需求满足，2/2 阶段通过，5/5 集成点连接，5/5 E2E 流程完整，77/77 测试通过。
 
@@ -283,9 +302,10 @@ self_update:
 ## Current State
 
 **Shipped:** v0.9 Startup Notification & Telegram Monitor (2026-04-06)
+**Active:** v0.10 管理界面自更新功能 (2026-04-07)
 **Total:** 9 milestones shipped, 45 phases, ~19,158 LOC Go
 
-*Last updated: 2026-04-06 after v0.9 milestone completion*
+*Last updated: 2026-04-07 after v0.10 milestone started*
 
 ## Evolution
 

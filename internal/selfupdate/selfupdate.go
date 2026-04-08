@@ -15,6 +15,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/minio/selfupdate"
@@ -75,6 +76,14 @@ type githubAsset struct {
 	ContentType        string `json:"content_type"`
 }
 
+// ProgressState represents the current progress of a self-update operation.
+// Stored as immutable value in atomic.Value for lock-free concurrent access.
+type ProgressState struct {
+	Stage           string `json:"stage"`            // "idle" / "checking" / "downloading" / "installing" / "complete" / "failed"
+	DownloadPercent int    `json:"download_percent"` // 0-100
+	Error           string `json:"error,omitempty"`  // populated only when Stage == "failed"
+}
+
 // Updater handles self-update operations including version checking and binary replacement.
 // Per D-03, it encapsulates configuration, HTTP client, cache, and logger.
 type Updater struct {
@@ -83,17 +92,35 @@ type Updater struct {
 	cachedRelease *ReleaseInfo
 	cacheTime     time.Time
 	logger        *slog.Logger
-	baseURL       string // defaults to "https://api.github.com", overrideable for tests
+	baseURL       string   // defaults to "https://api.github.com", overrideable for tests
+	progress      atomic.Value // stores *ProgressState
 }
 
 // NewUpdater creates a new Updater with the given configuration.
 func NewUpdater(cfg SelfUpdateConfig, logger *slog.Logger) *Updater {
-	return &Updater{
+	u := &Updater{
 		cfg:        cfg,
 		httpClient: &http.Client{Timeout: httpTimeout},
 		logger:     logger.With("component", "selfupdate"),
 		baseURL:    defaultGitHubAPIBase,
 	}
+	u.progress.Store(&ProgressState{Stage: "idle"})
+	return u
+}
+
+// SetProgress stores a new progress state atomically.
+// Each call must pass a new *ProgressState pointer (immutable value pattern).
+func (u *Updater) SetProgress(state *ProgressState) {
+	u.progress.Store(state)
+}
+
+// GetProgress returns the current progress state.
+// Returns idle state if no progress has been stored yet.
+func (u *Updater) GetProgress() *ProgressState {
+	if v := u.progress.Load(); v != nil {
+		return v.(*ProgressState)
+	}
+	return &ProgressState{Stage: "idle"}
 }
 
 // CheckLatest checks GitHub for the latest release. Results are cached for cacheTTL (1 hour).
@@ -267,8 +294,33 @@ func extractExeFromZip(zipData []byte, targetExeName string) (io.Reader, error) 
 	return nil, fmt.Errorf("exe %q not found in zip", targetExeName)
 }
 
-// download fetches a URL and returns the response body bytes.
-func (u *Updater) download(url string) ([]byte, error) {
+// progressWriter counts bytes written and updates download progress via io.TeeReader.
+type progressWriter struct {
+	total   int64
+	written int64
+	updater *Updater
+	stage   string
+}
+
+func (pw *progressWriter) Write(p []byte) (int, error) {
+	n := len(p)
+	pw.written += int64(n)
+	if pw.total > 0 {
+		percent := int(float64(pw.written) / float64(pw.total) * 100)
+		if percent > 100 {
+			percent = 100
+		}
+		pw.updater.SetProgress(&ProgressState{
+			Stage:           pw.stage,
+			DownloadPercent: percent,
+		})
+	}
+	return n, nil
+}
+
+// downloadWithProgress fetches a URL and returns the response body bytes.
+// If stage is non-empty, tracks download progress via io.TeeReader + Content-Length.
+func (u *Updater) downloadWithProgress(url string, stage string) ([]byte, error) {
 	resp, err := u.httpClient.Get(url)
 	if err != nil {
 		return nil, fmt.Errorf("download %s: %w", url, err)
@@ -277,6 +329,23 @@ func (u *Updater) download(url string) ([]byte, error) {
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("download %s: HTTP %d", url, resp.StatusCode)
 	}
+
+	// If stage is provided and Content-Length is known, track progress
+	if stage != "" && resp.ContentLength > 0 {
+		pw := &progressWriter{
+			total:   resp.ContentLength,
+			updater: u,
+			stage:   stage,
+		}
+		teeReader := io.TeeReader(resp.Body, pw)
+		data, err := io.ReadAll(teeReader)
+		if err != nil {
+			return nil, fmt.Errorf("read download %s: %w", url, err)
+		}
+		return data, nil
+	}
+
+	// No progress tracking (stage empty or Content-Length unknown)
 	data, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, fmt.Errorf("read download %s: %w", url, err)
@@ -290,15 +359,29 @@ func (u *Updater) download(url string) ([]byte, error) {
 // If already up to date, returns nil without downloading.
 // On Apply failure, checks RollbackError to determine if rollback succeeded.
 func (u *Updater) Update(currentVersion string) error {
+	// Register defer early so it catches all error returns
+	var updateErr error
+	defer func() {
+		if updateErr != nil {
+			current := u.GetProgress()
+			if current.Stage != "complete" && current.Stage != "failed" {
+				u.SetProgress(&ProgressState{Stage: "failed", Error: updateErr.Error()})
+			}
+		}
+	}()
+
 	// 1. Check if update needed
 	needsUpdate, release, err := u.NeedUpdate(currentVersion)
 	if err != nil {
-		return fmt.Errorf("check update: %w", err)
+		updateErr = fmt.Errorf("check update: %w", err)
+		return updateErr
 	}
 	if !needsUpdate {
 		u.logger.Info("Already up to date")
 		return nil
 	}
+
+	u.SetProgress(&ProgressState{Stage: "checking"})
 
 	u.logger.Info("Update available",
 		"current", currentVersion,
@@ -313,44 +396,53 @@ func (u *Updater) Update(currentVersion string) error {
 		}
 	}
 	if zipAssetName == "" {
-		return fmt.Errorf("no windows amd64 zip asset found in release %s", release.Version)
+		updateErr = fmt.Errorf("no windows amd64 zip asset found in release %s", release.Version)
+		return updateErr
 	}
 
-	// 3. Download checksums.txt
+	// 3. Download checksums.txt (no progress tracking for small file)
 	u.logger.Info("Downloading checksums", "url", release.ChecksumURL)
-	checksumsData, err := u.download(release.ChecksumURL)
+	checksumsData, err := u.downloadWithProgress(release.ChecksumURL, "")
 	if err != nil {
-		return fmt.Errorf("download checksums: %w", err)
+		updateErr = fmt.Errorf("download checksums: %w", err)
+		return updateErr
 	}
 
-	// 4. Download ZIP
+	// 4. Download ZIP with progress tracking
+	u.SetProgress(&ProgressState{Stage: "downloading", DownloadPercent: 0})
 	u.logger.Info("Downloading update", "url", release.DownloadURL)
-	zipData, err := u.download(release.DownloadURL)
+	zipData, err := u.downloadWithProgress(release.DownloadURL, "downloading")
 	if err != nil {
-		return fmt.Errorf("download zip: %w", err)
+		updateErr = fmt.Errorf("download zip: %w", err)
+		return updateErr
 	}
 
 	// 5. Verify ZIP checksum (D-02, UPDATE-03)
 	expectedHash, err := parseChecksum(checksumsData, zipAssetName)
 	if err != nil {
-		return fmt.Errorf("parse checksum: %w", err)
+		updateErr = fmt.Errorf("parse checksum: %w", err)
+		return updateErr
 	}
 	if !verifyChecksum(zipData, expectedHash) {
-		return fmt.Errorf("checksum verification failed for %s", zipAssetName)
+		updateErr = fmt.Errorf("checksum verification failed for %s", zipAssetName)
+		return updateErr
 	}
 	u.logger.Info("Checksum verified", "asset", zipAssetName)
 
 	// 6. Extract exe from ZIP in memory (D-01)
 	exeReader, err := extractExeFromZip(zipData, exeName)
 	if err != nil {
-		return fmt.Errorf("extract exe: %w", err)
+		updateErr = fmt.Errorf("extract exe: %w", err)
+		return updateErr
 	}
 	u.logger.Info("Extracted exe from zip", "exe", exeName)
 
 	// 7. Apply update using minio/selfupdate (UPDATE-04, UPDATE-05)
+	u.SetProgress(&ProgressState{Stage: "installing", DownloadPercent: 100})
 	exePath, err := os.Executable()
 	if err != nil {
-		return fmt.Errorf("get exe path: %w", err)
+		updateErr = fmt.Errorf("get exe path: %w", err)
+		return updateErr
 	}
 	opts := selfupdate.Options{
 		OldSavePath: exePath + ".old",
@@ -360,11 +452,14 @@ func (u *Updater) Update(currentVersion string) error {
 	err = selfupdate.Apply(exeReader, opts)
 	if err != nil {
 		if rerr := selfupdate.RollbackError(err); rerr != nil {
-			return fmt.Errorf("update failed and rollback also failed: %w (rollback: %v)", err, rerr)
+			updateErr = fmt.Errorf("update failed and rollback also failed: %w (rollback: %v)", err, rerr)
+			return updateErr
 		}
-		return fmt.Errorf("update failed (rolled back): %w", err)
+		updateErr = fmt.Errorf("update failed (rolled back): %w", err)
+		return updateErr
 	}
 
+	u.SetProgress(&ProgressState{Stage: "complete", DownloadPercent: 100})
 	u.logger.Info("Update applied successfully",
 		"old_version", currentVersion,
 		"new_version", release.Version)

@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -50,7 +51,7 @@ func validReleaseJSON(tag string) string {
 
 // newTestUpdater creates an Updater pointed at the given test server URL.
 func newTestUpdater(serverURL string) *Updater {
-	return &Updater{
+	u := &Updater{
 		cfg: SelfUpdateConfig{
 			GithubOwner: "test",
 			GithubRepo:  "repo",
@@ -59,6 +60,8 @@ func newTestUpdater(serverURL string) *Updater {
 		logger:     slog.Default().With("component", "selfupdate"),
 		baseURL:    serverURL,
 	}
+	u.progress.Store(&ProgressState{Stage: "idle"})
+	return u
 }
 
 func TestCheckLatest(t *testing.T) {
@@ -473,12 +476,12 @@ func TestUpdate_FullFlow(t *testing.T) {
 	assert.NotEmpty(t, zipAssetName)
 
 	// Step 3: Download checksums
-	checksumsData, err := u.download(release.ChecksumURL)
+	checksumsData, err := u.downloadWithProgress(release.ChecksumURL, "")
 	require.NoError(t, err)
 	assert.Equal(t, checksumsContent, string(checksumsData))
 
 	// Step 4: Download ZIP
-	downloadedZip, err := u.download(release.DownloadURL)
+	downloadedZip, err := u.downloadWithProgress(release.DownloadURL, "downloading")
 	require.NoError(t, err)
 	assert.Equal(t, zipData, downloadedZip)
 
@@ -515,4 +518,164 @@ func TestUpdate_AlreadyUpToDate(t *testing.T) {
 	require.NoError(t, err)
 	// Only 1 request (the API call to check version), no download requests
 	assert.Equal(t, int32(1), atomic.LoadInt32(&requestCount))
+}
+
+func TestProgressState_ConcurrentSafe(t *testing.T) {
+	u := newTestUpdater("http://localhost")
+	var wg sync.WaitGroup
+	for i := 0; i < 100; i++ {
+		wg.Add(1)
+		go func(n int) {
+			defer wg.Done()
+			u.SetProgress(&ProgressState{
+				Stage:           "downloading",
+				DownloadPercent: n % 101,
+			})
+			_ = u.GetProgress()
+		}(i)
+	}
+	wg.Wait()
+	// No panic = pass. Verify final state is valid.
+	p := u.GetProgress()
+	assert.Equal(t, "downloading", p.Stage)
+	assert.True(t, p.DownloadPercent >= 0 && p.DownloadPercent <= 100)
+}
+
+func TestProgressState_DefaultIdle(t *testing.T) {
+	u := newTestUpdater("http://localhost")
+	p := u.GetProgress()
+	assert.Equal(t, "idle", p.Stage)
+	assert.Equal(t, 0, p.DownloadPercent)
+	assert.Equal(t, "", p.Error)
+}
+
+func TestDownloadWithProgress_PercentCalc(t *testing.T) {
+	content := make([]byte, 10000) // 10KB
+	for i := range content {
+		content[i] = byte(i % 256)
+	}
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Length", fmt.Sprintf("%d", len(content)))
+		w.WriteHeader(http.StatusOK)
+		w.Write(content)
+	}))
+	defer server.Close()
+
+	u := newTestUpdater(server.URL)
+	data, err := u.downloadWithProgress(server.URL+"/test", "downloading")
+	require.NoError(t, err)
+	assert.Equal(t, content, data)
+
+	p := u.GetProgress()
+	assert.Equal(t, "downloading", p.Stage)
+	assert.Equal(t, 100, p.DownloadPercent) // All bytes read
+}
+
+func TestDownloadWithProgress_NoContentLength(t *testing.T) {
+	content := []byte("some data without content-length")
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Flush the headers first to force chunked transfer encoding
+		// This prevents Go from auto-setting Content-Length
+		w.WriteHeader(http.StatusOK)
+		if f, ok := w.(http.Flusher); ok {
+			f.Flush()
+		}
+		w.Write(content)
+	}))
+	defer server.Close()
+
+	u := newTestUpdater(server.URL)
+	data, err := u.downloadWithProgress(server.URL+"/test", "downloading")
+	require.NoError(t, err)
+	assert.Equal(t, content, data)
+
+	// With chunked encoding, Content-Length is -1, so DownloadPercent should remain 0
+	p := u.GetProgress()
+	assert.Equal(t, 0, p.DownloadPercent)
+}
+
+func TestUpdate_SetsProgressStages(t *testing.T) {
+	exeContent := "fake exe binary content"
+	zipData := createTestZip(t, exeName, exeContent)
+	zipHash := sha256.Sum256(zipData)
+	checksumsContent := fmt.Sprintf("%s  nanobot-auto-updater_2.0.0_windows_amd64.zip\n",
+		hex.EncodeToString(zipHash[:]))
+
+	var serverURL string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/repos/test/repo/releases/latest":
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			release := map[string]interface{}{
+				"tag_name":     "v2.0.0",
+				"name":         "v2.0.0",
+				"body":         "Release notes",
+				"html_url":     "https://github.com/test/repo/releases/tag/v2.0.0",
+				"published_at": "2026-03-29T00:00:00Z",
+				"assets": []map[string]interface{}{
+					{
+						"name":               "nanobot-auto-updater_2.0.0_windows_amd64.zip",
+						"browser_download_url": serverURL + "/download/zip",
+						"size":               len(zipData),
+						"content_type":       "application/zip",
+					},
+					{
+						"name":               "nanobot-auto-updater_2.0.0_checksums.txt",
+						"browser_download_url": serverURL + "/download/checksums",
+						"size":               len(checksumsContent),
+						"content_type":       "text/plain",
+					},
+				},
+			}
+			data, _ := json.Marshal(release)
+			w.Write(data)
+		case r.URL.Path == "/download/checksums":
+			w.WriteHeader(http.StatusOK)
+			fmt.Fprint(w, checksumsContent)
+		case r.URL.Path == "/download/zip":
+			w.Header().Set("Content-Length", fmt.Sprintf("%d", len(zipData)))
+			w.WriteHeader(http.StatusOK)
+			w.Write(zipData)
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+	serverURL = server.URL
+
+	u := newTestUpdater(server.URL)
+
+	// Update may succeed or fail at selfupdate.Apply depending on test environment.
+	// In either case, progress stages should have been set.
+	err := u.Update("1.0.0")
+
+	p := u.GetProgress()
+	if err != nil {
+		// Apply failed (common in test environments)
+		assert.Equal(t, "failed", p.Stage)
+		assert.NotEmpty(t, p.Error)
+	} else {
+		// Apply succeeded (e.g., test binary is replaceable)
+		assert.Equal(t, "complete", p.Stage)
+	}
+}
+
+func TestUpdate_FailedProgressStage(t *testing.T) {
+	// Server returns 500 for API call, causing early failure
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+		fmt.Fprint(w, "server error")
+	}))
+	defer server.Close()
+
+	u := newTestUpdater(server.URL)
+	err := u.Update("1.0.0")
+	require.Error(t, err)
+
+	p := u.GetProgress()
+	assert.Equal(t, "failed", p.Stage)
+	assert.Contains(t, p.Error, "check update")
 }
