@@ -1,5 +1,23 @@
 # Milestones
 
+## v0.10 管理界面自更新功能 (Shipped: 2026-04-08)
+
+**Phases completed:** 5 phases, 8 plans, 20 tasks
+
+**Key accomplishments:**
+
+- formatStartupMessage and NotifyStartupResult methods on Notifier with 6 TDD tests covering all-success, partial-failure, all-failed, skipped-exclusion, disabled-notifier, and all-skipped scenarios
+- Log-pattern detection state machine with AfterFunc timeout, duck-typed LogSubscriber/Notifier interfaces, and Pushover notification for success/failure/timeout outcomes
+- 8 concurrency and edge case stress tests confirming panic recovery, rapid state transitions, timer restart, context cancellation, and race-safe timer-entry interaction in the Telegram monitor
+- TelegramMonitor wired into InstanceLifecycle with Notifier injection, independent context management, and clean goroutine lifecycle
+- 6 TDD unit tests verifying InstanceLifecycle monitor wiring: create/stop lifecycle, TELE-07 zero-overhead, TELE-09 cancellation safety, success notification delivery
+- Download progress tracking via atomic.Value ProgressState + io.TeeReader, exposed through check API response
+- GET /api/v1/web-config localhost-only endpoint returning auth_token for frontend auto-authentication
+- Self-update management section with token auth, version badge, release notes expand/collapse, and 500ms progress polling with stage-based progress bar
+- Compilation verified and user browser-tested self-update management UI — all features working
+
+---
+
 ## v0.9 Startup Notification & Telegram Monitor (Shipped: 2026-04-06)
 
 **Phases completed:** 3 phases, 6 plans, 12 tasks

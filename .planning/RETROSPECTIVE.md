@@ -84,6 +84,43 @@
 
 ---
 
+## Milestone: v0.10 — 管理界面自更新功能
+
+**Shipped:** 2026-04-08
+**Phases:** 2 | **Plans:** 4 | **Sessions:** 2
+
+### What Was Built
+- 下载进度追踪: ProgressState (atomic.Value) + io.TeeReader + Content-Length 实时百分比
+- Web Token API: localhost-only GET /api/v1/web-config 返回 Bearer token
+- 自更新管理 UI: 版本标签 + 检测更新（版本号+日期+release notes 截断展开）+ 立即更新 + 500ms 进度轮询 + 进度条
+- Code review 修复: createInstanceCard XSS (innerHTML → textContent) + download_percent 范围验证 + 错误消息脱敏
+
+### What Worked
+- 前后端分离 2 阶段模式: Phase 44 后端 API → Phase 45 前端 UI，职责清晰
+- Code review 自动修复流程: gsd-code-review → gsd-code-review-fix，发现并修复 pre-existing XSS
+- 直接编译二进制浏览器测试: 不需要发布 release 即可验证 UI 功能
+
+### What Was Inefficient
+- Executor agent 越权删除后端文件: worktree agent 修改了 Phase 44 的 Go 源码和 .planning 文件，需要手动恢复
+- 恢复过程产生大量额外 commit，增加了 git 历史噪音
+
+### Patterns Established
+- textContent/createElement 渲染 API 数据: 防止 GitHub release notes XSS
+- 500ms setInterval + 60s Date.now() timeout guard: 实时反馈 + 防止无限轮询
+- 按钮状态互锁: 更新进行中禁用所有操作按钮
+
+### Key Lessons
+1. Worktree executor agent 需要 files_modified 约束 — 越权修改非计划文件是严重的 agent 行为问题
+2. 浏览器测试可以通过直接编译运行二进制完成，无需 GitHub Release 发布
+3. Code review 发现了 pre-existing XSS (createInstanceCard)，证明了 review 流程的价值
+
+### Cost Observations
+- Model mix: 100% sonnet
+- Sessions: 2 (Phase 44, Phase 45)
+- Notable: executor 越权问题增加了 ~30% 的修复时间
+
+---
+
 ## Cross-Milestone Trends
 
 ### Process Evolution
@@ -98,6 +135,7 @@
 | v0.7 | ~1 | 2 | Notifier 注入模式 |
 | v0.8 | ~3 | 5 | PoC-first + CI/CD + 自更新 |
 | v0.9 | ~2 | 3 | AfterFunc state machine + duck-typing + lifecycle monitor |
+| v0.10 | ~2 | 2 | 前后端分离 + Web UI 自更新管理 + textContent XSS 防护 |
 
 ### Cumulative Quality
 
@@ -111,6 +149,7 @@
 | v0.7 | ~77 | Notifier 接口, duck typing |
 | v0.8 | ~90+ | selfupdate, restartFn 注入, 内外函数分离 |
 | v0.9 | ~100+ | AfterFunc state machine, duck-typed local interface, instance-level context |
+| v0.10 | ~105+ | atomic.Value ProgressState, io.TeeReader, textContent XSS prevention, progress polling |
 
 ### Top Lessons (Verified Across Milestones)
 

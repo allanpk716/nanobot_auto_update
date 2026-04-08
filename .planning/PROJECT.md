@@ -2,7 +2,7 @@
 
 ## What This Is
 
-一个 Windows 后台监控服务，使用 Golang 开发，用于监控网络连通性并通过 HTTP API 触发 nanobot 工具的更新。**v0.9 启动通知与 Telegram 监控**：实例启动结果聚合通知、Telegram 连接状态监控（日志模式检测 + 30s 超时状态机）和 Pushover 通知。**v0.8 自更新**：通过 GitHub Releases 自动检测、下载并替换更新 nanobot-auto-updater 自身，包括 CI/CD 自动构建、HTTP API 触发自更新、安全恢复机制。**v0.7 更新生命周期通知**：HTTP API 触发更新时发送 Pushover 通知，包括更新开始/完成通知、非阻塞发送、优雅降级。**v0.6 更新日志记录和查询**：持久化记录每次更新操作的详细日志，提供分页查询 API 和 7 天自动清理。**v0.5 核心监控和自动化**：启动时自动启动实例、实例健康监控、Google 连通性监控、HTTP API 触发更新和 help 接口。**v0.4 实时日志查看**：通过 SSE 流式传输和嵌入式 Web UI 实时查看 nanobot 实例的 stdout/stderr 输出。多实例管理保持不变。通过配置文件和 HTTP API 控制行为。
+一个 Windows 后台监控服务，使用 Golang 开发，用于监控网络连通性并通过 HTTP API 触发 nanobot 工具的更新。**v0.10 管理界面自更新功能**：嵌入式 Web UI 新增自更新管理区域（版本显示、检测更新、一键更新、下载进度百分比），后端进度追踪（atomic.Value + io.TeeReader）和 Web Token API。**v0.9 启动通知与 Telegram 监控**：实例启动结果聚合通知、Telegram 连接状态监控（日志模式检测 + 30s 超时状态机）和 Pushover 通知。**v0.8 自更新**：通过 GitHub Releases 自动检测、下载并替换更新 nanobot-auto-updater 自身，包括 CI/CD 自动构建、HTTP API 触发自更新、安全恢复机制。**v0.7 更新生命周期通知**：HTTP API 触发更新时发送 Pushover 通知，包括更新开始/完成通知、非阻塞发送、优雅降级。**v0.6 更新日志记录和查询**：持久化记录每次更新操作的详细日志，提供分页查询 API 和 7 天自动清理。**v0.5 核心监控和自动化**：启动时自动启动实例、实例健康监控、Google 连通性监控、HTTP API 触发更新和 help 接口。**v0.4 实时日志查看**：通过 SSE 流式传输和嵌入式 Web UI 实时查看 nanobot 实例的 stdout/stderr 输出。多实例管理保持不变。通过配置文件和 HTTP API 控制行为。
 
 ## Core Value
 
@@ -88,16 +88,18 @@
 - ✓ TELE-07: 未产生 trigger 日志的实例无监控开销 (TestMonitor_NoTriggerNoNotifications)
 - ✓ TELE-09: 实例停止时取消监控,不发送虚假通知 (TestMonitor_StopCancelsMonitor)
 
+**v0.10 管理界面自更新功能** — 2026-04-08 (Phases 44-45):
+- ✓ UI-01: 自更新管理区域布局 (home.html header 与 main 之间)
+- ✓ UI-02: 当前版本显示 (蓝色标签样式)
+- ✓ UI-03: 检测更新 (版本号+发布日期+release notes 截断展开)
+- ✓ UI-04: 触发更新与进度显示 (checking→downloading%→installing→complete/failed)
+- ✓ UI-05: 下载进度百分比 (500ms 轮询 + 进度条 + 百分比文字)
+- ✓ API-01: 更新进度状态追踪 (ProgressState + io.TeeReader + atomic.Value)
+- ✓ API-02: Web UI Token API (localhost-only GET /api/v1/web-config)
+
 ### Active
 
-**v0.10 管理界面自更新功能** — 2026-04-07:
-- UI-01: 自更新管理区域布局 (home.html 顶部区块)
-- UI-02: 当前版本显示 (标签样式)
-- UI-03: 检测更新 (版本号+发布日期+更新说明)
-- UI-04: 触发更新与进度显示 (checking→downloading%→installing→complete/failed)
-- UI-05: 下载进度百分比 (轮询 + 进度条)
-- API-01: 更新进度状态追踪 (ProgressState + io.TeeReader + atomic.Value)
-- API-02: Web UI Token API (localhost-only GET /api/v1/web-config)
+(None — awaiting next milestone planning)
 
 ### Out of Scope
 
@@ -113,21 +115,9 @@
 
 **Pushover**: 推送通知服务，用于在更新失败时通知用户。
 
-**v0.10 管理界面自更新功能 (Active)** — 2026-04-07:
-- 在 home.html 顶部新增自更新管理区域
-- 显示当前版本、检测最新版本（版本号+日期+说明）、一键触发更新
-- 更新过程实时显示阶段和下载进度百分比
-- Web UI 自动从配置获取认证 Token，无需手动输入
-- 2 个阶段 (44-45)，4 个计划
+**v0.10 管理界面自更新功能 Shipped:** 2026-04-08 — 管理界面自更新功能里程碑完成，2 个阶段 (44-45)，4 个计划。Phase 44: 下载进度追踪 (ProgressState + io.TeeReader + atomic.Value) + Web Token API (localhost-only)。Phase 45: 自更新管理 UI (版本标签 + 检测更新 + 触发更新 + 500ms 进度轮询 + 进度条)。7/7 需求满足。
 
 **v0.9 Shipped:** 2026-04-06 — 启动通知与 Telegram 监控里程碑完成，3 个阶段 (41-43)，6 个计划。Phase 41: NotifyStartupResult 聚合通知 + auto-start 集成。Phase 42: TelegramMonitor 状态机 (模式检测 + AfterFunc 超时 + duck-typing 接口) + 8 并发压力测试。Phase 43: InstanceLifecycle 集成 (constructor chain + context 取消 + goroutine 生命周期)。12/12 需求满足。
-
-**v0.10 管理界面自更新功能** — 2026-04-07 (Active):
-- 在 home.html 顶部新增自更新管理区域
-- 显示当前版本、检测最新版本（版本号+日期+说明）、一键触发更新
-- 更新过程实时显示阶段和下载进度百分比
-- Web UI 自动从配置获取认证 Token，无需手动输入
-- 2 个阶段 (44-45)，4 个计划
 
 **v0.7 Shipped:** 2026-03-29 — 更新生命周期通知里程碑完成，2 个阶段 (34-35)，2 个计划，4 个任务。Phase 34: Notifier 注入 TriggerHandler + 异步通知 (开始/完成) + panic recovery。Phase 35: Notifier 接口重构 + recordingNotifier mock + 4 个 E2E 通知测试。审计结果: 4/4 需求满足，2/2 阶段通过，5/5 集成点连接，5/5 E2E 流程完整，77/77 测试通过。
 
@@ -254,6 +244,11 @@
 | Duck-typed LogSubscriber/Notifier 接口 | 最小范围,单方法接口,避免循环导入 | ✓ Good — Phase 42 |
 | Notifier constructor chain (main→manager→lifecycle) | 注入式通知,与现有模式一致 | ✓ Good — Phase 43 |
 | TelegramMonitor lifecycle tied to InstanceLifecycle | 启动后创建,停止前取消,goroutine 安全 | ✓ Good — Phase 43 |
+| atomic.Value ProgressState + io.TeeReader | 无锁并发读取进度 + 流式下载字节计数 | ✓ Good — Phase 44 |
+| localhost-only web-config endpoint | Token 仅限本地获取，防止远程滥用 | ✓ Good — Phase 44 |
+| textContent 渲染所有 API 数据 | 防止 GitHub release notes XSS | ✓ Good — Phase 45 |
+| 500ms setInterval 轮询 + 60s 超时 | 实时进度反馈 + 防止无限轮询 | ✓ Good — Phase 45 |
+| 按钮状态互锁 (更新中禁用所有按钮) | 防止重复触发更新 | ✓ Good — Phase 45 |
 
 ## Configuration
 
@@ -301,11 +296,10 @@ self_update:
 
 ## Current State
 
-**Shipped:** v0.9 Startup Notification & Telegram Monitor (2026-04-06)
-**Active:** v0.10 管理界面自更新功能 — Phase 45 complete (2026-04-08)
-**Total:** 9 milestones shipped, 45 phases, ~19,158 LOC Go
+**Shipped:** v0.10 管理界面自更新功能 (2026-04-08)
+**Total:** 10 milestones shipped, 45 phases, ~19,691 LOC Go
 
-*Last updated: 2026-04-08 after Phase 45 completion*
+*Last updated: 2026-04-08 after v0.10 milestone completion*
 
 ## Evolution
 
