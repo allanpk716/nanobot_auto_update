@@ -117,11 +117,14 @@
 5. 页面加载时自动获取 `/api/v1/web-config` token，存储后用于 API 调用
 6. 更新状态 UI 交互（进行中禁用按钮、完成/失败提示）
 
-**Plans:** 2 plans (45-01: HTML/CSS 自更新区块 + 版本显示, 45-02: 更新交互逻辑 + 进度轮询)
+**Plans:** 2 plans
+
+- [ ] 45-01-PLAN.md — HTML/CSS 自更新区块 + JS 逻辑（token、版本、检测、触发、轮询）
+- [ ] 45-02-PLAN.md — 编译验证 + 浏览器功能测试
 
 **Depends on:** Phase 44
 
 </details>
 
 ---
-*Last updated: 2026-04-07 (Phase 44 planned)*
+*Last updated: 2026-04-08 (Phase 45 planned)*
