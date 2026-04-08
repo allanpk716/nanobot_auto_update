@@ -293,7 +293,7 @@ async function checkUpdate() {
         resultDiv.innerHTML = '';
         const errorDiv = document.createElement('div');
         errorDiv.className = 'update-error';
-        errorDiv.textContent = '检测更新失败: ' + e.message;
+        errorDiv.textContent = '检测更新失败，请查看控制台获取详情';
         resultDiv.appendChild(errorDiv);
         startBtn.disabled = true;
     } finally {
@@ -345,7 +345,7 @@ async function startUpdate() {
         resultDiv.innerHTML = '';
         const errorDiv = document.createElement('div');
         errorDiv.className = 'update-error';
-        errorDiv.textContent = '启动更新失败: ' + e.message;
+        errorDiv.textContent = '启动更新失败，请查看控制台获取详情';
         resultDiv.appendChild(errorDiv);
         btn.disabled = false;
         document.getElementById('btn-check-update').disabled = false;
