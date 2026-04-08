@@ -418,9 +418,10 @@ function startProgressPolling() {
             } else if (progress.stage === 'checking') {
                 if (currentStatusEl) currentStatusEl.textContent = '检查中...';
             } else if (progress.stage === 'downloading') {
-                if (currentStatusEl) currentStatusEl.textContent = '下载中 ' + progress.download_percent + '%';
-                if (currentFillEl) currentFillEl.style.width = progress.download_percent + '%';
-                if (currentTextEl) currentTextEl.textContent = progress.download_percent + '%';
+                const pct = Math.max(0, Math.min(100, Number(progress.download_percent) || 0));
+                if (currentStatusEl) currentStatusEl.textContent = '下载中 ' + pct + '%';
+                if (currentFillEl) currentFillEl.style.width = pct + '%';
+                if (currentTextEl) currentTextEl.textContent = pct + '%';
             } else if (progress.stage === 'installing') {
                 if (currentStatusEl) currentStatusEl.textContent = '安装中...';
                 if (currentFillEl) currentFillEl.style.width = '100%';
