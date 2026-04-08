@@ -36,26 +36,48 @@ function createInstanceCard(instance) {
     const statusClass = instance.running ? 'status-running' : 'status-stopped';
     const statusText = instance.running ? '运行中' : '已停止';
 
-    card.innerHTML = `
-        <a href="/logs/${instance.name}" class="instance-name">${instance.name}</a>
-        <div class="instance-info">
-            <div class="info-row">
-                <span class="label">端口:</span>
-                <span class="value">${instance.port}</span>
-            </div>
-            <div class="info-row">
-                <span class="label">状态:</span>
-                <span class="value ${statusClass}">${statusText}</span>
-            </div>
-        </div>
-        <button class="btn-restart" data-instance="${instance.name}">重启实例</button>
-    `;
+    const nameLink = document.createElement('a');
+    nameLink.href = '/logs/' + encodeURIComponent(instance.name);
+    nameLink.className = 'instance-name';
+    nameLink.textContent = instance.name;
+    card.appendChild(nameLink);
 
-    // Add restart button click handler
-    const restartBtn = card.querySelector('.btn-restart');
+    const infoDiv = document.createElement('div');
+    infoDiv.className = 'instance-info';
+
+    const portRow = document.createElement('div');
+    portRow.className = 'info-row';
+    const portLabel = document.createElement('span');
+    portLabel.className = 'label';
+    portLabel.textContent = '端口:';
+    const portValue = document.createElement('span');
+    portValue.className = 'value';
+    portValue.textContent = instance.port;
+    portRow.appendChild(portLabel);
+    portRow.appendChild(portValue);
+    infoDiv.appendChild(portRow);
+
+    const statusRow = document.createElement('div');
+    statusRow.className = 'info-row';
+    const statusLabel = document.createElement('span');
+    statusLabel.className = 'label';
+    statusLabel.textContent = '状态:';
+    const statusValue = document.createElement('span');
+    statusValue.className = 'value ' + statusClass;
+    statusValue.textContent = statusText;
+    statusRow.appendChild(statusLabel);
+    statusRow.appendChild(statusValue);
+    infoDiv.appendChild(statusRow);
+    card.appendChild(infoDiv);
+
+    const restartBtn = document.createElement('button');
+    restartBtn.className = 'btn-restart';
+    restartBtn.dataset.instance = instance.name;
+    restartBtn.textContent = '重启实例';
     restartBtn.addEventListener('click', function() {
         restartInstance(instance.name, restartBtn);
     });
+    card.appendChild(restartBtn);
 
     return card;
 }
