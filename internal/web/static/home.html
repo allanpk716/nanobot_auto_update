@@ -13,6 +13,18 @@
         </div>
     </header>
 
+    <section id="selfupdate-section" class="selfupdate-section">
+        <div class="selfupdate-header">
+            <span class="selfupdate-title">自更新管理</span>
+            <span id="current-version" class="version-badge">--</span>
+        </div>
+        <div class="selfupdate-actions">
+            <button id="btn-check-update" class="btn-selfupdate">检测更新</button>
+            <button id="btn-start-update" class="btn-selfupdate" disabled>立即更新</button>
+        </div>
+        <div id="update-result" class="update-result"></div>
+    </section>
+
     <main>
         <div id="instances-grid" class="instances-grid">
             <!-- Instance cards will be loaded here -->

@@ -18,12 +18,11 @@ import (
 
 // mockSelfUpdateChecker is a mock implementation of SelfUpdateChecker for testing.
 type mockSelfUpdateChecker struct {
-	needsUpdate   bool
-	releaseInfo   *selfupdate.ReleaseInfo
-	err           error
-	updateErr     error
-	updateCalls   int
-	progressState *selfupdate.ProgressState
+	needsUpdate bool
+	releaseInfo *selfupdate.ReleaseInfo
+	err         error
+	updateErr   error
+	updateCalls int
 }
 
 func (m *mockSelfUpdateChecker) NeedUpdate(currentVersion string) (bool, *selfupdate.ReleaseInfo, error) {
@@ -33,13 +32,6 @@ func (m *mockSelfUpdateChecker) NeedUpdate(currentVersion string) (bool, *selfup
 func (m *mockSelfUpdateChecker) Update(currentVersion string) error {
 	m.updateCalls++
 	return m.updateErr
-}
-
-func (m *mockSelfUpdateChecker) GetProgress() *selfupdate.ProgressState {
-	if m.progressState != nil {
-		return m.progressState
-	}
-	return &selfupdate.ProgressState{Stage: "idle"}
 }
 
 // mockUpdateMutex is a mock implementation of UpdateMutex for testing.
@@ -298,10 +290,6 @@ func (m *panicSelfUpdateChecker) Update(currentVersion string) error {
 	panic("unexpected panic during update")
 }
 
-func (m *panicSelfUpdateChecker) GetProgress() *selfupdate.ProgressState {
-	return &selfupdate.ProgressState{Stage: "idle"}
-}
-
 // TestSelfUpdateCheck_StatusDuringUpdate tests check shows "updating" status
 func TestSelfUpdateCheck_StatusDuringUpdate(t *testing.T) {
 	// Create a checker that blocks on Update for a while
@@ -354,10 +342,6 @@ func (m *slowSelfUpdateChecker) NeedUpdate(currentVersion string) (bool, *selfup
 func (m *slowSelfUpdateChecker) Update(currentVersion string) error {
 	<-m.done
 	return nil
-}
-
-func (m *slowSelfUpdateChecker) GetProgress() *selfupdate.ProgressState {
-	return &selfupdate.ProgressState{Stage: "idle"}
 }
 
 // TestSelfUpdateAuth tests auth middleware integration (API-01)
@@ -549,80 +533,3 @@ func TestSelfUpdateUpdate_NilNotifier(t *testing.T) {
 // NOTE: The self-spawn + os.Exit(0) code path after successful update
 // cannot be unit tested (it terminates the test process).
 // This pattern was validated by the Phase 36 PoC (tmp/poc_selfupdate.go).
-
-func TestSelfUpdateCheck_Progress(t *testing.T) {
-	checker := &mockSelfUpdateChecker{
-		needsUpdate: true,
-		releaseInfo: &selfupdate.ReleaseInfo{
-			Version:      "v2.0.0",
-			ReleaseNotes: "New release",
-			PublishedAt:  time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC),
-			DownloadURL:  "https://example.com/download",
-		},
-		progressState: &selfupdate.ProgressState{
-			Stage:           "downloading",
-			DownloadPercent: 42,
-		},
-	}
-	mutex := &mockUpdateMutex{}
-	handler := newTestSelfUpdateHandler(checker, mutex, nil)
-
-	req := httptest.NewRequest("GET", "/api/v1/self-update/check", nil)
-	rec := httptest.NewRecorder()
-	handler.HandleCheck(rec, req)
-
-	if rec.Code != http.StatusOK {
-		t.Fatalf("Status code = %d, want %d", rec.Code, http.StatusOK)
-	}
-
-	var response SelfUpdateCheckResponse
-	if err := json.NewDecoder(rec.Body).Decode(&response); err != nil {
-		t.Fatalf("Failed to decode response JSON: %v", err)
-	}
-
-	if response.Progress == nil {
-		t.Fatal("Progress is nil, expected non-nil")
-	}
-	if response.Progress.Stage != "downloading" {
-		t.Errorf("progress.stage = %q, want %q", response.Progress.Stage, "downloading")
-	}
-	if response.Progress.DownloadPercent != 42 {
-		t.Errorf("progress.download_percent = %d, want %d", response.Progress.DownloadPercent, 42)
-	}
-}
-
-func TestSelfUpdateCheck_ProgressIdle(t *testing.T) {
-	checker := &mockSelfUpdateChecker{
-		needsUpdate: false,
-		releaseInfo: &selfupdate.ReleaseInfo{
-			Version:     "v1.0.0",
-			PublishedAt: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC),
-		},
-		// progressState is nil, so GetProgress returns idle default
-	}
-	mutex := &mockUpdateMutex{}
-	handler := newTestSelfUpdateHandler(checker, mutex, nil)
-
-	req := httptest.NewRequest("GET", "/api/v1/self-update/check", nil)
-	rec := httptest.NewRecorder()
-	handler.HandleCheck(rec, req)
-
-	if rec.Code != http.StatusOK {
-		t.Fatalf("Status code = %d, want %d", rec.Code, http.StatusOK)
-	}
-
-	var response SelfUpdateCheckResponse
-	if err := json.NewDecoder(rec.Body).Decode(&response); err != nil {
-		t.Fatalf("Failed to decode response JSON: %v", err)
-	}
-
-	if response.Progress == nil {
-		t.Fatal("Progress is nil, expected non-nil")
-	}
-	if response.Progress.Stage != "idle" {
-		t.Errorf("progress.stage = %q, want %q", response.Progress.Stage, "idle")
-	}
-	if response.Progress.DownloadPercent != 0 {
-		t.Errorf("progress.download_percent = %d, want %d", response.Progress.DownloadPercent, 0)
-	}
-}

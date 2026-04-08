@@ -20,7 +20,6 @@ import (
 type SelfUpdateChecker interface {
 	NeedUpdate(currentVersion string) (bool, *selfupdate.ReleaseInfo, error)
 	Update(currentVersion string) error
-	GetProgress() *selfupdate.ProgressState
 }
 
 // UpdateMutex is the interface for shared update lock operations.
@@ -40,15 +39,14 @@ type SelfUpdateStatus struct {
 
 // SelfUpdateCheckResponse is the JSON response for the check endpoint.
 type SelfUpdateCheckResponse struct {
-	CurrentVersion   string                    `json:"current_version"`
-	LatestVersion    string                    `json:"latest_version"`
-	NeedsUpdate      bool                      `json:"needs_update"`
-	ReleaseNotes     string                    `json:"release_notes"`
-	PublishedAt      string                    `json:"published_at"`
-	DownloadURL      string                    `json:"download_url"`
-	SelfUpdateStatus string                    `json:"self_update_status"`
-	SelfUpdateError  string                    `json:"self_update_error,omitempty"`
-	Progress         *selfupdate.ProgressState `json:"progress"`
+	CurrentVersion   string `json:"current_version"`
+	LatestVersion    string `json:"latest_version"`
+	NeedsUpdate      bool   `json:"needs_update"`
+	ReleaseNotes     string `json:"release_notes"`
+	PublishedAt      string `json:"published_at"`
+	DownloadURL      string `json:"download_url"`
+	SelfUpdateStatus string `json:"self_update_status"`
+	SelfUpdateError  string `json:"self_update_error,omitempty"`
 }
 
 // SelfUpdateHandler handles GET /api/v1/self-update/check and POST /api/v1/self-update requests.
@@ -119,7 +117,6 @@ func (h *SelfUpdateHandler) HandleCheck(w http.ResponseWriter, r *http.Request) 
 		DownloadURL:      releaseInfo.DownloadURL,
 		SelfUpdateStatus: currentStatus.Status,
 		SelfUpdateError:  currentStatus.Error,
-		Progress:         h.updater.GetProgress(),
 	}
 
 	w.Header().Set("Content-Type", "application/json")

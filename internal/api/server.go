@@ -89,10 +89,6 @@ func NewServer(cfg *config.APIConfig, im *instance.InstanceManager, fullCfg *con
 	mux.Handle("GET /api/v1/update-logs",
 		authMiddleware(http.HandlerFunc(queryHandler.Handle)))
 
-	// Web-config endpoint (Phase 44: API-02) -- localhost-only, no auth required
-	webConfigHandler := NewWebConfigHandler(cfg.BearerToken, logger)
-	mux.HandleFunc("GET /api/v1/web-config", localhostOnly(webConfigHandler))
-
 	// Self-update endpoints (Phase 39: API-01, API-02, API-03)
 	if selfUpdater != nil {
 		selfUpdateHandler := NewSelfUpdateHandler(selfUpdater, version, im, notif, logger)
