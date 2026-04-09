@@ -1,4 +1,4 @@
-# Requirements: Nanobot Auto Updater — v0.11
+# Requirements: Nanobot Auto Updater -- v0.11
 
 **Defined:** 2026-04-09
 **Core Value:** 自动保持 nanobot 处于最新版本,无需用户手动干预。
@@ -51,22 +51,22 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| SVC-01 | — | Pending |
-| SVC-02 | — | Pending |
-| SVC-03 | — | Pending |
-| MGR-01 | — | Pending |
-| MGR-02 | — | Pending |
-| MGR-03 | — | Pending |
-| MGR-04 | — | Pending |
-| ADPT-01 | — | Pending |
-| ADPT-02 | — | Pending |
-| ADPT-03 | — | Pending |
+| MGR-01 | Phase 46 | Pending |
+| SVC-01 | Phase 46 | Pending |
+| SVC-02 | Phase 47 | Pending |
+| SVC-03 | Phase 47 | Pending |
+| MGR-02 | Phase 48 | Pending |
+| MGR-03 | Phase 48 | Pending |
+| MGR-04 | Phase 48 | Pending |
+| ADPT-01 | Phase 49 | Pending |
+| ADPT-02 | Phase 49 | Pending |
+| ADPT-03 | Phase 49 | Pending |
 
 **Coverage:**
 - v0.11 requirements: 10 total
-- Mapped to phases: 0
-- Unmapped: 10 ⚠️
+- Mapped to phases: 10
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-04-09*
-*Last updated: 2026-04-09 after initial definition*
+*Last updated: 2026-04-09 after roadmap creation*
