@@ -1,51 +1,30 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.0
-milestone_name: milestone
-status: executing
-last_updated: "2026-04-08T05:30:46.177Z"
-last_activity: 2026-04-08
+milestone: v0.11
+milestone_name: windows-service-auto-start
+status: defining_requirements
+last_updated: "2026-04-09T00:00:00.000Z"
+last_activity: 2026-04-09
 progress:
-  total_phases: 5
-  completed_phases: 4
-  total_plans: 8
-  completed_plans: 10
-  percent: 100
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-04-07)
+See: .planning/PROJECT.md (updated 2026-04-09)
 
 **Core value:** 自动保持 nanobot 处于最新版本,无需用户手动干预。
-**Current focus:** Phase 45 — frontend-selfupdate-management-ui
+**Current focus:** Milestone v0.11 Windows 服务自启动
 
 ## Current Position
 
-Phase: 45
-Plan: Not started
-Status: Executing Phase 45
-
-Progress: [██████████] 50% (1/2 phases, 2/4 plans)
-
-## Milestone: v0.10 管理界面自更新功能
-
-**Goal:** 在 home.html 顶部新增自更新管理区域，支持版本显示、检测更新、触发更新（含下载进度百分比）。
-
-**Phases:**
-
-- Phase 44: 后端 — 自更新进度追踪 + Web Token API (2/2 plans) — COMPLETE
-- Phase 45: 前端 — 自更新管理 UI (0/2 plans) — Context gathered
-
-## Session Continuity
-
-Last activity: 2026-04-08 - Completed quick task 260408-j8d: refactor README.md for AI agent audience, split advanced content to separate docs
-Next: `/gsd-plan-phase 45` to start Phase 45 planning
-
-### Quick Tasks Completed
-
-| # | Description | Date | Commit | Directory |
-|---|-------------|------|--------|-----------|
-| 260408-j8d | refactor README.md for AI agent audience, split advanced content to separate docs | 2026-04-08 | bad6c9a | [260408-j8d-refactor-readme-md-for-ai-agent-audience](./quick/260408-j8d-refactor-readme-md-for-ai-agent-audience/) |
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-04-09 — Milestone v0.11 started

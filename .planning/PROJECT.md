@@ -294,12 +294,22 @@ self_update:
 
 ---
 
+## Current Milestone: v0.11 Windows 服务自启动
+
+**Goal:** 支持通过配置文件开启 Windows 服务模式，系统启动即运行，无需用户登录桌面。
+
+**Target features:**
+- Windows Service 运行模式（golang.org/x/sys/windows/svc）
+- 配置文件驱动（config.yaml `auto_start: true`）
+- 服务自动注册/启动/停止/卸载
+- 双模式兼容（console 模式 + service 模式）
+
 ## Current State
 
 **Shipped:** v0.10 管理界面自更新功能 (2026-04-08)
 **Total:** 10 milestones shipped, 45 phases, ~19,691 LOC Go
 
-*Last updated: 2026-04-08 after v0.10 milestone completion*
+*Last updated: 2026-04-09 after v0.11 milestone started*
 
 ## Evolution
 
