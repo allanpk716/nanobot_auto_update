@@ -123,11 +123,11 @@ Plans:
   2. SCM 发送 Stop 控制码时，程序在 30 秒内完成资源清理并退出（关闭 HTTP 服务器、停止实例、清理 goroutine）
   3. SCM 发送 Shutdown 控制码时（系统关机），程序同样执行优雅关闭流程
   4. 服务在 Windows 服务管理器中显示为 "Running" 状态，停止后显示为 "Stopped"
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 47-01: TBD
-- [ ] 47-02: TBD
+- [ ] 47-01-PLAN.md — Extract AppComponents/AppStartup/AppShutdown from main.go, implement ServiceHandler with svc.Handler Execute method
+- [ ] 47-02-PLAN.md — Add RunService wrapper and svc.Run service mode branch to main.go
 
 ### Phase 48: Service Manager
 **Goal**: 用户设置 auto_start: true 后，程序自动完成服务注册和恢复策略配置，无需手动操作 sc.exe
@@ -168,9 +168,9 @@ Phases execute in numeric order: 46 -> 47 -> 48 -> 49
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
 | 46. Service Configuration & Mode Detection | v0.11 | 2/2 | Complete    | 2026-04-10 |
-| 47. Windows Service Handler | v0.11 | 0/? | Not started | - |
+| 47. Windows Service Handler | v0.11 | 0/2 | Not started | - |
 | 48. Service Manager | v0.11 | 0/? | Not started | - |
 | 49. Existing Code Adaptation | v0.11 | 0/? | Not started | - |
 
 ---
-*Last updated: 2026-04-10 (Phase 46 planned — 2 plans in 2 waves)*
+*Last updated: 2026-04-10 (Phase 47 planned — 2 plans in 2 waves)*
