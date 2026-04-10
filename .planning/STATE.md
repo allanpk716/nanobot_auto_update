@@ -1,10 +1,11 @@
 ---
 gsd_state_version: 1.0
 milestone: v0.11
-milestone_name: windows-service-auto-start
-status: roadmap_created
-last_updated: "2026-04-09T00:00:00.000Z"
-last_activity: 2026-04-09
+milestone_name: Windows 服务自启动
+status: planning
+stopped_at: Phase 46 context gathered
+last_updated: "2026-04-10T01:03:28.284Z"
+last_activity: "2026-04-09 -- v0.11 roadmap created (4 phases: 46-49)"
 progress:
   total_phases: 4
   completed_phases: 0
@@ -34,6 +35,7 @@ Progress: [░░░░░░░░░░] 0%
 ## Performance Metrics
 
 **Velocity:**
+
 - Total plans completed: 0 (v0.11 milestone)
 - Previous milestones: 45 phases shipped (v1.0 through v0.10)
 
@@ -58,6 +60,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-09
-Stopped at: Roadmap created for v0.11 Windows 服务自启动 (4 phases: 46-49)
-Resume file: None
+Last session: 2026-04-10T01:03:28.280Z
+Stopped at: Phase 46 context gathered
+Resume file: .planning/phases/46-service-configuration-mode-detection/46-CONTEXT.md
