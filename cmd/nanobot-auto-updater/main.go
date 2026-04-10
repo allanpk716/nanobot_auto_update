@@ -215,6 +215,18 @@ func main() {
 	}
 
 	// Start all application components (D-05, D-10)
+	// Service mode: run via Windows SCM (D-09)
+	if inService {
+		slog.Info("Starting in service mode")
+		if err := lifecycle.RunService(cfg, logger, Version, updateLogger, notif, createComponents, startInstances); err != nil {
+			logger.Error("Service execution failed", "error", err)
+			os.Exit(1)
+		}
+		// svc.Run blocks until Execute returns. After RunService returns,
+		// the service handler has completed its lifecycle -- exit cleanly.
+		return
+	}
+
 	components, err := lifecycle.AppStartup(cfg, logger, Version, updateLogger, notif, createComponents, startInstances)
 	if err != nil {
 		logger.Error("Failed to start application", "error", err)
