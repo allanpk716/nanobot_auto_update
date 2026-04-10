@@ -93,7 +93,7 @@
 
 **Milestone Goal:** 支持通过配置文件开启 Windows 服务模式，系统启动即运行，无需用户登录桌面。
 
-- [ ] **Phase 46: Service Configuration & Mode Detection** - 配置驱动 auto_start 开关，启动时自动检测服务/控制台运行模式
+- [x] **Phase 46: Service Configuration & Mode Detection** - 配置驱动 auto_start 开关，启动时自动检测服务/控制台运行模式 (completed 2026-04-10)
 - [ ] **Phase 47: Windows Service Handler** - 实现 svc.Handler 接口，处理服务生命周期和优雅关闭
 - [ ] **Phase 48: Service Manager** - 服务注册/卸载/恢复策略的完整管理
 - [ ] **Phase 49: Existing Code Adaptation** - 守护进程、重启机制和工作目录的服务模式适配
@@ -111,8 +111,8 @@
 **Plans**: 2 plans
 
 Plans:
-- [ ] 46-01-PLAN.md — ServiceConfig 结构体、Validate()、表格驱动测试、Config 集成 (TDD)
-- [ ] 46-02-PLAN.md — svc.IsWindowsService() 检测封装、main.go 入口分支逻辑
+- [x] 46-01-PLAN.md — ServiceConfig 结构体、Validate()、表格驱动测试、Config 集成 (TDD)
+- [x] 46-02-PLAN.md — svc.IsWindowsService() 检测封装、main.go 入口分支逻辑
 
 ### Phase 47: Windows Service Handler
 **Goal**: Windows SCM 能通过标准服务接口启动和停止程序，服务生命周期完全可控
@@ -167,7 +167,7 @@ Phases execute in numeric order: 46 -> 47 -> 48 -> 49
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
-| 46. Service Configuration & Mode Detection | v0.11 | 0/2 | Planning complete | - |
+| 46. Service Configuration & Mode Detection | v0.11 | 2/2 | Complete    | 2026-04-10 |
 | 47. Windows Service Handler | v0.11 | 0/? | Not started | - |
 | 48. Service Manager | v0.11 | 0/? | Not started | - |
 | 49. Existing Code Adaptation | v0.11 | 0/? | Not started | - |
