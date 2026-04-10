@@ -54,6 +54,26 @@ func main() {
 		os.Exit(0)
 	}
 
+	// Detect Windows service mode (SVC-01, D-06)
+	// This check runs before config loading -- service mode path does not need config.yaml.
+	// Note: slog is NOT initialized yet at this point. Use fmt.Fprintf(os.Stderr, ...) for output.
+	inService, err := lifecycle.IsServiceMode()
+	if err != nil {
+		// svc.IsWindowsService() returned an error (review concern #5).
+		// Treat as console mode (false) with warning. Do NOT fatal exit --
+		// the detection is best-effort and should not prevent the app from starting.
+		fmt.Fprintf(os.Stderr, "Warning: failed to detect service mode: %v\n", err)
+		// Continue as console mode
+		inService = false
+	}
+
+	if inService {
+		// Service mode: running under Windows SCM (D-06)
+		// Phase 47 will implement full svc.Handler -- for now log and continue.
+		// Using fmt.Fprintf(os.Stderr) because slog is not initialized yet.
+		fmt.Fprintf(os.Stderr, "Detected Windows service mode\n")
+	}
+
 	// Load configuration with validation (CONF-06)
 	cfg, err := config.Load(*configFile)
 	if err != nil {
@@ -95,6 +115,29 @@ func main() {
 		"bearer_token_configured", cfg.API.BearerToken != "",
 		"bearer_token_length", len(cfg.API.BearerToken),
 	)
+
+	// Handle service mode configuration mismatches (D-07, D-08)
+	if inService && (cfg.Service.AutoStart == nil || !*cfg.Service.AutoStart) {
+		// D-07: SCM started but auto_start is not enabled in config -- warn about config change.
+		// Phase 48 will handle auto-uninstall of orphaned services.
+		slog.Warn("Running as service but auto_start is not enabled in config",
+			"service_name", cfg.Service.ServiceName,
+			"note", "Phase 48 will handle auto-uninstall",
+		)
+	}
+
+	if !inService && cfg.Service.AutoStart != nil && *cfg.Service.AutoStart {
+		// D-08: Console mode but auto_start is true -- register service and exit.
+		// SCOPE NOTE (review concern #2): Phase 46 only logs the intent and exits with code 2.
+		// Actual SCM registration (svc/mgr CreateService) is Phase 48 scope (MGR-02).
+		// The exit code 2 signals to calling scripts that service registration was requested.
+		slog.Info("auto_start enabled, registering as Windows service",
+			"service_name", cfg.Service.ServiceName,
+			"display_name", cfg.Service.DisplayName,
+		)
+		slog.Info("Service registration will be handled by Phase 48")
+		os.Exit(2)
+	}
 
 	slog.Info("Application starting",
 		"version", Version,
