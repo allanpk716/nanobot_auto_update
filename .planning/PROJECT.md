@@ -307,9 +307,10 @@ self_update:
 ## Current State
 
 **Shipped:** v0.10 管理界面自更新功能 (2026-04-08)
+**In Progress:** v0.11 Windows 服务自启动 — Phase 46 complete (ServiceConfig + 服务模式检测)
 **Total:** 10 milestones shipped, 45 phases, ~19,691 LOC Go
 
-*Last updated: 2026-04-09 after v0.11 milestone started*
+*Last updated: 2026-04-10 after Phase 46 completion*
 
 ## Evolution
 
