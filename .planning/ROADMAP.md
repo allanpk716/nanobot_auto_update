@@ -108,11 +108,11 @@
   1. config.yaml 中 auto_start: true/false 配置项被正确加载和解析
   2. 程序在 Windows 服务上下文中启动时，svc.IsWindowsService() 返回 true，程序进入服务模式
   3. 程序在命令行直接运行时，svc.IsWindowsService() 返回 false，程序进入控制台模式（行为与当前完全一致）
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 46-01: TBD
-- [ ] 46-02: TBD
+- [ ] 46-01-PLAN.md — ServiceConfig 结构体、Validate()、表格驱动测试、Config 集成 (TDD)
+- [ ] 46-02-PLAN.md — svc.IsWindowsService() 检测封装、main.go 入口分支逻辑
 
 ### Phase 47: Windows Service Handler
 **Goal**: Windows SCM 能通过标准服务接口启动和停止程序，服务生命周期完全可控
@@ -167,10 +167,10 @@ Phases execute in numeric order: 46 -> 47 -> 48 -> 49
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
-| 46. Service Configuration & Mode Detection | v0.11 | 0/? | Not started | - |
+| 46. Service Configuration & Mode Detection | v0.11 | 0/2 | Planning complete | - |
 | 47. Windows Service Handler | v0.11 | 0/? | Not started | - |
 | 48. Service Manager | v0.11 | 0/? | Not started | - |
 | 49. Existing Code Adaptation | v0.11 | 0/? | Not started | - |
 
 ---
-*Last updated: 2026-04-10 (v0.11 roadmap updated — added ADPT-04)*
+*Last updated: 2026-04-10 (Phase 46 planned — 2 plans in 2 waves)*
