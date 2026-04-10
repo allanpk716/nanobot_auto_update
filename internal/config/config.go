@@ -22,6 +22,7 @@ type Config struct {
 	Monitor    MonitorConfig     `yaml:"monitor" mapstructure:"monitor"`            // Monitoring service config (CONF-04, CONF-05)
 	HealthCheck HealthCheckConfig `yaml:"health_check" mapstructure:"health_check"` // Instance health monitoring config (HEALTH-01)
 	SelfUpdate SelfUpdateConfig  `yaml:"self_update" mapstructure:"self_update"`   // Self-update config (UPDATE-07)
+	Service    ServiceConfig    `yaml:"service" mapstructure:"service"`           // Service mode config (MGR-01)
 }
 
 // defaults sets the default values for the configuration.
@@ -45,6 +46,11 @@ func (c *Config) defaults() {
 	// SelfUpdate defaults (UPDATE-07)
 	c.SelfUpdate.GithubOwner = "allanpk716"
 	c.SelfUpdate.GithubRepo = "nanobot_auto_update"
+
+	// Service defaults (MGR-01, D-02, D-03)
+	c.Service.AutoStart = nil // nil = false, unconfigured behaves same as current (D-02)
+	c.Service.ServiceName = "NanobotAutoUpdater"
+	c.Service.DisplayName = "Nanobot Auto Updater"
 }
 
 // validateUniqueNames checks for duplicate instance names.
@@ -117,6 +123,11 @@ func (c *Config) Validate() error {
 		errs = append(errs, err)
 	}
 
+	// Validate Service config (MGR-01)
+	if err := c.Service.Validate(); err != nil {
+		errs = append(errs, err)
+	}
+
 	return errors.Join(errs...)
 }
 
@@ -164,6 +175,10 @@ func Load(configPath string) (*Config, error) {
 	// Set defaults for SelfUpdate config (UPDATE-07)
 	v.SetDefault("self_update.github_owner", cfg.SelfUpdate.GithubOwner)
 	v.SetDefault("self_update.github_repo", cfg.SelfUpdate.GithubRepo)
+
+	// Set defaults for Service config (MGR-01)
+	v.SetDefault("service.service_name", cfg.Service.ServiceName)
+	v.SetDefault("service.display_name", cfg.Service.DisplayName)
 
 	// Read config file (optional - use defaults if missing)
 	if err := v.ReadInConfig(); err != nil {
