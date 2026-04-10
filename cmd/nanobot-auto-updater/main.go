@@ -6,7 +6,6 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
-	"runtime/debug"
 	"syscall"
 	"time"
 
@@ -18,12 +17,9 @@ import (
 	"github.com/HQGroup/nanobot-auto-updater/internal/instance"
 	"github.com/HQGroup/nanobot-auto-updater/internal/lifecycle"
 	"github.com/HQGroup/nanobot-auto-updater/internal/logging"
-	"github.com/HQGroup/nanobot-auto-updater/internal/network"
-	"github.com/HQGroup/nanobot-auto-updater/internal/notification"
 	"github.com/HQGroup/nanobot-auto-updater/internal/notifier"
 	"github.com/HQGroup/nanobot-auto-updater/internal/selfupdate"
 	"github.com/HQGroup/nanobot-auto-updater/internal/updatelog"
-	"github.com/robfig/cron/v3"
 )
 
 // Version is set via ldflags at build time.
@@ -144,34 +140,10 @@ func main() {
 		"config", *configFile,
 	)
 
-	// Create UpdateLogger with file persistence (STORE-01, D-04)
+	// Create components that require circular-dependency packages (D-05, D-10)
+	// lifecycle.AppStartup cannot import api/instance/notifier/updatelog directly
+	// due to circular imports, so main.go creates these and passes them in.
 	updateLogger := updatelog.NewUpdateLogger(logger, "./logs/updates.jsonl")
-
-	// Startup cleanup: remove logs older than 7 days (STORE-02, D-06)
-	if err := updateLogger.CleanupOldLogs(); err != nil {
-		logger.Error("Failed to cleanup old update logs", "error", err)
-		// Non-fatal: continue without cleanup
-	}
-
-	// Load history from JSONL file into memory (Phase 32: D-01)
-	// Must run after CleanupOldLogs to ensure only valid records are loaded
-	if err := updateLogger.LoadFromFile(); err != nil {
-		logger.Error("Failed to load update logs from file", "error", err)
-		// Non-fatal: continue with empty logs
-	}
-
-	// Schedule daily log cleanup at 3 AM (STORE-02, D-06)
-	cleanupCron := cron.New()
-	cleanupCron.AddFunc("0 3 * * *", func() {
-		if err := updateLogger.CleanupOldLogs(); err != nil {
-			logger.Error("Scheduled update log cleanup failed", "error", err)
-		}
-	})
-	cleanupCron.Start()
-	logger.Info("Update log cleanup scheduler started", "schedule", "0 3 * * *")
-
-	// Create Notifier (MONITOR-04, MONITOR-05, UNOTIF-01, UNOTIF-02)
-	// Created before InstanceManager so it can be injected into lifecycle (D-05)
 	notif := notifier.NewWithConfig(
 		notifier.Config{
 			ApiToken: cfg.Pushover.ApiToken,
@@ -180,141 +152,84 @@ func main() {
 		logger,
 	)
 
-	// Create InstanceManager (after notifier so it can be injected, D-05)
-	instanceManager := instance.NewInstanceManager(cfg, logger, notif)
+	// createComponents creates the API server, health monitor, and instance manager.
+	// These packages (api, health, instance) cannot be imported by the lifecycle package
+	// due to circular import constraints.
+	createComponents := func(
+		cfg *config.Config,
+		logger *slog.Logger,
+		version string,
+		notif any,
+		updateLogger any,
+		selfUpdater *selfupdate.Updater,
+	) (instanceManager any, healthMonitor lifecycle.HealthMonitorControl, apiServer lifecycle.APIServerControl, err error) {
+		// Cast parameters back to concrete types
+		concreteNotif := notif.(*notifier.Notifier)
+		concreteUpdateLogger := updateLogger.(*updatelog.UpdateLogger)
 
-	// Create self-update Updater (Phase 39)
-	selfUpdater := selfupdate.NewUpdater(
-		selfupdate.SelfUpdateConfig{
-			GithubOwner: cfg.SelfUpdate.GithubOwner,
-			GithubRepo:  cfg.SelfUpdate.GithubRepo,
-		},
-		logger,
-	)
+		// Create InstanceManager (needs Notifier)
+		im := instance.NewInstanceManager(cfg, logger, concreteNotif)
+		instanceManager = im
 
-	// Create API server (SSE-07: WriteTimeout=0)
-	var apiServer *api.Server
-	if cfg.API.Port != 0 {
-		var err error
-		apiServer, err = api.NewServer(&cfg.API, instanceManager, cfg, Version, logger, updateLogger, notif, selfUpdater)
-		if err != nil {
-			logger.Error("Failed to create API server", "error", err)
-			os.Exit(1)
+		// Create API server (conditional, can fail)
+		if cfg.API.Port != 0 {
+			apiSrv, apiErr := api.NewServer(&cfg.API, im, cfg, version, logger, concreteUpdateLogger, concreteNotif, selfUpdater)
+			if apiErr != nil {
+				logger.Error("Failed to create API server", "error", apiErr)
+				err = apiErr
+				return
+			}
+			apiServer = apiSrv
+
+			// Start API server in goroutine
+			go func() {
+				logger.Info("API server starting", "port", cfg.API.Port)
+				if startErr := apiSrv.Start(); startErr != nil {
+					logger.Error("API server error", "error", startErr)
+				}
+			}()
 		}
 
-		// Start API server in goroutine
-		go func() {
-			logger.Info("启动 API 服务器", "port", cfg.API.Port)
-			if err := apiServer.Start(); err != nil {
-				logger.Error("API 服务器错误", "error", err)
-			}
-		}()
-	}
-
-	// Start health monitor for all instances (HEALTH-01, HEALTH-04)
-	var healthMonitor *health.HealthMonitor
-	if len(cfg.Instances) > 0 {
-		healthMonitor = health.NewHealthMonitor(
-			cfg.Instances,
-			cfg.HealthCheck.Interval,
-			logger,
-		)
-		go healthMonitor.Start()
-		logger.Info("健康监控已启动", "interval", cfg.HealthCheck.Interval)
-	}
-
-	// Start network monitor (MONITOR-01, MONITOR-06)
-	networkMonitor := network.NewNetworkMonitor(
-		"https://www.google.com",
-		cfg.Monitor.Interval,
-		cfg.Monitor.Timeout,
-		logger,
-	)
-	go networkMonitor.Start()
-	logger.Info("网络监控已启动", "interval", cfg.Monitor.Interval)
-
-	// Start notification manager (MONITOR-04, MONITOR-05)
-	notificationManager := notification.NewNotificationManager(
-		networkMonitor,
-		notif,
-		logger,
-	)
-	go notificationManager.Start(cfg.Monitor.Interval)
-	logger.Info("通知管理器已启动", "check_interval", cfg.Monitor.Interval)
-
-	// Auto-start instances in goroutine (non-blocking)
-	// AUTOSTART-01: Application starts all configured instances at startup
-	go func() {
-		defer func() {
-			if r := recover(); r != nil {
-				logger.Error("自动启动 goroutine panic",
-					"panic", r,
-					"stack", string(debug.Stack()))
-			}
-		}()
-
-		// Create context with timeout for auto-start
-		// Total timeout: 5 minutes (adjust based on instance count)
-		autoStartTimeout := 5 * time.Minute
-		autoStartCtx, cancel := context.WithTimeout(context.Background(), autoStartTimeout)
-		defer cancel()
-
-		logger.Info("开始自动启动所有实例",
-			"instance_count", len(cfg.Instances),
-			"timeout", autoStartTimeout)
-
-		// Execute auto-start
-		result := instanceManager.StartAllInstances(autoStartCtx)
-		// STRT-01, STRT-02: Send aggregated startup notification
-		// STRT-03: NotifyStartupResult handles disabled notifier gracefully (returns nil)
-		// Notification runs inside existing auto-start goroutine (non-blocking to main)
-		if err := notif.NotifyStartupResult(result); err != nil {
-			logger.Error("Failed to send startup notification", "error", err)
+		// Create health monitor (conditional)
+		if len(cfg.Instances) > 0 {
+			hm := health.NewHealthMonitor(
+				cfg.Instances,
+				cfg.HealthCheck.Interval,
+				logger,
+			)
+			healthMonitor = hm
 		}
-	}()
 
-	// Setup graceful shutdown signal handling
+		return
+	}
+
+	// startInstances auto-starts all configured instances and sends notification.
+	startInstances := func(ctx context.Context, instanceManager any, notif any) {
+		concreteIM := instanceManager.(*instance.InstanceManager)
+		concreteNotif := notif.(*notifier.Notifier)
+
+		result := concreteIM.StartAllInstances(ctx)
+		if err := concreteNotif.NotifyStartupResult(result); err != nil {
+			slog.Error("Failed to send startup notification", "error", err)
+		}
+	}
+
+	// Start all application components (D-05, D-10)
+	components, err := lifecycle.AppStartup(cfg, logger, Version, updateLogger, notif, createComponents, startInstances)
+	if err != nil {
+		logger.Error("Failed to start application", "error", err)
+		// AppStartup already cleaned up partial components via rollback
+		os.Exit(1)
+	}
+
+	// Console mode: wait for shutdown signal (D-06, D-11)
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
-
-	// Wait for shutdown signal
 	<-sigChan
 	logger.Info("Shutdown signal received")
 
-	// Graceful shutdown with timeout
+	// Graceful shutdown with 10-second timeout (D-06)
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-
-	// Stop notification manager first (before network monitor)
-	if notificationManager != nil {
-		notificationManager.Stop()
-	}
-
-	// Stop network monitor
-	if networkMonitor != nil {
-		networkMonitor.Stop()
-	}
-
-	// Stop health monitor
-	if healthMonitor != nil {
-		healthMonitor.Stop()
-	}
-
-	// Stop cleanup cron scheduler
-	cleanupCron.Stop()
-	logger.Info("Update log cleanup scheduler stopped")
-
-	// Close UpdateLogger file handle (D-05)
-	if err := updateLogger.Close(); err != nil {
-		logger.Error("Failed to close update logger", "error", err)
-	}
-
-	// Shutdown API server
-	if apiServer != nil {
-		if err := apiServer.Shutdown(shutdownCtx); err != nil {
-			logger.Error("API server shutdown error", "error", err)
-		}
-	}
-
-	logger.Info("Shutdown completed")
+	lifecycle.AppShutdown(shutdownCtx, components, logger)
 }

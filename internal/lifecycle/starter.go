@@ -140,10 +140,14 @@ func StartNanobotWithCapture(
 }
 
 // captureLogs reads from a reader and writes to LogBuffer
-func captureLogs(ctx context.Context, reader *os.File, source string,	logBuffer *logbuffer.LogBuffer,
+func captureLogs(ctx context.Context, reader io.Reader, source string, logBuffer *logbuffer.LogBuffer,
 	logger *slog.Logger,
 ) {
-	defer reader.Close()
+	defer func() {
+		if closer, ok := reader.(io.Closer); ok {
+			closer.Close()
+		}
+	}()
 	buf := make([]byte, 4096)
 	for {
 		select {
