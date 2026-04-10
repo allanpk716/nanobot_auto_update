@@ -31,7 +31,7 @@ func TestNewServer(t *testing.T) {
 		},
 	}
 
-	im := instance.NewInstanceManager(fullCfg, logger)
+	im := instance.NewInstanceManager(fullCfg, logger, nil)
 
 	server, err := NewServer(cfg, im, fullCfg, "test-version", logger, nil, nil, nil)
 	if err != nil {
@@ -66,7 +66,7 @@ func TestServerLifecycle(t *testing.T) {
 		},
 	}
 
-	im := instance.NewInstanceManager(fullCfg, logger)
+	im := instance.NewInstanceManager(fullCfg, logger, nil)
 
 	server, err := NewServer(cfg, im, fullCfg, "test-version", logger, nil, nil, nil)
 	if err != nil {
@@ -102,7 +102,7 @@ func TestNewServerValidation(t *testing.T) {
 		},
 	}
 
-	im := instance.NewInstanceManager(fullCfg, logger)
+	im := instance.NewInstanceManager(fullCfg, logger, nil)
 
 	// Test with nil config
 	_, err := NewServer(nil, im, fullCfg, "test-version", logger, nil, nil, nil)
@@ -138,7 +138,7 @@ func TestWebUIRoutes(t *testing.T) {
 		},
 	}
 
-	im := instance.NewInstanceManager(fullCfg, logger)
+	im := instance.NewInstanceManager(fullCfg, logger, nil)
 
 	server, err := NewServer(cfg, im, fullCfg, "test-version", logger, nil, nil, nil)
 	if err != nil {
@@ -186,7 +186,7 @@ func TestWebUIInstanceNotFound(t *testing.T) {
 		},
 	}
 
-	im := instance.NewInstanceManager(fullCfg, logger)
+	im := instance.NewInstanceManager(fullCfg, logger, nil)
 
 	server, err := NewServer(cfg, im, fullCfg, "test-version", logger, nil, nil, nil)
 	if err != nil {
@@ -224,7 +224,7 @@ func TestServerStart_PortRetry(t *testing.T) {
 		},
 	}
 
-	im := instance.NewInstanceManager(fullCfg, logger)
+	im := instance.NewInstanceManager(fullCfg, logger, nil)
 	server, err := NewServer(cfg, im, fullCfg, "test-version", logger, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("NewServer failed: %v", err)

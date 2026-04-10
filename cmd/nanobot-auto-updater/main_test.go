@@ -261,7 +261,7 @@ func TestScheduledMultiInstanceUpdate(t *testing.T) {
 	logger := logging.NewLogger("./logs")
 
 	// 创建 InstanceManager
-	manager := instance.NewInstanceManager(cfg, logger)
+	manager := instance.NewInstanceManager(cfg, logger, nil)
 
 	// 验证使用 context.Background() 而非 WithTimeout()
 	ctx := context.Background()
@@ -313,7 +313,7 @@ func TestUpdateNowMultiInstance(t *testing.T) {
 	logger := logging.NewLogger("./logs")
 
 	// 创建 InstanceManager
-	manager := instance.NewInstanceManager(cfg, logger)
+	manager := instance.NewInstanceManager(cfg, logger, nil)
 
 	// 验证使用 context.WithTimeout() 而非 Background()
 	timeout := 30 * time.Second
@@ -363,7 +363,7 @@ func TestMultiInstanceLongRunning(t *testing.T) {
 	logger := logging.NewLogger("./logs")
 
 	// 创建 InstanceManager
-	manager := instance.NewInstanceManager(cfg, logger)
+	manager := instance.NewInstanceManager(cfg, logger, nil)
 
 	// 记录初始内存和 goroutine 状态
 	var initialMemStats runtime.MemStats

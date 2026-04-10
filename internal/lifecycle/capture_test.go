@@ -27,16 +27,17 @@ func TestCaptureLogs_WritesToBuffer(t *testing.T) {
 
 	ctx := context.Background()
 
-	// Execute: Run captureLogs
+	// Execute: Run captureLogs -- reads all bytes at once (buffer > input size)
 	captureLogs(ctx, reader, "stdout", logBuf, createTestLogger())
 
 	// Verify: Check logs written to buffer
 	history := logBuf.GetHistory()
-	if len(history) != 3 {
-		t.Errorf("expected 3 log entries, got %d", len(history))
+	if len(history) != 1 {
+		t.Errorf("expected 1 log entry (raw read), got %d", len(history))
 	}
-	if history[0].Content != "line1" {
-		t.Errorf("expected first line 'line1', got '%s'", history[0].Content)
+	// Raw read captures entire input as one chunk
+	if history[0].Content != "line1\nline2\nline3\n" {
+		t.Errorf("expected content 'line1\\nline2\\nline3\\n', got '%s'", history[0].Content)
 	}
 	if history[0].Source != "stdout" {
 		t.Errorf("expected source 'stdout', got '%s'", history[0].Source)
@@ -83,8 +84,8 @@ func TestCaptureLogs_LogEntryFields(t *testing.T) {
 	if entry.Source != "stderr" {
 		t.Errorf("expected source 'stderr', got '%s'", entry.Source)
 	}
-	if entry.Content != "test log line" {
-		t.Errorf("expected content 'test log line', got '%s'", entry.Content)
+	if entry.Content != "test log line\n" {
+		t.Errorf("expected content 'test log line\\n', got '%s'", entry.Content)
 	}
 	if entry.Timestamp.Before(beforeTime) || entry.Timestamp.After(afterTime) {
 		t.Errorf("timestamp %v not in expected range [%v, %v]", entry.Timestamp, beforeTime, afterTime)
@@ -225,10 +226,10 @@ func TestCaptureLogsPipeError(t *testing.T) {
 	// Execute: Run captureLogs
 	captureLogs(ctx, reader, "stdout", logBuf, testLogger)
 
-	// Verify: Error is logged (ERR-01)
+	// Verify: Error is logged (ERR-01) -- captureLogs logs "Log capture stopped" on read errors
 	logs := logOutput.String()
-	if !strings.Contains(logs, "Log capture scanner error") {
-		t.Errorf("expected 'Log capture scanner error' in logs, got: %s", logs)
+	if !strings.Contains(logs, "Log capture stopped") {
+		t.Errorf("expected 'Log capture stopped' in logs, got: %s", logs)
 	}
 	if !strings.Contains(logs, "source=stdout") {
 		t.Errorf("expected source to be logged, got: %s", logs)

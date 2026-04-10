@@ -221,5 +221,5 @@ func createTestInstanceManager() *instance.InstanceManager {
 		},
 	}
 
-	return instance.NewInstanceManager(cfg, logger)
+	return instance.NewInstanceManager(cfg, logger, nil)
 }

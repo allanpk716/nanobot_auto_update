@@ -152,7 +152,7 @@ func createTestInstanceManager() *instance.InstanceManager {
 		},
 	}
 
-	return instance.NewInstanceManager(cfg, logger)
+	return instance.NewInstanceManager(cfg, logger, nil)
 }
 
 // TestInstanceListHandler tests GET /api/v1/instances endpoint
@@ -166,7 +166,7 @@ func TestInstanceListHandler(t *testing.T) {
 			{Name: "instance3", Port: 8082, StartCommand: "cmd3"},
 		},
 	}
-	im := instance.NewInstanceManager(cfg, logger)
+	im := instance.NewInstanceManager(cfg, logger, nil)
 
 	// Create handler
 	handler := NewInstanceListHandler(im, logger)
