@@ -25,6 +25,7 @@ Requirements for Windows Service auto-start milestone. Each maps to roadmap phas
 - [ ] **ADPT-01**: daemon.go 在服务模式下跳过守护进程模式
 - [ ] **ADPT-02**: restartFn 在服务模式下使用 SCM 重启（net stop + net start）而非 self-spawn
 - [ ] **ADPT-03**: 服务模式设置工作目录为 exe 所在目录，避免 System32 默认路径问题
+- [ ] **ADPT-04**: 服务模式下监听配置文件变更，自动重载配置无需重启服务
 
 ## v2 Requirements
 
@@ -34,7 +35,6 @@ Deferred to future milestone.
 
 - **SVC-04**: Windows Event Log 集成（日志输出到事件查看器）
 - **MGR-05**: 命令行子命令 install-service / uninstall-service 独立管理服务
-- **ADPT-04**: 服务模式热重载配置（无需重启更新配置）
 
 ## Out of Scope
 
@@ -61,12 +61,13 @@ Which phases cover which requirements. Updated during roadmap creation.
 | ADPT-01 | Phase 49 | Pending |
 | ADPT-02 | Phase 49 | Pending |
 | ADPT-03 | Phase 49 | Pending |
+| ADPT-04 | Phase 49 | Pending |
 
 **Coverage:**
-- v0.11 requirements: 10 total
-- Mapped to phases: 10
+- v0.11 requirements: 11 total
+- Mapped to phases: 11
 - Unmapped: 0
 
 ---
 *Requirements defined: 2026-04-09*
-*Last updated: 2026-04-09 after roadmap creation*
+*Last updated: 2026-04-10 after roadmap update (added ADPT-04)*

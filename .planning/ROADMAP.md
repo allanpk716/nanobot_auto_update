@@ -145,14 +145,15 @@ Plans:
 - [ ] 48-02: TBD
 
 ### Phase 49: Existing Code Adaptation
-**Goal**: 服务模式下所有现有功能（守护进程、自更新重启、文件路径）正常工作，无需用户额外配置
+**Goal**: 服务模式下所有现有功能（守护进程、自更新重启、文件路径、配置重载）正常工作，无需用户额外配置
 **Depends on**: Phase 48
-**Requirements**: ADPT-01, ADPT-02, ADPT-03
+**Requirements**: ADPT-01, ADPT-02, ADPT-03, ADPT-04
 **Success Criteria** (what must be TRUE):
   1. 服务模式下 daemon.go 不进入守护进程循环（因为 SCM 负责进程生命周期管理）
   2. 自更新后 restartFn 使用 SCM 重启（net stop + net start）而非 self-spawn，确保服务状态正确
   3. 服务模式下工作目录自动设置为 exe 所在目录（非 System32），config.yaml 和日志文件路径正确解析
-  4. 控制台模式下 daemon.go、restartFn、工作目录行为与当前完全一致（无回归）
+  4. 服务模式下监听 config.yaml 文件变更，自动重载配置（无需重启服务）
+  5. 控制台模式下 daemon.go、restartFn、工作目录行为与当前完全一致（无回归）
 **Plans**: TBD
 
 Plans:
@@ -172,4 +173,4 @@ Phases execute in numeric order: 46 -> 47 -> 48 -> 49
 | 49. Existing Code Adaptation | v0.11 | 0/? | Not started | - |
 
 ---
-*Last updated: 2026-04-09 (v0.11 roadmap created)*
+*Last updated: 2026-04-10 (v0.11 roadmap updated — added ADPT-04)*
