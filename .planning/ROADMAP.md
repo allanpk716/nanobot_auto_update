@@ -138,11 +138,11 @@ Plans:
   2. auto_start: false 时，程序检测到已注册服务则自动卸载（SCM DeleteService）并退出
   3. 服务配置了 SCM 恢复策略：失败后自动重启，无需人工干预
   4. 非 Windows 平台编译时 auto_start 配置被忽略，不影响其他功能
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 48-01: TBD
-- [ ] 48-02: TBD
+- [ ] 48-01-PLAN.md — ServiceManager core: RegisterService (CreateService + recovery), UnregisterService (Stop + Delete), IsAdmin, non-Windows stub
+- [ ] 48-02-PLAN.md — Wire ServiceManager into main.go: replace placeholder code with real RegisterService/UnregisterService calls
 
 ### Phase 49: Existing Code Adaptation
 **Goal**: 服务模式下所有现有功能（守护进程、自更新重启、文件路径、配置重载）正常工作，无需用户额外配置
@@ -169,8 +169,8 @@ Phases execute in numeric order: 46 -> 47 -> 48 -> 49
 |-------|-----------|----------------|--------|-----------|
 | 46. Service Configuration & Mode Detection | v0.11 | 2/2 | Complete    | 2026-04-10 |
 | 47. Windows Service Handler | v0.11 | 2/2 | Complete    | 2026-04-10 |
-| 48. Service Manager | v0.11 | 0/? | Not started | - |
+| 48. Service Manager | v0.11 | 0/2 | Planned | - |
 | 49. Existing Code Adaptation | v0.11 | 0/? | Not started | - |
 
 ---
-*Last updated: 2026-04-10 (Phase 47 planned — 2 plans in 2 waves)*
+*Last updated: 2026-04-11 (Phase 48 planned -- 2 plans in 2 waves)*
