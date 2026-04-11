@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"sync"
 	"syscall"
 	"time"
 
@@ -186,6 +187,9 @@ func main() {
 	// Shared mutable state for hot-reloadable values.
 	// The token is read by AuthMiddleware on every request via a closure.
 	// Updated by OnBearerTokenChange callback when config changes.
+	// Protected by tokenMu to prevent data race between HTTP handler
+	// goroutines (readers) and hot-reload timer goroutine (writer).
+	var tokenMu sync.RWMutex
 	currentBearerToken := cfg.API.BearerToken
 
 	// Create components that require circular-dependency packages (D-05, D-10)
@@ -221,7 +225,11 @@ func main() {
 
 		// Create API server (conditional, can fail)
 		if cfg.API.Port != 0 {
-			apiSrv, apiErr := api.NewServer(&cfg.API, im, cfg, version, logger, concreteUpdateLogger, concreteNotif, selfUpdater, func() string { return currentBearerToken })
+			apiSrv, apiErr := api.NewServer(&cfg.API, im, cfg, version, logger, concreteUpdateLogger, concreteNotif, selfUpdater, func() string {
+					tokenMu.RLock()
+					defer tokenMu.RUnlock()
+					return currentBearerToken
+				})
 			if apiErr != nil {
 				logger.Error("Failed to create API server", "error", apiErr)
 				err = apiErr
@@ -363,7 +371,9 @@ func main() {
 					},
 
 					OnBearerTokenChange: func(newCfg *config.Config) {
+						tokenMu.Lock()
 						currentBearerToken = newCfg.API.BearerToken
+						tokenMu.Unlock()
 						slog.Info("hot reload: bearer token updated")
 					},
 
