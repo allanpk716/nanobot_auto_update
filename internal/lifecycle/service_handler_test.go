@@ -41,7 +41,7 @@ func testServiceLogger() *slog.Logger {
 func testServiceHandler() *ServiceHandler {
 	cfg := testServiceConfig()
 	logger := testServiceLogger()
-	return NewServiceHandler(cfg, logger, "test-version", nil, nil, nil, nil)
+	return NewServiceHandler(cfg, logger, "test-version", nil, nil, nil, nil, nil)
 }
 
 // readStatus reads a status from the channel with a timeout.

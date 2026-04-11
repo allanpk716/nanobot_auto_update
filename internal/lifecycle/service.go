@@ -24,6 +24,7 @@ func NewServiceHandler(
 	notif NotifySender,
 	createComponents CreateComponentsFunc,
 	startInstances StartInstancesFunc,
+	onReady func(*AppComponents),
 ) *ServiceHandler {
 	return &ServiceHandler{}
 }
@@ -38,6 +39,7 @@ func RunService(
 	notif NotifySender,
 	createComponents CreateComponentsFunc,
 	startInstances StartInstancesFunc,
+	onReady func(*AppComponents),
 ) error {
 	return fmt.Errorf("service mode is not supported on this platform")
 }

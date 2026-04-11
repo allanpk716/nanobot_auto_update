@@ -23,6 +23,7 @@ type ServiceHandler struct {
 	notif            NotifySender
 	createComponents CreateComponentsFunc
 	startInstances   StartInstancesFunc
+	onReady          func(*AppComponents) // called after AppStartup succeeds
 }
 
 // NewServiceHandler creates a new service handler (D-01).
@@ -35,6 +36,7 @@ func NewServiceHandler(
 	notif NotifySender,
 	createComponents CreateComponentsFunc,
 	startInstances StartInstancesFunc,
+	onReady func(*AppComponents),
 ) *ServiceHandler {
 	return &ServiceHandler{
 		cfg:              cfg,
@@ -44,6 +46,7 @@ func NewServiceHandler(
 		notif:            notif,
 		createComponents: createComponents,
 		startInstances:   startInstances,
+		onReady:          onReady,
 	}
 }
 
@@ -79,6 +82,13 @@ func (h *ServiceHandler) Execute(args []string, r <-chan svc.ChangeRequest, s ch
 	s <- svc.Status{State: svc.Running, Accepts: cmdsAccepted}
 	h.logger.Info("Service is running")
 
+	// Call onReady callback after AppStartup succeeds and Running is reported.
+	// Used to start config hot reload and other post-startup tasks.
+	// [HIGH-3 fix] Exact insertion: after Running reported, before event loop.
+	if h.onReady != nil {
+		h.onReady(components)
+	}
+
 	// Main event loop -- wait for Stop/Shutdown (D-03)
 loop:
 	for {
@@ -98,6 +108,9 @@ loop:
 
 	// D-02: Report stopping state
 	s <- svc.Status{State: svc.StopPending}
+
+	// [MED-4 fix] Stop config file watcher before component shutdown
+	config.StopWatch()
 
 	// D-04, D-06: Graceful shutdown with 30-second timeout
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -121,7 +134,8 @@ func RunService(
 	notif NotifySender,
 	createComponents CreateComponentsFunc,
 	startInstances StartInstancesFunc,
+	onReady func(*AppComponents),
 ) error {
-	handler := NewServiceHandler(cfg, logger, version, updateLogger, notif, createComponents, startInstances)
+	handler := NewServiceHandler(cfg, logger, version, updateLogger, notif, createComponents, startInstances, onReady)
 	return svc.Run(cfg.Service.ServiceName, handler)
 }
