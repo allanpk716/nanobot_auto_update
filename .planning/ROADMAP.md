@@ -109,7 +109,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 **Milestone Goal:** 在 Web 后台界面完整管理 nanobot 实例的生命周期（CRUD + 启停）和 nanobot 自身配置文件
 
-- [ ] **Phase 50: Instance Config CRUD API** - Backend API for creating, reading, updating, deleting instance configurations with validation
+- [x] **Phase 50: Instance Config CRUD API** - Backend API for creating, reading, updating, deleting instance configurations with validation (completed 2026-04-11)
 - [ ] **Phase 51: Instance Lifecycle Control API** - Backend API for start/stop operations on individual instances with auth
 - [ ] **Phase 52: Nanobot Config Management API** - Backend API for reading/writing nanobot config.json per instance with auto-directory setup
 - [ ] **Phase 53: Instance Management UI** - Full web interface with instance cards, CRUD dialogs, lifecycle controls, and nanobot config editor
@@ -129,8 +129,8 @@ Decimal phases appear between their surrounding integers in numeric order.
 **Plans**: 2 plans
 
 Plans:
-- [ ] 50-01-PLAN.md — SaveConfig function + InstanceConfigHandler with all 6 CRUD endpoints + route registration
-- [ ] 50-02-PLAN.md — Comprehensive handler tests and SaveConfig tests (TDD)
+- [x] 50-01-PLAN.md — SaveConfig function + InstanceConfigHandler with all 6 CRUD endpoints + route registration
+- [x] 50-02-PLAN.md — Comprehensive handler tests and SaveConfig tests (TDD)
 
 ### Phase 51: Instance Lifecycle Control API
 **Goal**: Users can start and stop individual instances on demand through authenticated API endpoints
@@ -174,7 +174,7 @@ Phases execute in numeric order: 50 -> 51 -> 52 -> 53
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
-| 50. Instance Config CRUD API | v0.12 | 0/2 | Planned | - |
+| 50. Instance Config CRUD API | v0.12 | 2/2 | Complete    | 2026-04-11 |
 | 51. Instance Lifecycle Control API | v0.12 | 0/? | Not started | - |
 | 52. Nanobot Config Management API | v0.12 | 0/? | Not started | - |
 | 53. Instance Management UI | v0.12 | 0/? | Not started | - |
