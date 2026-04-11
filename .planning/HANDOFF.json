@@ -1,0 +1,32 @@
+{
+  "version": "1.0",
+  "timestamp": "2026-04-11T01:35:20.083Z",
+  "phase": "48",
+  "phase_name": "service-manager",
+  "phase_dir": ".planning/phases/48-service-manager",
+  "plan": null,
+  "task": null,
+  "total_tasks": 3,
+  "status": "paused",
+  "completed_tasks": [
+    {"id": 1, "name": "Implement ServiceManager (RegisterService, UnregisterService, IsAdmin)", "status": "done", "commit": "147acb8"},
+    {"id": 2, "name": "Unit tests for ServiceManager", "status": "done", "commit": "29f4e9e"},
+    {"id": 3, "name": "Wire ServiceManager into main.go", "status": "done", "commit": "89ceaa3"}
+  ],
+  "remaining_tasks": [],
+  "blockers": [],
+  "human_actions_pending": [
+    {"action": "Manual testing: service registration with admin + auto_start: true", "context": "SCM operations require real Windows SCM with admin privileges", "blocking": true},
+    {"action": "Manual testing: idempotent registration (run twice)", "context": "Verify service already exists skip logic", "blocking": true},
+    {"action": "Manual testing: service unregistration with auto_start: false", "context": "Verify UnregisterService + 'switched to console mode' log", "blocking": true},
+    {"action": "Manual testing: non-admin error + exit code 1", "context": "Verify admin check with 'Run as administrator' hint", "blocking": true},
+    {"action": "Manual testing: recovery policy via sc qfailure", "context": "Verify 3x restart / 60s / 24h reset", "blocking": true},
+    {"action": "Manual testing: console mode non-regression", "context": "Verify full app startup/shutdown unaffected", "blocking": true}
+  ],
+  "decisions": [
+    {"decision": "v0.11 tag pushed for auto-update testing", "rationale": "User will test UAT items via auto-updated binary", "phase": "48"}
+  ],
+  "uncommitted_files": [],
+  "next_action": "After user completes UAT testing and approves, run phase completion: /gsd-execute-phase 48 -- then update roadmap via phase complete",
+  "context_notes": "Phase 48 execution fully complete (all 3 tasks done, code review done, verification done). Status is human_needed - 6 UAT items pending manual testing. User has v0.11 tag pushed for auto-update testing. Once user approves, need to: update ROADMAP.md, advance STATE.md, and proceed to next phase."
+}
