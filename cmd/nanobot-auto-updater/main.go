@@ -389,8 +389,8 @@ func main() {
 						newIM := instance.NewInstanceManager(newCfg, logger, notif)
 						hotReloadComponents.InstanceManager = newIM
 						startCtx, startCancel := context.WithTimeout(context.Background(), 5*time.Minute)
-						defer startCancel()
 						newIM.StartAllInstances(startCtx)
+						startCancel()
 						slog.Info("hot reload: instances fully replaced and restarted",
 							"instance_count", len(newCfg.Instances),
 						)
