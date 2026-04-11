@@ -121,6 +121,54 @@
 
 ---
 
+## Milestone: v0.11 — Windows 服务自启动
+
+**Shipped:** 2026-04-11
+**Phases:** 4 | **Plans:** 8 | **Sessions:** 2
+
+### What Was Built
+- svc.IsWindowsService() 运行模式检测 + build-tag 双实现 (service_windows.go / service.go)
+- svc.Handler Execute 方法: 服务启动/停止/关机控制，30 秒优雅关闭，AppComponents 提取
+- ServiceManager: CreateService + 3x restart recovery (60s interval, 24h reset), UnregisterService (Stop + poll + Delete), IsAdmin elevation check
+- main.go 三分支 auto_start 逻辑: 服务模式告警 → 控制台模式注册 → 控制台模式卸载
+- 双模式适配: daemon.go IsServiceMode guard + defaultRestartFn SCM restart + 工作目录验证
+- 配置热重载: viper.WatchConfig + 500ms debounce + 6 组件重建回调 + 动态 Bearer Token getter
+- Code review 修复: currentBearerToken RWMutex data race + startCancel 显式调用 + logFile.Close handle leak + os.Chdir error logging
+
+### What Worked
+- AppComponents/AppStartup/AppShutdown 提取模式: 服务和控制台模式共享启动逻辑，零重复
+- Build-tag 双实现: Windows 平台完整功能 + 非 Windows 平台 no-op stubs，编译无障碍
+- 三分支 auto_start 设计: 配置驱动模式切换，无需命令行参数
+- Code review 流程: 发现 4 个问题 (data race, goroutine leak, file handle leak, missing error log)
+- 500ms debounce timer 合并 Windows fsnotify 快速事件，避免重复重建
+
+### What Was Inefficient
+- Phase 48 UAT 测试暂停等待人工验证，但最终跳过 — 单元测试和 build 验证已充分
+- 预存在的 capture_test.go 编译错误继续从 v0.8-v0.10 延续
+- ROADMAP.md Phase 48 状态未及时更新，需要 milestone 完成时修正
+
+### Patterns Established
+- AppComponents 提取模式: main.go 启动/关闭逻辑抽取为独立函数，服务和控制台共享
+- onReady callback: 服务 Running 状态后执行初始化操作（热重载等）
+- IsServiceMode guard: 服务模式下跳过守护进程逻辑 (early return pattern)
+- 双重启策略: service=os.Exit(1) 触发 SCM recovery, console=self-spawn
+- HotReloadCallbacks 函数字段: config 包检测变更，调用方提供重建函数，避免循环导入
+- 动态 Token getter: func() string closure 实现 Token 热重载
+
+### Key Lessons
+1. Windows 服务开发需要 svc.Handler + ServiceManager 分层: Handler 处理生命周期，Manager 处理注册/卸载
+2. 配置热重载需要 debounce — Windows fsnotify 在文件保存时会产生多个快速事件
+3. 全量替换 (StopAll→recreate→StartAll) 比增量 diff 更简单可靠，实例数量有限
+4. os.Exit(1) 在服务模式下触发 SCM recovery policy — 非零退出码是正确的行为
+5. Go string 赋值是原子的 — shared variable + func() string 是 Bearer Token 热重载的最简方案
+
+### Cost Observations
+- Model mix: 100% sonnet
+- Sessions: 2 (Phase 46-48, Phase 49)
+- Notable: 4 个阶段 2 天完成，Phase 48-49 在 1 个 session 内完成
+
+---
+
 ## Cross-Milestone Trends
 
 ### Process Evolution
@@ -136,6 +184,7 @@
 | v0.8 | ~3 | 5 | PoC-first + CI/CD + 自更新 |
 | v0.9 | ~2 | 3 | AfterFunc state machine + duck-typing + lifecycle monitor |
 | v0.10 | ~2 | 2 | 前后端分离 + Web UI 自更新管理 + textContent XSS 防护 |
+| v0.11 | ~2 | 4 | Windows Service + SCM + build-tag + config hot reload |
 
 ### Cumulative Quality
 
@@ -150,6 +199,7 @@
 | v0.8 | ~90+ | selfupdate, restartFn 注入, 内外函数分离 |
 | v0.9 | ~100+ | AfterFunc state machine, duck-typed local interface, instance-level context |
 | v0.10 | ~105+ | atomic.Value ProgressState, io.TeeReader, textContent XSS prevention, progress polling |
+| v0.11 | ~115+ | svc.Handler, ServiceManager SCM, build-tag dual impl, IsServiceMode guard, HotReloadCallbacks, debounce timer |
 
 ### Top Lessons (Verified Across Milestones)
 

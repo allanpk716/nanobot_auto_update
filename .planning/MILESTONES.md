@@ -1,5 +1,17 @@
 # Milestones
 
+## v0.11 Windows 服务自启动 (Shipped: 2026-04-11)
+
+**Phases completed:** 4 phases, 8 plans, 15 tasks
+
+**Key accomplishments:**
+
+- Windows service mode detection via svc.IsWindowsService() with build-tag dual implementation and main.go startup branching (D-06, D-07, D-08)
+- Windows ServiceManager with SCM registration (CreateService + 3x restart recovery), context-cancellable uninstall (Stop + DeleteService), admin elevation check, and cross-platform no-op stubs
+- Replaced Phase 46 placeholder code in main.go with real lifecycle.RegisterService/UnregisterService/IsAdmin calls implementing three-case auto_start branching: service-mode config mismatch warning, console-mode admin-checked service registration (exit code 2), and console-mode service uninstall with "switched to console mode" transition
+
+---
+
 ## v0.10 管理界面自更新功能 (Shipped: 2026-04-08)
 
 **Phases completed:** 5 phases, 8 plans, 20 tasks

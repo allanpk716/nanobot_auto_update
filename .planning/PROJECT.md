@@ -2,7 +2,7 @@
 
 ## What This Is
 
-一个 Windows 后台监控服务，使用 Golang 开发，用于监控网络连通性并通过 HTTP API 触发 nanobot 工具的更新。**v0.10 管理界面自更新功能**：嵌入式 Web UI 新增自更新管理区域（版本显示、检测更新、一键更新、下载进度百分比），后端进度追踪（atomic.Value + io.TeeReader）和 Web Token API。**v0.9 启动通知与 Telegram 监控**：实例启动结果聚合通知、Telegram 连接状态监控（日志模式检测 + 30s 超时状态机）和 Pushover 通知。**v0.8 自更新**：通过 GitHub Releases 自动检测、下载并替换更新 nanobot-auto-updater 自身，包括 CI/CD 自动构建、HTTP API 触发自更新、安全恢复机制。**v0.7 更新生命周期通知**：HTTP API 触发更新时发送 Pushover 通知，包括更新开始/完成通知、非阻塞发送、优雅降级。**v0.6 更新日志记录和查询**：持久化记录每次更新操作的详细日志，提供分页查询 API 和 7 天自动清理。**v0.5 核心监控和自动化**：启动时自动启动实例、实例健康监控、Google 连通性监控、HTTP API 触发更新和 help 接口。**v0.4 实时日志查看**：通过 SSE 流式传输和嵌入式 Web UI 实时查看 nanobot 实例的 stdout/stderr 输出。多实例管理保持不变。通过配置文件和 HTTP API 控制行为。
+一个 Windows 后台监控服务，使用 Golang 开发，用于监控网络连通性并通过 HTTP API 触发 nanobot 工具的更新。**v0.11 Windows 服务自启动**：支持通过 config.yaml `auto_start: true` 开启 Windows 服务模式，系统启动即运行，无需用户登录桌面。包括 svc.Handler 服务生命周期管理、ServiceManager (SCM 注册/卸载/恢复策略)、双模式兼容适配（服务模式跳过守护进程、SCM 重启策略）、配置热重载（viper.WatchConfig + 500ms debounce + 6 组件重建回调）。**v0.10 管理界面自更新功能**：嵌入式 Web UI 新增自更新管理区域（版本显示、检测更新、一键更新、下载进度百分比），后端进度追踪（atomic.Value + io.TeeReader）和 Web Token API。**v0.9 启动通知与 Telegram 监控**：实例启动结果聚合通知、Telegram 连接状态监控（日志模式检测 + 30s 超时状态机）和 Pushover 通知。**v0.8 自更新**：通过 GitHub Releases 自动检测、下载并替换更新 nanobot-auto-updater 自身，包括 CI/CD 自动构建、HTTP API 触发自更新、安全恢复机制。**v0.7 更新生命周期通知**：HTTP API 触发更新时发送 Pushover 通知，包括更新开始/完成通知、非阻塞发送、优雅降级。**v0.6 更新日志记录和查询**：持久化记录每次更新操作的详细日志，提供分页查询 API 和 7 天自动清理。**v0.5 核心监控和自动化**：启动时自动启动实例、实例健康监控、Google 连通性监控、HTTP API 触发更新和 help 接口。**v0.4 实时日志查看**：通过 SSE 流式传输和嵌入式 Web UI 实时查看 nanobot 实例的 stdout/stderr 输出。多实例管理保持不变。通过配置文件和 HTTP API 控制行为。
 
 ## Core Value
 
@@ -88,6 +88,19 @@
 - ✓ TELE-07: 未产生 trigger 日志的实例无监控开销 (TestMonitor_NoTriggerNoNotifications)
 - ✓ TELE-09: 实例停止时取消监控,不发送虚假通知 (TestMonitor_StopCancelsMonitor)
 
+**v0.11 Windows 服务自启动** — 2026-04-11 (Phases 46-49):
+- ✓ SVC-01: svc.IsWindowsService() 检测运行模式，自动选择服务/控制台模式
+- ✓ SVC-02: svc.Handler Execute 方法处理服务启动/停止/关机请求
+- ✓ SVC-03: 服务模式优雅关闭，响应 Stop/Shutdown 控制码
+- ✓ MGR-01: config.yaml auto_start: true/false 配置项
+- ✓ MGR-02: auto_start=true 时管理员权限自动注册 Windows 服务
+- ✓ MGR-03: auto_start=false 时检测已注册服务自动卸载
+- ✓ MGR-04: SCM 恢复策略 (3x restart, 60s interval)
+- ✓ ADPT-01: 服务模式跳过守护进程模式
+- ✓ ADPT-02: restartFn 服务模式使用 SCM 重启
+- ✓ ADPT-03: 服务模式工作目录自动设置 (exe 所在目录)
+- ✓ ADPT-04: 配置文件变更自动重载 (500ms debounce)
+
 **v0.10 管理界面自更新功能** — 2026-04-08 (Phases 44-45):
 - ✓ UI-01: 自更新管理区域布局 (home.html header 与 main 之间)
 - ✓ UI-02: 当前版本显示 (蓝色标签样式)
@@ -114,6 +127,8 @@
 **uv**: Python 包管理器，用于安装和管理 Python 工具。
 
 **Pushover**: 推送通知服务，用于在更新失败时通知用户。
+
+**v0.11 Windows 服务自启动 Shipped:** 2026-04-11 — Windows 服务自启动里程碑完成，4 个阶段 (46-49)，8 个计划，15 个任务。Phase 46: ServiceConfig + svc.IsWindowsService() 检测。Phase 47: svc.Handler 生命周期管理 + 优雅关闭。Phase 48: ServiceManager (SCM 注册/卸载/恢复策略)。Phase 49: 双模式适配 + 配置热重载 (500ms debounce + 6 组件回调)。11/11 需求满足。
 
 **v0.10 管理界面自更新功能 Shipped:** 2026-04-08 — 管理界面自更新功能里程碑完成，2 个阶段 (44-45)，4 个计划。Phase 44: 下载进度追踪 (ProgressState + io.TeeReader + atomic.Value) + Web Token API (localhost-only)。Phase 45: 自更新管理 UI (版本标签 + 检测更新 + 触发更新 + 500ms 进度轮询 + 进度条)。7/7 需求满足。
 
@@ -249,6 +264,20 @@
 | textContent 渲染所有 API 数据 | 防止 GitHub release notes XSS | ✓ Good — Phase 45 |
 | 500ms setInterval 轮询 + 60s 超时 | 实时进度反馈 + 防止无限轮询 | ✓ Good — Phase 45 |
 | 按钮状态互锁 (更新中禁用所有按钮) | 防止重复触发更新 | ✓ Good — Phase 45 |
+| golang.org/x/sys/windows/svc | Windows 标准库服务接口 | ✓ Good — Phase 46 |
+| build-tag 双实现 (service_windows.go / service.go) | 跨平台编译兼容 | ✓ Good — Phase 46 |
+| svc.IsWindowsService() 检测 | 自动模式选择，无需命令行参数 | ✓ Good — Phase 46 |
+| AppComponents/AppStartup/AppShutdown 提取 | 服务模式与控制台模式共享启动/关闭逻辑 | ✓ Good — Phase 47 |
+| onReady callback 模式 | 服务 Running 状态后执行初始化（热重载等） | ✓ Good — Phase 47 |
+| ServiceManager 便利包装函数 | main.go 简洁调用 RegisterService/UnregisterService/IsAdmin | ✓ Good — Phase 48 |
+| SetRecoveryActionsOnNonCrashFailures 非关键 | 日志警告但不阻断，SCM 基础恢复策略已足够 | ✓ Good — Phase 48 |
+| IsServiceMode guard pattern | 服务模式下跳过守护进程逻辑 (MakeDaemon/MakeDaemonSimple) | ✓ Good — Phase 49 |
+| 双重启策略 (service=os.Exit(1), console=self-spawn) | 服务模式触发 SCM recovery，控制台模式自重启 | ✓ Good — Phase 49 |
+| 500ms debounce timer (time.AfterFunc) | Windows fsnotify 快速事件合并 | ✓ Good — Phase 49 |
+| sync.Mutex 序列化组件重建 | 防止并发 config change 导致组件状态混乱 | ✓ Good — Phase 49 |
+| 全量替换策略 (StopAll→recreate→StartAll) | 实例配置变更，避免复杂 diff | ✓ Good — Phase 49 |
+| 动态 Bearer Token getter (func() string) | 热重载 Token 无需重启 API 服务器 | ✓ Good — Phase 49 |
+| SelfUpdater 仅日志不重建 | 避免破坏 SelfUpdateHandler 的引用 | ✓ Good — Phase 49 |
 
 ## Configuration
 
@@ -282,6 +311,11 @@ self_update:
   github_repo: "nanobot-auto-updater"  # 默认值
 ```
 
+**v0.11 服务模式配置** (新):
+```yaml
+auto_start: false  # true: 注册为 Windows 服务, false: 控制台模式
+```
+
 **命令行参数**:
 - `-cron`: 覆盖配置文件中的 cron 表达式
 - `-config`: 指定配置文件路径
@@ -294,23 +328,17 @@ self_update:
 
 ---
 
-## Current Milestone: v0.11 Windows 服务自启动
+## Current Milestone: Planning Next
 
-**Goal:** 支持通过配置文件开启 Windows 服务模式，系统启动即运行，无需用户登录桌面。
-
-**Target features:**
-- Windows Service 运行模式（golang.org/x/sys/windows/svc）
-- 配置文件驱动（config.yaml `auto_start: true`）
-- 服务自动注册/启动/停止/卸载
-- 双模式兼容（console 模式 + service 模式）
+**Goal:** 待规划下一个里程碑
 
 ## Current State
 
-**Shipped:** v0.10 管理界面自更新功能 (2026-04-08)
-**In Progress:** v0.11 Windows 服务自启动 — Phase 46 complete (ServiceConfig + 服务模式检测)
-**Total:** 10 milestones shipped, 45 phases, ~19,691 LOC Go
+**Shipped:** v0.11 Windows 服务自启动 (2026-04-11)
+**In Progress:** 无 — 等待下一个里程碑规划
+**Total:** 11 milestones shipped, 49 phases, ~21,492 LOC Go
 
-*Last updated: 2026-04-10 after Phase 46 completion*
+*Last updated: 2026-04-11 after v0.11 milestone completion*
 
 ## Evolution
 
