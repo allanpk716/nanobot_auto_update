@@ -105,6 +105,16 @@ func NewServer(cfg *config.APIConfig, im *instance.InstanceManager, fullCfg *con
 			authMiddleware(http.HandlerFunc(selfUpdateHandler.HandleUpdate)))
 	}
 
+		// Instance config CRUD endpoints (Phase 50: IC-01 through IC-06)
+		// Handler receives config.GetCurrentConfig as the config reader -- no NewServer signature change needed.
+		instanceConfigHandler := NewInstanceConfigHandler(config.GetCurrentConfig, logger)
+		mux.Handle("GET /api/v1/instance-configs", authMiddleware(http.HandlerFunc(instanceConfigHandler.HandleList)))
+		mux.Handle("POST /api/v1/instance-configs", authMiddleware(http.HandlerFunc(instanceConfigHandler.HandleCreate)))
+		mux.Handle("GET /api/v1/instance-configs/{name}", authMiddleware(http.HandlerFunc(instanceConfigHandler.HandleGet)))
+		mux.Handle("PUT /api/v1/instance-configs/{name}", authMiddleware(http.HandlerFunc(instanceConfigHandler.HandleUpdate)))
+		mux.Handle("DELETE /api/v1/instance-configs/{name}", authMiddleware(http.HandlerFunc(instanceConfigHandler.HandleDelete)))
+		mux.Handle("POST /api/v1/instance-configs/{name}/copy", authMiddleware(http.HandlerFunc(instanceConfigHandler.HandleCopy)))
+
 	// Create HTTP server
 	// SSE-07: WriteTimeout=0 to support SSE long connections
 	httpServer := &http.Server{
