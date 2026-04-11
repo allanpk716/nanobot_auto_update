@@ -1,10 +1,10 @@
 ---
 gsd_state_version: 1.0
-milestone: none
-milestone_name: ""
-status: idle
+milestone: v0.12
+milestone_name: "实例管理与配置编辑"
+status: defining_requirements
 stopped_at: ""
-last_updated: "2026-04-11T11:35:00.000Z"
+last_updated: "2026-04-11T12:00:00.000Z"
 last_activity: 2026-04-11
 progress:
   total_phases: 0
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-11)
 
 **Core value:** 自动保持 nanobot 处于最新版本,无需用户手动干预。
-**Current focus:** 等待下一个里程碑规划
+**Current focus:** v0.12 实例管理与配置编辑
 
 ## Current Position
 
-Phase: None
-Plan: None
-Status: Idle — milestone v0.11 completed
-Last activity: 2026-04-11
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-04-11 — Milestone v0.12 started
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -57,4 +57,4 @@ None.
 ## Session Continuity
 
 Last session: 2026-04-11
-Stopped at: Milestone v0.11 completed
+Stopped at: Milestone v0.12 started — defining requirements

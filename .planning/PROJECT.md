@@ -112,7 +112,7 @@
 
 ### Active
 
-(None — awaiting next milestone planning)
+(None — to be defined in milestone v0.12)
 
 ### Out of Scope
 
@@ -328,17 +328,24 @@ auto_start: false  # true: 注册为 Windows 服务, false: 控制台模式
 
 ---
 
-## Current Milestone: Planning Next
+## Current Milestone: v0.12 实例管理与配置编辑
 
-**Goal:** 待规划下一个里程碑
+**Goal:** 在 Web 后台界面完整管理 nanobot 实例的生命周期（CRUD + 启停）和 nanobot 自身配置文件
+
+**Target features:**
+- 实例 CRUD（新建、复制、编辑、删除实例配置）
+- 实例生命周期控制（启动、停止、重启单个实例）
+- 配置持久化（界面修改自动保存到 config.yaml）
+- nanobot 配置编辑器（表单 + JSON 混合模式编辑 nanobot config.json）
+- 目录自动管理（新建实例时自动创建配置目录和默认 config.json）
 
 ## Current State
 
 **Shipped:** v0.11 Windows 服务自启动 (2026-04-11)
-**In Progress:** 无 — 等待下一个里程碑规划
+**In Progress:** v0.12 实例管理与配置编辑
 **Total:** 11 milestones shipped, 49 phases, ~21,492 LOC Go
 
-*Last updated: 2026-04-11 after v0.11 milestone completion*
+*Last updated: 2026-04-11 after v0.12 milestone started*
 
 ## Evolution
 
