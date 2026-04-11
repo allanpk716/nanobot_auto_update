@@ -96,7 +96,7 @@
 - [x] **Phase 46: Service Configuration & Mode Detection** - 配置驱动 auto_start 开关，启动时自动检测服务/控制台运行模式 (completed 2026-04-10)
 - [x] **Phase 47: Windows Service Handler** - 实现 svc.Handler 接口，处理服务生命周期和优雅关闭 (completed 2026-04-10)
 - [ ] **Phase 48: Service Manager** - 服务注册/卸载/恢复策略的完整管理
-- [ ] **Phase 49: Existing Code Adaptation** - 守护进程、重启机制和工作目录的服务模式适配
+- [x] **Phase 49: Existing Code Adaptation** - 守护进程、重启机制和工作目录的服务模式适配 (completed 2026-04-11)
 
 ## Phase Details
 
@@ -157,8 +157,8 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 49-01-PLAN.md — daemon.go 服务模式跳过 + defaultRestartFn SCM 重启策略 + 验证 ADPT-03 (ADPT-01/02/03)
-- [ ] 49-02-PLAN.md — config 热重载: viper.WatchConfig + 组件重建回调 + onReady 集成 (ADPT-04)
+- [x] 49-01-PLAN.md — daemon.go 服务模式跳过 + defaultRestartFn SCM 重启策略 + 验证 ADPT-03 (ADPT-01/02/03)
+- [x] 49-02-PLAN.md — config 热重载: viper.WatchConfig + 组件重建回调 + onReady 集成 (ADPT-04)
 
 ## Progress
 
@@ -170,7 +170,7 @@ Phases execute in numeric order: 46 -> 47 -> 48 -> 49
 | 46. Service Configuration & Mode Detection | v0.11 | 2/2 | Complete    | 2026-04-10 |
 | 47. Windows Service Handler | v0.11 | 2/2 | Complete    | 2026-04-10 |
 | 48. Service Manager | v0.11 | 0/2 | Planned | - |
-| 49. Existing Code Adaptation | v0.11 | 0/2 | Planned | - |
+| 49. Existing Code Adaptation | v0.11 | 2/2 | Complete    | 2026-04-11 |
 
 ---
 *Last updated: 2026-04-11 (Phase 49 planned -- 2 plans in 1 wave)*
