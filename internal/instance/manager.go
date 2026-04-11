@@ -319,6 +319,30 @@ func (m *InstanceManager) UnlockUpdate() {
 	m.isUpdating.Store(false)
 }
 
+// InstanceStatusInfo holds the status information for a single instance.
+// Used by status API and health monitor to get PID-based running state.
+type InstanceStatusInfo struct {
+	Name    string
+	Port    uint32
+	Running bool
+	PID     int32
+}
+
+// GetInstanceStatuses returns the running status of all instances using PID-based detection.
+// This is the accurate method for multi-instance scenarios where all instances share the same binary.
+func (m *InstanceManager) GetInstanceStatuses() []InstanceStatusInfo {
+	statuses := make([]InstanceStatusInfo, 0, len(m.instances))
+	for _, inst := range m.instances {
+		statuses = append(statuses, InstanceStatusInfo{
+			Name:    inst.Name(),
+			Port:    inst.Port(),
+			Running: inst.IsRunning(),
+			PID:     inst.GetPID(),
+		})
+	}
+	return statuses
+}
+
 // GetLifecycle returns the InstanceLifecycle for a specific instance by name.
 // Returns error if instance not found.
 func (m *InstanceManager) GetLifecycle(name string) (*InstanceLifecycle, error) {

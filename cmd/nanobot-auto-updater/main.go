@@ -234,7 +234,19 @@ func main() {
 		// Create health monitor (conditional)
 		if len(cfg.Instances) > 0 {
 			hm := health.NewHealthMonitor(
-				cfg.Instances,
+				func() []health.InstanceStatus {
+					statuses := im.GetInstanceStatuses()
+					result := make([]health.InstanceStatus, len(statuses))
+					for i, s := range statuses {
+						result[i] = health.InstanceStatus{
+							Name:    s.Name,
+							Port:    s.Port,
+							Running: s.Running,
+							PID:     s.PID,
+						}
+					}
+					return result
+				},
 				cfg.HealthCheck.Interval,
 				logger,
 			)

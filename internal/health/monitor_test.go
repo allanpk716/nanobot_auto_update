@@ -8,33 +8,34 @@ import (
 	"testing"
 	"time"
 
-	"github.com/HQGroup/nanobot-auto-updater/internal/config"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestNewHealthMonitor(t *testing.T) {
-	instances := []config.InstanceConfig{
-		{Name: "test1", Port: 8081},
-		{Name: "test2", Port: 8082},
+	checkFn := func() []InstanceStatus {
+		return []InstanceStatus{
+			{Name: "test1", Port: 8081, Running: false},
+			{Name: "test2", Port: 8082, Running: false},
+		}
 	}
 	interval := 30 * time.Second
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 
-	hm := NewHealthMonitor(instances, interval, logger)
+	hm := NewHealthMonitor(checkFn, interval, logger)
 
 	assert.NotNil(t, hm)
-	assert.Equal(t, 2, len(hm.instances))
 	assert.Equal(t, interval, hm.interval)
 	assert.NotNil(t, hm.states)
 }
 
 func TestMonitor_StateChange_RunningToStop(t *testing.T) {
-	// Setup
-	instances := []config.InstanceConfig{
-		{Name: "test-instance", Port: 8081},
+	checkFn := func() []InstanceStatus {
+		return []InstanceStatus{
+			{Name: "test-instance", Port: 8081, Running: false},
+		}
 	}
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
-	hm := NewHealthMonitor(instances, 30*time.Second, logger)
+	hm := NewHealthMonitor(checkFn, 30*time.Second, logger)
 
 	// Set initial state to running
 	hm.states["test-instance"] = &InstanceHealthState{
@@ -42,22 +43,18 @@ func TestMonitor_StateChange_RunningToStop(t *testing.T) {
 		LastCheck: time.Now(),
 	}
 
-	// Mock IsNanobotRunning to return false (stopped)
-	// Note: This test verifies the logic, but cannot truly mock lifecycle.IsNanobotRunning
-	// In real implementation, you might need to use interface/dependency injection for better testability
-	// For now, we test the state change logic conceptually
-
 	// Verify initial state
 	assert.True(t, hm.states["test-instance"].IsRunning)
 }
 
 func TestMonitor_StateChange_StopToRunning(t *testing.T) {
-	// Setup
-	instances := []config.InstanceConfig{
-		{Name: "test-instance", Port: 8081},
+	checkFn := func() []InstanceStatus {
+		return []InstanceStatus{
+			{Name: "test-instance", Port: 8081, Running: true},
+		}
 	}
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
-	hm := NewHealthMonitor(instances, 30*time.Second, logger)
+	hm := NewHealthMonitor(checkFn, 30*time.Second, logger)
 
 	// Set initial state to stopped
 	hm.states["test-instance"] = &InstanceHealthState{
@@ -70,12 +67,13 @@ func TestMonitor_StateChange_StopToRunning(t *testing.T) {
 }
 
 func TestMonitor_FirstCheck_NoStateChange(t *testing.T) {
-	// Setup
-	instances := []config.InstanceConfig{
-		{Name: "test-instance", Port: 8081},
+	checkFn := func() []InstanceStatus {
+		return []InstanceStatus{
+			{Name: "test-instance", Port: 8081, Running: false},
+		}
 	}
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
-	hm := NewHealthMonitor(instances, 30*time.Second, logger)
+	hm := NewHealthMonitor(checkFn, 30*time.Second, logger)
 
 	// Verify no initial state exists
 	_, exists := hm.states["test-instance"]
@@ -83,11 +81,13 @@ func TestMonitor_FirstCheck_NoStateChange(t *testing.T) {
 }
 
 func TestMonitor_Stop(t *testing.T) {
-	instances := []config.InstanceConfig{
-		{Name: "test1", Port: 8081},
+	checkFn := func() []InstanceStatus {
+		return []InstanceStatus{
+			{Name: "test1", Port: 8081, Running: false},
+		}
 	}
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
-	hm := NewHealthMonitor(instances, 30*time.Second, logger)
+	hm := NewHealthMonitor(checkFn, 30*time.Second, logger)
 
 	// Start monitor in goroutine
 	var wg sync.WaitGroup
@@ -111,12 +111,13 @@ func TestMonitor_Stop(t *testing.T) {
 }
 
 func TestMonitor_RunningToStop_LogsOnlyOnce(t *testing.T) {
-	// Setup
-	instances := []config.InstanceConfig{
-		{Name: "test-instance", Port: 8081},
+	checkFn := func() []InstanceStatus {
+		return []InstanceStatus{
+			{Name: "test-instance", Port: 8081, Running: false},
+		}
 	}
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
-	hm := NewHealthMonitor(instances, 30*time.Second, logger)
+	hm := NewHealthMonitor(checkFn, 30*time.Second, logger)
 
 	// Set initial state to running
 	hm.states["test-instance"] = &InstanceHealthState{
@@ -126,6 +127,4 @@ func TestMonitor_RunningToStop_LogsOnlyOnce(t *testing.T) {
 
 	// Verify we have initial state
 	assert.True(t, hm.states["test-instance"].IsRunning)
-	// Note: Actual log verification would require capturing logs
-	// This test verifies the state management logic
 }

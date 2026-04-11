@@ -36,6 +36,8 @@ func FindPIDByPort(port uint32, logger *slog.Logger) (int32, error) {
 
 // FindPIDByProcessName returns the PID of the process with the specified name.
 // Returns 0 if no process with that name is found.
+// Deprecated: Not suitable for multi-instance scenarios where multiple instances share the same binary.
+// Use PID-based tracking via InstanceLifecycle.IsRunning() instead.
 func FindPIDByProcessName(processName string, logger *slog.Logger) (int32, error) {
 	logger.Debug("Searching for process by name", "process_name", processName)
 
@@ -63,15 +65,15 @@ func FindPIDByProcessName(processName string, logger *slog.Logger) (int32, error
 }
 
 // IsNanobotRunning checks if nanobot is running on the specified port.
-// Falls back to process name detection if port check finds nothing.
+// Uses port-based detection only, which is precise for multi-instance scenarios.
 // Returns (isRunning, pid, detectionMethod, error).
-// detectionMethod is "port" or "process_name" or "" if not running.
+// detectionMethod is "port" or "" if not running.
 func IsNanobotRunning(port uint32) (bool, int32, string, error) {
 	logger := slog.Default() // Use default logger for detector
 
 	logger.Info("Detecting nanobot process", "port", port)
 
-	// Primary: Check by port (more precise - identifies specific instance)
+	// Check by port (precise - identifies specific instance by its listening port)
 	pid, err := FindPIDByPort(port, logger)
 	if err != nil {
 		return false, 0, "", err
@@ -80,17 +82,7 @@ func IsNanobotRunning(port uint32) (bool, int32, string, error) {
 		return true, pid, "port", nil
 	}
 
-	// Fallback: Check by process name (handles case where port is not listening yet)
-	// Note: This is less precise in multi-instance scenarios
-	pid, err = FindPIDByProcessName("nanobot.exe", logger)
-	if err != nil {
-		return false, 0, "", err
-	}
-	if pid > 0 {
-		return true, pid, "process_name", nil
-	}
-
-	logger.Info("Nanobot not running")
+	logger.Info("Nanobot not running on port", "port", port)
 	return false, 0, "", nil
 }
 

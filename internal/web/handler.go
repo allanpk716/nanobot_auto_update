@@ -9,7 +9,6 @@ import (
 	"net/http"
 
 	"github.com/HQGroup/nanobot-auto-updater/internal/instance"
-	"github.com/HQGroup/nanobot-auto-updater/internal/lifecycle"
 )
 
 //go:embed static/*
@@ -91,27 +90,18 @@ type InstanceStatus struct {
 }
 
 // NewInstanceStatusHandler creates handler for GET /api/v1/instances/status
-// Returns instance list with name, port, and running status
+// Returns instance list with name, port, and running status using PID-based detection.
+// Uses InstanceManager.GetInstanceStatuses() for accurate multi-instance status.
 func NewInstanceStatusHandler(im *instance.InstanceManager, logger *slog.Logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		configs := im.GetInstanceConfigs()
-		statuses := make([]InstanceStatus, 0, len(configs))
+		statusInfos := im.GetInstanceStatuses()
+		statuses := make([]InstanceStatus, 0, len(statusInfos))
 
-		for _, cfg := range configs {
-			running, _, _, err := lifecycle.IsNanobotRunning(cfg.Port)
-			if err != nil {
-				logger.Warn("Failed to detect instance status",
-					"instance", cfg.Name,
-					"port", cfg.Port,
-					"error", err)
-				// On error, assume not running
-				running = false
-			}
-
+		for _, info := range statusInfos {
 			statuses = append(statuses, InstanceStatus{
-				Name:    cfg.Name,
-				Port:    cfg.Port,
-				Running: running,
+				Name:    info.Name,
+				Port:    info.Port,
+				Running: info.Running,
 			})
 		}
 
