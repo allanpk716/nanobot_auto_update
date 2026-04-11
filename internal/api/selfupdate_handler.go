@@ -11,6 +11,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/HQGroup/nanobot-auto-updater/internal/lifecycle"
 	"github.com/HQGroup/nanobot-auto-updater/internal/selfupdate"
 	"golang.org/x/sys/windows"
 )
@@ -80,9 +81,19 @@ func NewSelfUpdateHandler(updater SelfUpdateChecker, version string, im UpdateMu
 	return h
 }
 
-// defaultRestartFn is the production restart implementation (D-01).
-// It spawns a new process with the same arguments and exits the current one.
+// defaultRestartFn is the production restart implementation.
+// Service mode (D-01): exits with code 1 to trigger SCM recovery policy auto-restart.
+// Console mode (D-02): spawns a new process and exits with code 0 (self-spawn).
 func defaultRestartFn(exePath string) {
+	// ADPT-02, D-03: Check service mode to choose restart strategy
+	if isSvc, _ := lifecycle.IsServiceMode(); isSvc {
+		// D-01: Service mode — exit with non-zero code to trigger SCM recovery policy.
+		// Phase 48 configured: 3x ServiceRestart, 60s interval, 24h reset failure count.
+		slog.Info("service mode restart: exiting to trigger SCM recovery policy")
+		os.Exit(1)
+	}
+
+	// D-02: Console mode — original self-spawn behavior (unchanged)
 	cmd := exec.Command(exePath, os.Args[1:]...)
 	cmd.SysProcAttr = &windows.SysProcAttr{
 		HideWindow:    true,
