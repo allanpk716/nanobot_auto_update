@@ -1,11 +1,11 @@
 ---
 gsd_state_version: 1.0
 milestone: v0.12
-milestone_name: "实例管理与配置编辑"
-status: roadmap_created
-stopped_at: ""
-last_updated: "2026-04-11T14:00:00.000Z"
-last_activity: 2026-04-11
+milestone_name: 实例管理与配置编辑
+status: planning
+stopped_at: Phase 50 context gathered
+last_updated: "2026-04-11T13:00:04.370Z"
+last_activity: 2026-04-11 — Roadmap created for v0.12
 progress:
   total_phases: 4
   completed_phases: 0
@@ -60,5 +60,5 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-04-11
-Stopped at: Roadmap created for v0.12 — ready to plan Phase 50
+Last session: 2026-04-11T13:00:04.364Z
+Stopped at: Phase 50 context gathered
