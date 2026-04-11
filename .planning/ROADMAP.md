@@ -154,11 +154,11 @@ Plans:
   3. 服务模式下工作目录自动设置为 exe 所在目录（非 System32），config.yaml 和日志文件路径正确解析
   4. 服务模式下监听 config.yaml 文件变更，自动重载配置（无需重启服务）
   5. 控制台模式下 daemon.go、restartFn、工作目录行为与当前完全一致（无回归）
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 49-01: TBD
-- [ ] 49-02: TBD
+- [ ] 49-01-PLAN.md — daemon.go 服务模式跳过 + defaultRestartFn SCM 重启策略 + 验证 ADPT-03 (ADPT-01/02/03)
+- [ ] 49-02-PLAN.md — config 热重载: viper.WatchConfig + 组件重建回调 + onReady 集成 (ADPT-04)
 
 ## Progress
 
@@ -170,7 +170,7 @@ Phases execute in numeric order: 46 -> 47 -> 48 -> 49
 | 46. Service Configuration & Mode Detection | v0.11 | 2/2 | Complete    | 2026-04-10 |
 | 47. Windows Service Handler | v0.11 | 2/2 | Complete    | 2026-04-10 |
 | 48. Service Manager | v0.11 | 0/2 | Planned | - |
-| 49. Existing Code Adaptation | v0.11 | 0/? | Not started | - |
+| 49. Existing Code Adaptation | v0.11 | 0/2 | Planned | - |
 
 ---
-*Last updated: 2026-04-11 (Phase 48 planned -- 2 plans in 2 waves)*
+*Last updated: 2026-04-11 (Phase 49 planned -- 2 plans in 1 wave)*
