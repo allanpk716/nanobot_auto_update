@@ -112,27 +112,56 @@ func main() {
 		"bearer_token_length", len(cfg.API.BearerToken),
 	)
 
-	// Handle service mode configuration mismatches (D-07, D-08)
+	// Handle service registration/unregistration based on auto_start config (MGR-02, MGR-03)
+
+	// Case 1: Running as service but auto_start is disabled in config
+	// This means the user changed config after service was registered.
+	// The service will still run this session. The uninstall happens next time
+	// the user runs in console mode with auto_start: false.
 	if inService && (cfg.Service.AutoStart == nil || !*cfg.Service.AutoStart) {
-		// D-07: SCM started but auto_start is not enabled in config -- warn about config change.
-		// Phase 48 will handle auto-uninstall of orphaned services.
 		slog.Warn("Running as service but auto_start is not enabled in config",
 			"service_name", cfg.Service.ServiceName,
-			"note", "Phase 48 will handle auto-uninstall",
+			"action", "To stop running as a service: set auto_start: false in config.yaml, then run this program from a console (not as a service) to auto-uninstall",
 		)
 	}
 
+	// Case 2: Console mode + auto_start: true -> register service and exit (MGR-02)
 	if !inService && cfg.Service.AutoStart != nil && *cfg.Service.AutoStart {
-		// D-08: Console mode but auto_start is true -- register service and exit.
-		// SCOPE NOTE (review concern #2): Phase 46 only logs the intent and exits with code 2.
-		// Actual SCM registration (svc/mgr CreateService) is Phase 48 scope (MGR-02).
-		// The exit code 2 signals to calling scripts that service registration was requested.
-		slog.Info("auto_start enabled, registering as Windows service",
+		// Check admin privileges (D-08)
+		if !lifecycle.IsAdmin() {
+			slog.Error("Administrator privileges required to register Windows service",
+				"hint", "Right-click the executable and select 'Run as administrator'",
+			)
+			os.Exit(1)
+		}
+
+		slog.Info("Registering as Windows service",
 			"service_name", cfg.Service.ServiceName,
 			"display_name", cfg.Service.DisplayName,
 		)
-		slog.Info("Service registration will be handled by Phase 48")
-		os.Exit(2)
+
+		if err := lifecycle.RegisterService(cfg, logger); err != nil {
+			slog.Error("Failed to register Windows service", "error", err)
+			os.Exit(1)
+		}
+
+		slog.Info("Service registered successfully. Use Windows Services Manager to start it, or restart the computer.")
+		os.Exit(2) // Exit code 2: service registered (signals to calling scripts)
+	}
+
+	// Case 3: Console mode + auto_start: false -> check and uninstall existing service (MGR-03)
+	if !inService && (cfg.Service.AutoStart == nil || !*cfg.Service.AutoStart) {
+		if err := lifecycle.UnregisterService(context.Background(), cfg, logger); err != nil {
+			slog.Warn("Failed to unregister service (may not exist or insufficient privileges)",
+				"error", err,
+			)
+			// Non-fatal: continue to console mode (D-06)
+		} else {
+			slog.Info("Service uninstalled, switched to console mode",
+				"service_name", cfg.Service.ServiceName,
+			)
+		}
+		// Continue to normal console mode execution (D-06)
 	}
 
 	slog.Info("Application starting",
