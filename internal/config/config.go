@@ -145,43 +145,72 @@ var (
 	ErrVersionRequested = errors.New("version requested")
 )
 
+// viperInstance holds the viper instance used by Load().
+// Exported so that hotreload.go can call WatchConfig/OnConfigChange on the same instance.
+var viperInstance *viper.Viper
+
+// GetViper returns the viper instance used for config loading.
+// Returns nil if Load() has not been called yet.
+func GetViper() *viper.Viper {
+	return viperInstance
+}
+
+// ReloadConfig re-reads the config file and returns a new Config with validation.
+// Returns the new Config on success, or the old config and error on failure.
+func ReloadConfig(old *Config) (*Config, error) {
+	if viperInstance == nil {
+		return old, fmt.Errorf("viper not initialized")
+	}
+	if err := viperInstance.ReadInConfig(); err != nil {
+		return old, fmt.Errorf("failed to re-read config file: %w", err)
+	}
+	newCfg := New()
+	if err := viperInstance.Unmarshal(newCfg); err != nil {
+		return old, fmt.Errorf("failed to unmarshal config: %w", err)
+	}
+	if err := newCfg.Validate(); err != nil {
+		return old, fmt.Errorf("config validation failed: %w", err)
+	}
+	return newCfg, nil
+}
+
 // Load reads configuration from the specified YAML file.
 // Returns Config with defaults applied, then file values, then validation.
 func Load(configPath string) (*Config, error) {
-	v := viper.New()
-	v.SetConfigFile(configPath)
-	v.SetConfigType("yaml")
+	viperInstance = viper.New()
+	viperInstance.SetConfigFile(configPath)
+	viperInstance.SetConfigType("yaml")
 
 	// Create config with defaults
 	cfg := New()
 
 	// Set defaults in viper (for fields not in file)
 	// Pushover defaults (optional)
-	v.SetDefault("pushover.api_token", cfg.Pushover.ApiToken)
-	v.SetDefault("pushover.user_key", cfg.Pushover.UserKey)
+	viperInstance.SetDefault("pushover.api_token", cfg.Pushover.ApiToken)
+	viperInstance.SetDefault("pushover.user_key", cfg.Pushover.UserKey)
 
 	// Set defaults for API config (CONF-01, CONF-02, CONF-03)
-	v.SetDefault("api.port", cfg.API.Port)
-	v.SetDefault("api.timeout", cfg.API.Timeout)
+	viperInstance.SetDefault("api.port", cfg.API.Port)
+	viperInstance.SetDefault("api.timeout", cfg.API.Timeout)
 	// Note: api.bearer_token has no default - it's required (SEC-03)
 
 	// Set defaults for Monitor config (CONF-04, CONF-05)
-	v.SetDefault("monitor.interval", cfg.Monitor.Interval)
-	v.SetDefault("monitor.timeout", cfg.Monitor.Timeout)
+	viperInstance.SetDefault("monitor.interval", cfg.Monitor.Interval)
+	viperInstance.SetDefault("monitor.timeout", cfg.Monitor.Timeout)
 
 	// Set defaults for HealthCheck config (HEALTH-01)
-	v.SetDefault("health_check.interval", cfg.HealthCheck.Interval)
+	viperInstance.SetDefault("health_check.interval", cfg.HealthCheck.Interval)
 
 	// Set defaults for SelfUpdate config (UPDATE-07)
-	v.SetDefault("self_update.github_owner", cfg.SelfUpdate.GithubOwner)
-	v.SetDefault("self_update.github_repo", cfg.SelfUpdate.GithubRepo)
+	viperInstance.SetDefault("self_update.github_owner", cfg.SelfUpdate.GithubOwner)
+	viperInstance.SetDefault("self_update.github_repo", cfg.SelfUpdate.GithubRepo)
 
 	// Set defaults for Service config (MGR-01)
-	v.SetDefault("service.service_name", cfg.Service.ServiceName)
-	v.SetDefault("service.display_name", cfg.Service.DisplayName)
+	viperInstance.SetDefault("service.service_name", cfg.Service.ServiceName)
+	viperInstance.SetDefault("service.display_name", cfg.Service.DisplayName)
 
 	// Read config file (optional - use defaults if missing)
-	if err := v.ReadInConfig(); err != nil {
+	if err := viperInstance.ReadInConfig(); err != nil {
 		// If file doesn't exist, use defaults
 		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
 			return nil, fmt.Errorf("failed to read config file: %w", err)
@@ -190,7 +219,7 @@ func Load(configPath string) (*Config, error) {
 	}
 
 	// Unmarshal to struct
-	if err := v.Unmarshal(cfg); err != nil {
+	if err := viperInstance.Unmarshal(cfg); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal config: %w", err)
 	}
 
