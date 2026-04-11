@@ -126,7 +126,11 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. User can delete an instance via DELETE — running instances are stopped first, then removed from config.yaml
   4. User can copy an instance via POST — auto-updater config is cloned with new name/port and nanobot config directory is created
   5. Invalid configs are rejected with clear error messages (duplicate name, duplicate port, missing required fields, port out of range)
-**Plans**: TBD
+**Plans**: 2 plans
+
+Plans:
+- [ ] 50-01-PLAN.md — SaveConfig function + InstanceConfigHandler with all 6 CRUD endpoints + route registration
+- [ ] 50-02-PLAN.md — Comprehensive handler tests and SaveConfig tests (TDD)
 
 ### Phase 51: Instance Lifecycle Control API
 **Goal**: Users can start and stop individual instances on demand through authenticated API endpoints
@@ -170,10 +174,10 @@ Phases execute in numeric order: 50 -> 51 -> 52 -> 53
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
-| 50. Instance Config CRUD API | v0.12 | 0/? | Not started | - |
+| 50. Instance Config CRUD API | v0.12 | 0/2 | Planned | - |
 | 51. Instance Lifecycle Control API | v0.12 | 0/? | Not started | - |
 | 52. Nanobot Config Management API | v0.12 | 0/? | Not started | - |
 | 53. Instance Management UI | v0.12 | 0/? | Not started | - |
 
 ---
-*Last updated: 2026-04-11 (v0.12 roadmap created)*
+*Last updated: 2026-04-11 (Phase 50 planned)*
