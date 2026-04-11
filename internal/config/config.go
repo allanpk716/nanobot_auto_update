@@ -179,6 +179,22 @@ func ReloadConfig(old *Config) (*Config, error) {
 // This prevents concurrent API requests from causing data loss.
 var updateMu sync.Mutex
 
+// instanceConfigToMap converts an InstanceConfig to a map using mapstructure tag names as keys.
+// This is needed because viper.Set() with struct values uses Go field names, which don't match
+// the YAML keys that mapstructure uses for reading.
+func instanceConfigToMap(ic InstanceConfig) map[string]interface{} {
+	m := map[string]interface{}{
+		"name":           ic.Name,
+		"port":           ic.Port,
+		"start_command":  ic.StartCommand,
+		"startup_timeout": ic.StartupTimeout,
+	}
+	if ic.AutoStart != nil {
+		m["auto_start"] = *ic.AutoStart
+	}
+	return m
+}
+
 // deepCopyConfig creates a deep copy of the Config struct.
 // The Instances slice is recreated so mutations to it do not affect the original.
 func deepCopyConfig(cfg *Config) *Config {
@@ -231,9 +247,53 @@ func UpdateConfig(fn func(*Config) error) error {
 	if v == nil {
 		return fmt.Errorf("viper not initialized")
 	}
-	v.Set("instances", copy.Instances)
+
+	// Suppress hot-reload during write to prevent ReadInConfig() from
+	// corrupting viper's internal state (which mixes v.Set() keys with
+	// file-read keys). UpdateConfig updates globalHotReload.current
+	// directly, making the file-watch reload unnecessary.
+	if globalHotReload != nil {
+		globalHotReload.skipReload = true
+	}
+
+	// Re-read the config file to ensure viper's internal state is fully
+	// synchronized with the file before we overwrite it. Without this,
+	// viper may lose keys (like api.bearer_token) that were not explicitly
+	// set via v.Set() but were only present from the initial ReadInConfig().
+	// This can happen because fsnotify events can trigger OnConfigChange
+	// callbacks that call ReadInConfig() concurrently with WriteConfig(),
+	// leading to stale internal state.
+	if err := v.ReadInConfig(); err != nil {
+		if globalHotReload != nil {
+			globalHotReload.skipReload = false
+		}
+		return fmt.Errorf("failed to re-read config file: %w", err)
+	}
+
+	// Persist the modified copy.
+	// Convert InstanceConfig structs to maps using mapstructure tag names as keys,
+	// because v.Set("instances", structs) uses Go field names which don't match the YAML keys.
+	instanceMaps := make([]interface{}, len(copy.Instances))
+	for i, ic := range copy.Instances {
+		instanceMaps[i] = instanceConfigToMap(ic)
+	}
+	v.Set("instances", instanceMaps)
 	if err := v.WriteConfig(); err != nil {
+		if globalHotReload != nil {
+			globalHotReload.skipReload = false
+		}
 		return fmt.Errorf("failed to write config file: %w", err)
+	}
+
+	// Update the in-memory config so the next UpdateConfig call sees the latest state.
+	// Without this, concurrent calls would all read the same stale globalHotReload.current
+	// (hot-reload debounce is 500ms+, too slow for serialized API requests).
+	globalHotReload.current = copy
+
+	// Re-enable hot-reload after write completes.
+	// The next file change (500ms+ from now) will trigger a normal reload.
+	if globalHotReload != nil {
+		globalHotReload.skipReload = false
 	}
 
 	return nil

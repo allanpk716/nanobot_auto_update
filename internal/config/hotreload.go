@@ -47,6 +47,7 @@ type hotReloadState struct {
 	callbacks     *HotReloadCallbacks
 	running       bool
 	debounceTimer *time.Timer // [MED-1 fix] debounce rapid fsnotify events
+	skipReload    bool        // true while UpdateConfig is writing to suppress doReload
 }
 
 var globalHotReload *hotReloadState
@@ -111,6 +112,15 @@ func (s *hotReloadState) doReload() {
 	defer s.mu.Unlock()
 
 	if !s.running {
+		return
+	}
+
+	// Skip reload if UpdateConfig is actively writing.
+	// UpdateConfig updates globalHotReload.current directly, so the
+	// file-watch reload is unnecessary and can corrupt viper's internal state
+	// by overwriting v.Set() calls with stale file data via ReadInConfig().
+	if s.skipReload {
+		s.logger.Info("skipping config reload: UpdateConfig in progress")
 		return
 	}
 
