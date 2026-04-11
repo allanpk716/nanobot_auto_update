@@ -140,6 +140,20 @@ func NewHomePageHandler(im *instance.InstanceManager, logger *slog.Logger) http.
 	}
 }
 
+// NewVersionHandler creates handler for GET /api/v1/version
+// Returns the current application version without authentication.
+func NewVersionHandler(version string, logger *slog.Logger) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(map[string]interface{}{
+			"version": version,
+		}); err != nil {
+			logger.Error("Failed to encode version response", "error", err)
+			http.Error(w, "Internal server error", http.StatusInternalServerError)
+		}
+	}
+}
+
 // NewInstanceRestartHandler creates handler for POST /api/v1/instances/{name}/restart
 // Restarts a specific instance by calling StopForUpdate then StartAfterUpdate
 func NewInstanceRestartHandler(im *instance.InstanceManager, logger *slog.Logger) http.HandlerFunc {

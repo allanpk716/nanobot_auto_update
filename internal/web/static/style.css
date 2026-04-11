@@ -433,3 +433,16 @@ main {
     font-size: 13px;
     padding: var(--spacing-sm);
 }
+
+/* Header version badge */
+.header-version-badge {
+    display: inline-block;
+    padding: var(--spacing-xs) var(--spacing-sm);
+    background-color: #e0e7ff;
+    color: #2563eb;
+    border-radius: 4px;
+    font-size: 13px;
+    font-weight: 600;
+    font-family: 'Consolas', 'Monaco', monospace;
+    white-space: nowrap;
+}

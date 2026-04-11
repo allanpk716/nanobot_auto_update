@@ -62,6 +62,9 @@ func NewServer(cfg *config.APIConfig, im *instance.InstanceManager, fullCfg *con
 	// Instance status API (Quick task 260320-k8z: Task 1)
 	mux.HandleFunc("GET /api/v1/instances/status", web.NewInstanceStatusHandler(im, logger))
 
+	// Version API (no auth required)
+	mux.HandleFunc("GET /api/v1/version", web.NewVersionHandler(version, logger))
+
 	// Instance restart API (Quick task 260325-ovr: Task 1)
 	mux.HandleFunc("POST /api/v1/instances/{name}/restart", web.NewInstanceRestartHandler(im, logger))
 

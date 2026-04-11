@@ -88,6 +88,8 @@ func IsNanobotRunning(port uint32) (bool, int32, string, error) {
 
 // FindProcessByPID checks if a process with the given PID exists and is running.
 // Returns the process object if found, nil otherwise.
+// Note: proc.Status() is NOT implemented on Windows (gopsutil issue #1708), so we use
+// a simpler check: if process.NewProcess(pid) succeeds, the process exists.
 func FindProcessByPID(pid int32, logger *slog.Logger) (*process.Process, error) {
 	logger.Debug("Checking if process exists", "pid", pid)
 
@@ -97,23 +99,17 @@ func FindProcessByPID(pid int32, logger *slog.Logger) (*process.Process, error) 
 		return nil, err
 	}
 
-	// Verify the process is still running
-	status, err := proc.Status()
+	// process.NewProcess succeeds only if the OS can open a handle to the process.
+	// On Windows, this means the process exists. Additional liveness check via
+	// IsRunning() which works on Windows (unlike Status() which is not implemented).
+	running, err := proc.IsRunning()
 	if err != nil {
-		logger.Debug("Failed to get process status", "pid", pid, "error", err)
+		logger.Debug("Failed to check if process is running", "pid", pid, "error", err)
 		return nil, err
 	}
-
-	logger.Debug("Process status", "pid", pid, "status", status)
-
-	// Check if process is in a running state
-	// Common statuses: R (running), S (sleeping), D (disk sleep), Z (zombie), T (stopped)
-	// status is a slice of strings
-	for _, s := range status {
-		if s == "Z" || s == "T" {
-			logger.Debug("Process is not running", "pid", pid, "status", s)
-			return nil, fmt.Errorf("process is not running (status: %s)", s)
-		}
+	if !running {
+		logger.Debug("Process exists but not running", "pid", pid)
+		return nil, fmt.Errorf("process %d exists but is not running", pid)
 	}
 
 	return proc, nil

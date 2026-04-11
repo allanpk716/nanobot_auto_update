@@ -129,9 +129,28 @@ document.addEventListener('DOMContentLoaded', function() {
     // Auto-refresh every 5 seconds
     setInterval(loadInstances, 5000);
 
+    // Load version into header badge
+    loadHeaderVersion();
+
     // Initialize self-update module
     initSelfUpdate();
 });
+
+// Load version for header badge (no auth required)
+async function loadHeaderVersion() {
+    try {
+        const resp = await fetch('/api/v1/version');
+        if (resp.ok) {
+            const data = await resp.json();
+            const badge = document.getElementById('header-version');
+            if (badge && data.version) {
+                badge.textContent = 'v' + data.version.replace(/^v/, '');
+            }
+        }
+    } catch (e) {
+        // Non-critical, ignore
+    }
+}
 
 // Self-update module
 let authToken = '';
@@ -161,17 +180,15 @@ async function initSelfUpdate() {
     }
 }
 
-// Load current version from check API
+// Load current version from version API (no auth required)
 async function loadCurrentVersion() {
     try {
-        const resp = await fetch('/api/v1/self-update/check', {
-            headers: { 'Authorization': 'Bearer ' + authToken }
-        });
+        const resp = await fetch('/api/v1/version');
         if (!resp.ok) {
-            throw new Error('check API failed');
+            throw new Error('version API failed');
         }
         const data = await resp.json();
-        document.getElementById('current-version').textContent = data.current_version;
+        document.getElementById('current-version').textContent = data.version;
     } catch (e) {
         console.error('Failed to load current version:', e);
         document.getElementById('current-version').textContent = 'N/A';

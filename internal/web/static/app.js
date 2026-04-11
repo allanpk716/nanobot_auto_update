@@ -305,4 +305,23 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Initialize button text
     updateScrollButtonText();
+
+    // Load version into header badge
+    loadHeaderVersion();
 });
+
+// Load version for header badge (no auth required)
+async function loadHeaderVersion() {
+    try {
+        const resp = await fetch('/api/v1/version');
+        if (resp.ok) {
+            const data = await resp.json();
+            const badge = document.getElementById('header-version');
+            if (badge && data.version) {
+                badge.textContent = 'v' + data.version.replace(/^v/, '');
+            }
+        }
+    } catch (e) {
+        // Non-critical, ignore
+    }
+}
