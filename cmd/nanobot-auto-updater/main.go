@@ -80,7 +80,9 @@ func main() {
 		// so config.yaml and log files resolve correctly (Phase 49 ADPT-03).
 		if exePath, err := os.Executable(); err == nil {
 			if exeDir := filepath.Dir(exePath); exeDir != "" {
-				os.Chdir(exeDir)
+				if chdirErr := os.Chdir(exeDir); chdirErr != nil {
+					fmt.Fprintf(os.Stderr, "Warning: failed to change working directory to %s: %v\n", exeDir, chdirErr)
+				}
 			}
 		}
 	}
