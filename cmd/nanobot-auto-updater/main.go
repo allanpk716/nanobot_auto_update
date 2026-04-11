@@ -18,6 +18,8 @@ import (
 	"github.com/HQGroup/nanobot-auto-updater/internal/instance"
 	"github.com/HQGroup/nanobot-auto-updater/internal/lifecycle"
 	"github.com/HQGroup/nanobot-auto-updater/internal/logging"
+	"github.com/HQGroup/nanobot-auto-updater/internal/network"
+	"github.com/HQGroup/nanobot-auto-updater/internal/notification"
 	"github.com/HQGroup/nanobot-auto-updater/internal/notifier"
 	"github.com/HQGroup/nanobot-auto-updater/internal/selfupdate"
 	"github.com/HQGroup/nanobot-auto-updater/internal/updatelog"
@@ -181,6 +183,11 @@ func main() {
 		"config", *configFile,
 	)
 
+	// Shared mutable state for hot-reloadable values.
+	// The token is read by AuthMiddleware on every request via a closure.
+	// Updated by OnBearerTokenChange callback when config changes.
+	currentBearerToken := cfg.API.BearerToken
+
 	// Create components that require circular-dependency packages (D-05, D-10)
 	// lifecycle.AppStartup cannot import api/instance/notifier/updatelog directly
 	// due to circular imports, so main.go creates these and passes them in.
@@ -214,7 +221,7 @@ func main() {
 
 		// Create API server (conditional, can fail)
 		if cfg.API.Port != 0 {
-			apiSrv, apiErr := api.NewServer(&cfg.API, im, cfg, version, logger, concreteUpdateLogger, concreteNotif, selfUpdater)
+			apiSrv, apiErr := api.NewServer(&cfg.API, im, cfg, version, logger, concreteUpdateLogger, concreteNotif, selfUpdater, func() string { return currentBearerToken })
 			if apiErr != nil {
 				logger.Error("Failed to create API server", "error", apiErr)
 				err = apiErr
@@ -271,7 +278,119 @@ func main() {
 	// Service mode: run via Windows SCM (D-09)
 	if inService {
 		slog.Info("Starting in service mode")
-		if err := lifecycle.RunService(cfg, logger, Version, updateLogger, notif, createComponents, startInstances); err != nil {
+					// [HIGH-2] shared pointer: onReady sets it, hot reload callbacks read it
+			var hotReloadComponents *lifecycle.AppComponents
+
+			onReady := func(components *lifecycle.AppComponents) {
+				hotReloadComponents = components
+
+				callbacks := &config.HotReloadCallbacks{
+					OnMonitorChange: func(newCfg *config.Config) {
+						if hotReloadComponents.NetworkMonitor != nil {
+							hotReloadComponents.NetworkMonitor.Stop()
+						}
+						if hotReloadComponents.NotificationManager != nil {
+							hotReloadComponents.NotificationManager.Stop()
+						}
+						hotReloadComponents.NetworkMonitor = network.NewNetworkMonitor(
+							"https://www.google.com",
+							newCfg.Monitor.Interval,
+							newCfg.Monitor.Timeout,
+							logger,
+						)
+						go hotReloadComponents.NetworkMonitor.Start()
+						hotReloadComponents.NotificationManager = notification.NewNotificationManager(
+							hotReloadComponents.NetworkMonitor,
+							notif,
+							logger,
+						)
+						go hotReloadComponents.NotificationManager.Start(newCfg.Monitor.Interval)
+						slog.Info("hot reload: monitor + notification manager rebuilt")
+					},
+
+					OnPushoverChange: func(newCfg *config.Config) {
+						notif = notifier.NewWithConfig(
+							notifier.Config{
+								ApiToken: newCfg.Pushover.ApiToken,
+								UserKey:  newCfg.Pushover.UserKey,
+							},
+							logger,
+						)
+						if hotReloadComponents.NotificationManager != nil {
+							hotReloadComponents.NotificationManager.Stop()
+							hotReloadComponents.NotificationManager = notification.NewNotificationManager(
+								hotReloadComponents.NetworkMonitor,
+								notif,
+								logger,
+							)
+							go hotReloadComponents.NotificationManager.Start(newCfg.Monitor.Interval)
+						}
+						slog.Info("hot reload: notifier + notification manager rebuilt")
+					},
+
+					OnSelfUpdateChange: func(newCfg *config.Config) {
+						slog.Warn("self_update config changed but requires service restart to apply",
+							"new_owner", newCfg.SelfUpdate.GithubOwner,
+							"new_repo", newCfg.SelfUpdate.GithubRepo,
+						)
+					},
+
+					OnHealthCheckChange: func(newCfg *config.Config) {
+						if hotReloadComponents.HealthMonitor != nil {
+							hotReloadComponents.HealthMonitor.Stop()
+						}
+						im := hotReloadComponents.InstanceManager.(*instance.InstanceManager)
+						hm := health.NewHealthMonitor(
+							func() []health.InstanceStatus {
+								statuses := im.GetInstanceStatuses()
+								result := make([]health.InstanceStatus, len(statuses))
+								for i, s := range statuses {
+									result[i] = health.InstanceStatus{
+										Name:    s.Name,
+										Port:    s.Port,
+										Running: s.Running,
+										PID:     s.PID,
+									}
+								}
+								return result
+							},
+							newCfg.HealthCheck.Interval,
+							logger,
+						)
+						hotReloadComponents.HealthMonitor = hm
+						go hm.Start()
+						slog.Info("hot reload: health monitor rebuilt")
+					},
+
+					OnBearerTokenChange: func(newCfg *config.Config) {
+						currentBearerToken = newCfg.API.BearerToken
+						slog.Info("hot reload: bearer token updated")
+					},
+
+					OnInstancesChange: func(newCfg *config.Config) {
+						im := hotReloadComponents.InstanceManager.(*instance.InstanceManager)
+						slog.Info("hot reload: instances config changed, performing full replace",
+							"old_count", len(im.GetInstanceNames()),
+							"new_count", len(newCfg.Instances),
+						)
+						stopCtx, stopCancel := context.WithTimeout(context.Background(), 30*time.Second)
+						lifecycle.StopAllNanobots(stopCtx, 5*time.Second, logger)
+						stopCancel()
+						newIM := instance.NewInstanceManager(newCfg, logger, notif)
+						hotReloadComponents.InstanceManager = newIM
+						startCtx, startCancel := context.WithTimeout(context.Background(), 5*time.Minute)
+						defer startCancel()
+						newIM.StartAllInstances(startCtx)
+						slog.Info("hot reload: instances fully replaced and restarted",
+							"instance_count", len(newCfg.Instances),
+						)
+					},
+				}
+
+				config.WatchConfig(cfg, logger, callbacks)
+			}
+
+			if err := lifecycle.RunService(cfg, logger, Version, updateLogger, notif, createComponents, startInstances, onReady); err != nil {
 			logger.Error("Service execution failed", "error", err)
 			os.Exit(1)
 		}

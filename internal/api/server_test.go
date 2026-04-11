@@ -33,7 +33,7 @@ func TestNewServer(t *testing.T) {
 
 	im := instance.NewInstanceManager(fullCfg, logger, nil)
 
-	server, err := NewServer(cfg, im, fullCfg, "test-version", logger, nil, nil, nil)
+	server, err := NewServer(cfg, im, fullCfg, "test-version", logger, nil, nil, nil, func() string { return cfg.BearerToken })
 	if err != nil {
 		t.Fatalf("NewServer failed: %v", err)
 	}
@@ -68,7 +68,7 @@ func TestServerLifecycle(t *testing.T) {
 
 	im := instance.NewInstanceManager(fullCfg, logger, nil)
 
-	server, err := NewServer(cfg, im, fullCfg, "test-version", logger, nil, nil, nil)
+	server, err := NewServer(cfg, im, fullCfg, "test-version", logger, nil, nil, nil, func() string { return cfg.BearerToken })
 	if err != nil {
 		t.Fatalf("NewServer failed: %v", err)
 	}
@@ -105,7 +105,7 @@ func TestNewServerValidation(t *testing.T) {
 	im := instance.NewInstanceManager(fullCfg, logger, nil)
 
 	// Test with nil config
-	_, err := NewServer(nil, im, fullCfg, "test-version", logger, nil, nil, nil)
+	_, err := NewServer(nil, im, fullCfg, "test-version", logger, nil, nil, nil, func() string { return "" })
 	if err == nil {
 		t.Error("Expected error for nil config")
 	}
@@ -115,7 +115,7 @@ func TestNewServerValidation(t *testing.T) {
 		Port:        0,
 		BearerToken: "test-token-32-characters-long-enough",
 	}
-	_, err = NewServer(cfg, im, fullCfg, "test-version", logger, nil, nil, nil)
+	_, err = NewServer(cfg, im, fullCfg, "test-version", logger, nil, nil, nil, func() string { return cfg.BearerToken })
 	if err == nil {
 		t.Error("Expected error for zero port")
 	}
@@ -140,7 +140,7 @@ func TestWebUIRoutes(t *testing.T) {
 
 	im := instance.NewInstanceManager(fullCfg, logger, nil)
 
-	server, err := NewServer(cfg, im, fullCfg, "test-version", logger, nil, nil, nil)
+	server, err := NewServer(cfg, im, fullCfg, "test-version", logger, nil, nil, nil, func() string { return cfg.BearerToken })
 	if err != nil {
 		t.Fatalf("NewServer failed: %v", err)
 	}
@@ -188,7 +188,7 @@ func TestWebUIInstanceNotFound(t *testing.T) {
 
 	im := instance.NewInstanceManager(fullCfg, logger, nil)
 
-	server, err := NewServer(cfg, im, fullCfg, "test-version", logger, nil, nil, nil)
+	server, err := NewServer(cfg, im, fullCfg, "test-version", logger, nil, nil, nil, func() string { return cfg.BearerToken })
 	if err != nil {
 		t.Fatalf("NewServer failed: %v", err)
 	}
@@ -225,7 +225,7 @@ func TestServerStart_PortRetry(t *testing.T) {
 	}
 
 	im := instance.NewInstanceManager(fullCfg, logger, nil)
-	server, err := NewServer(cfg, im, fullCfg, "test-version", logger, nil, nil, nil)
+	server, err := NewServer(cfg, im, fullCfg, "test-version", logger, nil, nil, nil, func() string { return cfg.BearerToken })
 	if err != nil {
 		t.Fatalf("NewServer failed: %v", err)
 	}

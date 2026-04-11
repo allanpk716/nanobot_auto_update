@@ -26,7 +26,7 @@ type Server struct {
 // SSE-07: Sets WriteTimeout=0 to support SSE long connections
 // HELP-01, HELP-02: Added fullCfg and version parameters for help endpoint
 // STORE-01, D-04: UpdateLogger created externally in main.go and injected here
-func NewServer(cfg *config.APIConfig, im *instance.InstanceManager, fullCfg *config.Config, version string, logger *slog.Logger, updateLogger *updatelog.UpdateLogger, notif Notifier, selfUpdater *selfupdate.Updater) (*Server, error) {
+func NewServer(cfg *config.APIConfig, im *instance.InstanceManager, fullCfg *config.Config, version string, logger *slog.Logger, updateLogger *updatelog.UpdateLogger, notif Notifier, selfUpdater *selfupdate.Updater, getToken func() string) (*Server, error) {
 	if cfg == nil {
 		return nil, fmt.Errorf("API config is nil")
 	}
@@ -78,7 +78,7 @@ func NewServer(cfg *config.APIConfig, im *instance.InstanceManager, fullCfg *con
 	// Trigger update endpoint with auth (Phase 28: API-01, API-02)
 	instanceCount := len(im.GetInstanceNames())
 	triggerHandler := NewTriggerHandler(im, cfg, logger, updateLogger, notif, instanceCount)
-	authMiddleware := AuthMiddleware(func() string { return cfg.BearerToken }, logger)
+	authMiddleware := AuthMiddleware(getToken, logger)
 
 	// Wrap handler with auth middleware
 	// API-01: POST /api/v1/trigger-update endpoint exists
