@@ -14,6 +14,12 @@ import (
 // if it detects it's being called from nanobot parent process.
 // Returns true if daemon restart was performed, false if already daemon.
 func MakeDaemon() (bool, error) {
+	// 服务模式下跳过守护进程模式（ADPT-01, D-08）
+	// SCM 负责进程生命周期管理，不需要守护进程循环
+	if isSvc, _ := IsServiceMode(); isSvc {
+		return false, nil
+	}
+
 	// 1. Check if already daemonized (via environment variable)
 	if os.Getenv("NANOBOT_UPDATER_DAEMON") == "1" {
 		return false, nil // Already running as daemon
@@ -37,6 +43,11 @@ func MakeDaemon() (bool, error) {
 // MakeDaemonSimple always restarts as daemon without parent check
 // This is a simpler alternative when parent detection is not reliable
 func MakeDaemonSimple() (bool, error) {
+	// 服务模式下跳过守护进程模式（ADPT-01, D-08）
+	if isSvc, _ := IsServiceMode(); isSvc {
+		return false, nil
+	}
+
 	// Check if already daemonized
 	if os.Getenv("NANOBOT_UPDATER_DAEMON") == "1" {
 		return false, nil
