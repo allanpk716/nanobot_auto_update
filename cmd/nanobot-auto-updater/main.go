@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
@@ -68,6 +69,17 @@ func main() {
 		// Phase 47 will implement full svc.Handler -- for now log and continue.
 		// Using fmt.Fprintf(os.Stderr) because slog is not initialized yet.
 		fmt.Fprintf(os.Stderr, "Detected Windows service mode\n")
+	}
+
+	if inService {
+		// Fix working directory for service mode: SCM starts services with
+		// C:\Windows\System32 as working directory. Change to exe's directory
+		// so config.yaml and log files resolve correctly (Phase 49 ADPT-03).
+		if exePath, err := os.Executable(); err == nil {
+			if exeDir := filepath.Dir(exePath); exeDir != "" {
+				os.Chdir(exeDir)
+			}
+		}
 	}
 
 	// Load configuration with validation (CONF-06)
