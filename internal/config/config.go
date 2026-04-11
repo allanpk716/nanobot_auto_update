@@ -3,6 +3,7 @@ package config
 import (
 	"errors"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/spf13/viper"
@@ -172,6 +173,70 @@ func ReloadConfig(old *Config) (*Config, error) {
 		return old, fmt.Errorf("config validation failed: %w", err)
 	}
 	return newCfg, nil
+}
+
+// updateMu serializes the full read-modify-write cycle for config updates.
+// This prevents concurrent API requests from causing data loss.
+var updateMu sync.Mutex
+
+// deepCopyConfig creates a deep copy of the Config struct.
+// The Instances slice is recreated so mutations to it do not affect the original.
+func deepCopyConfig(cfg *Config) *Config {
+	if cfg == nil {
+		return nil
+	}
+	c := *cfg
+	c.Instances = make([]InstanceConfig, len(cfg.Instances))
+	for i := range cfg.Instances {
+		c.Instances[i] = cfg.Instances[i]
+		// Deep copy AutoStart pointer
+		if cfg.Instances[i].AutoStart != nil {
+			val := *cfg.Instances[i].AutoStart
+			c.Instances[i].AutoStart = &val
+		}
+	}
+	return &c
+}
+
+// UpdateConfig atomically reads the current config, applies a mutation function, and persists the result.
+// The mutation function receives a deep copy of the current config -- it is safe to modify freely.
+// If the mutation function returns nil, the modified copy is written to disk via viper.
+// If the mutation function returns an error, no write occurs and the original config is untouched.
+// If the viper write fails, no write occurs and the original config is untouched.
+//
+// This function serializes all callers via updateMu, so concurrent API requests are safe.
+//
+// D-08: Uses viper.WriteConfig() to persist to the same file viper loaded from.
+// D-09: After writing, hot-reload watcher detects the file change (500ms debounce).
+func UpdateConfig(fn func(*Config) error) error {
+	updateMu.Lock()
+	defer updateMu.Unlock()
+
+	// Read current config (this is a pointer to globalHotReload.current)
+	current := GetCurrentConfig()
+	if current == nil {
+		return fmt.Errorf("config not initialized (WatchConfig not started)")
+	}
+
+	// Deep copy so mutations don't affect the live config
+	copy := deepCopyConfig(current)
+
+	// Apply the caller's mutation
+	if err := fn(copy); err != nil {
+		return fmt.Errorf("mutation failed: %w", err)
+	}
+
+	// Persist the modified copy
+	v := GetViper()
+	if v == nil {
+		return fmt.Errorf("viper not initialized")
+	}
+	v.Set("instances", copy.Instances)
+	if err := v.WriteConfig(); err != nil {
+		return fmt.Errorf("failed to write config file: %w", err)
+	}
+
+	return nil
 }
 
 // Load reads configuration from the specified YAML file.
