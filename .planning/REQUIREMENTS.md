@@ -71,31 +71,31 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| IC-01 | — | Pending |
-| IC-02 | — | Pending |
-| IC-03 | — | Pending |
-| IC-04 | — | Pending |
-| IC-05 | — | Pending |
-| IC-06 | — | Pending |
-| LC-01 | — | Pending |
-| LC-02 | — | Pending |
-| LC-03 | — | Pending |
-| NC-01 | — | Pending |
-| NC-02 | — | Pending |
-| NC-03 | — | Pending |
-| NC-04 | — | Pending |
-| UI-01 | — | Pending |
-| UI-02 | — | Pending |
-| UI-03 | — | Pending |
-| UI-04 | — | Pending |
-| UI-05 | — | Pending |
-| UI-06 | — | Pending |
+| IC-01 | Phase 50 | Pending |
+| IC-02 | Phase 50 | Pending |
+| IC-03 | Phase 50 | Pending |
+| IC-04 | Phase 50 | Pending |
+| IC-05 | Phase 50 | Pending |
+| IC-06 | Phase 50 | Pending |
+| LC-01 | Phase 51 | Pending |
+| LC-02 | Phase 51 | Pending |
+| LC-03 | Phase 51 | Pending |
+| NC-01 | Phase 52 | Pending |
+| NC-02 | Phase 52 | Pending |
+| NC-03 | Phase 52 | Pending |
+| NC-04 | Phase 52 | Pending |
+| UI-01 | Phase 53 | Pending |
+| UI-02 | Phase 53 | Pending |
+| UI-03 | Phase 53 | Pending |
+| UI-04 | Phase 53 | Pending |
+| UI-05 | Phase 53 | Pending |
+| UI-06 | Phase 53 | Pending |
 
 **Coverage:**
 - v0.12 requirements: 19 total
-- Mapped to phases: 0
-- Unmapped: 19 ⚠️
+- Mapped to phases: 19
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-04-11*
-*Last updated: 2026-04-11 after initial definition*
+*Last updated: 2026-04-11 after roadmap creation*

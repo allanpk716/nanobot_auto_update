@@ -15,6 +15,12 @@
 
 ## Phases
 
+**Phase Numbering:**
+- Integer phases (50, 51, 52, 53): Planned milestone work
+- Decimal phases (50.1, 50.2): Urgent insertions (marked with INSERTED)
+
+Decimal phases appear between their surrounding integers in numeric order.
+
 <details>
 <summary>v1.0 Single Instance Auto-Update (Phases 01-04) - SHIPPED 2026-02-18</summary>
 
@@ -99,14 +105,75 @@
 
 </details>
 
+### v0.12 实例管理与配置编辑 (In Progress)
+
+**Milestone Goal:** 在 Web 后台界面完整管理 nanobot 实例的生命周期（CRUD + 启停）和 nanobot 自身配置文件
+
+- [ ] **Phase 50: Instance Config CRUD API** - Backend API for creating, reading, updating, deleting instance configurations with validation
+- [ ] **Phase 51: Instance Lifecycle Control API** - Backend API for start/stop operations on individual instances with auth
+- [ ] **Phase 52: Nanobot Config Management API** - Backend API for reading/writing nanobot config.json per instance with auto-directory setup
+- [ ] **Phase 53: Instance Management UI** - Full web interface with instance cards, CRUD dialogs, lifecycle controls, and nanobot config editor
+
+## Phase Details
+
+### Phase 50: Instance Config CRUD API
+**Goal**: Users can manage instance configurations through a validated REST API that auto-persists to config.yaml
+**Depends on**: Phase 49 (existing config hot reload mechanism)
+**Requirements**: IC-01, IC-02, IC-03, IC-04, IC-05, IC-06
+**Success Criteria** (what must be TRUE):
+  1. User can create a new instance via POST with all config fields (name, port, start_command, startup_timeout, auto_start) and it appears in config.yaml
+  2. User can update an existing instance's configuration via PUT and changes are reflected in config.yaml within 500ms
+  3. User can delete an instance via DELETE — running instances are stopped first, then removed from config.yaml
+  4. User can copy an instance via POST — auto-updater config is cloned with new name/port and nanobot config directory is created
+  5. Invalid configs are rejected with clear error messages (duplicate name, duplicate port, missing required fields, port out of range)
+**Plans**: TBD
+
+### Phase 51: Instance Lifecycle Control API
+**Goal**: Users can start and stop individual instances on demand through authenticated API endpoints
+**Depends on**: Phase 50 (instance config must exist to control lifecycle)
+**Requirements**: LC-01, LC-02, LC-03
+**Success Criteria** (what must be TRUE):
+  1. User can start a stopped instance via POST /api/v1/instances/{name}/start and the instance begins listening on its configured port
+  2. User can stop a running instance via POST /api/v1/instances/{name}/stop and the instance process terminates
+  3. All CRUD and lifecycle endpoints return 401 Unauthorized when Bearer token is missing or incorrect (reuses existing constant-time auth)
+**Plans**: TBD
+
+### Phase 52: Nanobot Config Management API
+**Goal**: Users can read and write nanobot's own config.json for any instance through the API, with automatic directory and default config creation
+**Depends on**: Phase 50 (instance must exist in auto-updater config to manage its nanobot config)
+**Requirements**: NC-01, NC-02, NC-03, NC-04
+**Success Criteria** (what must be TRUE):
+  1. Creating a new instance auto-creates the nanobot config directory (e.g., ~/.nanobot-{name}/) with a minimal valid config.json
+  2. User can read any instance's nanobot config.json via GET /api/v1/instances/{name}/nanobot-config and receive valid JSON
+  3. User can update any instance's nanobot config.json via PUT /api/v1/instances/{name}/nanobot-config and the file is updated on disk
+  4. Copying an instance clones the nanobot config.json to the new directory with port and name fields updated
+**Plans**: TBD
+
+### Phase 53: Instance Management UI
+**Goal**: Users can manage all instances and nanobot configurations through a visual web interface without touching config files
+**Depends on**: Phase 51, Phase 52 (all backend APIs must be available)
+**Requirements**: UI-01, UI-02, UI-03, UI-04, UI-05, UI-06
+**Success Criteria** (what must be TRUE):
+  1. User sees an instance list page with cards showing name, port, command, running status indicator, and action buttons (start/stop/edit/delete/copy)
+  2. User can create a new instance via a dialog with all config fields and a nanobot config editor, and it appears in the list immediately
+  3. User can edit an existing instance's configuration via dialog and changes persist to config.yaml
+  4. User can copy an instance via dialog with new name/port, and both auto-updater and nanobot configs are cloned
+  5. User can delete an instance with a confirmation dialog that warns if the instance is running
+  6. User can edit nanobot config via a hybrid editor with structured form for common fields (API key, model, telegram token) and raw JSON text editor
+**Plans**: TBD
+**UI hint**: yes
+
 ## Progress
+
+**Execution Order:**
+Phases execute in numeric order: 50 -> 51 -> 52 -> 53
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
-| 46. Service Configuration & Mode Detection | v0.11 | 2/2 | Complete | 2026-04-10 |
-| 47. Windows Service Handler | v0.11 | 2/2 | Complete | 2026-04-10 |
-| 48. Service Manager | v0.11 | 2/2 | Complete | 2026-04-11 |
-| 49. Existing Code Adaptation | v0.11 | 2/2 | Complete | 2026-04-11 |
+| 50. Instance Config CRUD API | v0.12 | 0/? | Not started | - |
+| 51. Instance Lifecycle Control API | v0.12 | 0/? | Not started | - |
+| 52. Nanobot Config Management API | v0.12 | 0/? | Not started | - |
+| 53. Instance Management UI | v0.12 | 0/? | Not started | - |
 
 ---
-*Last updated: 2026-04-11 (v0.11 milestone completed)*
+*Last updated: 2026-04-11 (v0.12 roadmap created)*
