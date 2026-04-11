@@ -388,7 +388,7 @@ func TestSelfUpdateAuth(t *testing.T) {
 
 	selfUpdateHandler := NewSelfUpdateHandler(checker, "dev", mutex, nil, logger)
 	selfUpdateHandler.restartFn = func(exePath string) {} // prevent os.Exit in tests
-	authMiddleware := AuthMiddleware(cfg.BearerToken, logger)
+	authMiddleware := AuthMiddleware(func() string { return cfg.BearerToken }, logger)
 
 	checkHandler := authMiddleware(http.HandlerFunc(selfUpdateHandler.HandleCheck))
 	updateHandler := authMiddleware(http.HandlerFunc(selfUpdateHandler.HandleUpdate))

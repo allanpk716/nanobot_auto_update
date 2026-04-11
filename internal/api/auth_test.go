@@ -22,7 +22,7 @@ func TestAuthMiddleware_MissingHeader(t *testing.T) {
 	})
 
 	// Wrap with auth middleware
-	authMiddleware := AuthMiddleware(expectedToken, logger)
+	authMiddleware := AuthMiddleware(func() string { return expectedToken }, logger)
 	handler := authMiddleware(nextHandler)
 
 	// Create request without Authorization header
@@ -91,7 +91,7 @@ func TestAuthMiddleware_InvalidFormat(t *testing.T) {
 				t.Error("Next handler should not be called with invalid auth format")
 			})
 
-			authMiddleware := AuthMiddleware(expectedToken, logger)
+			authMiddleware := AuthMiddleware(func() string { return expectedToken }, logger)
 			handler := authMiddleware(nextHandler)
 
 			req := httptest.NewRequest("POST", "/api/v1/test", nil)
@@ -146,7 +146,7 @@ func TestAuthMiddleware_InvalidToken(t *testing.T) {
 				t.Error("Next handler should not be called with invalid token")
 			})
 
-			authMiddleware := AuthMiddleware(expectedToken, logger)
+			authMiddleware := AuthMiddleware(func() string { return expectedToken }, logger)
 			handler := authMiddleware(nextHandler)
 
 			req := httptest.NewRequest("POST", "/api/v1/test", nil)
@@ -186,7 +186,7 @@ func TestAuthMiddleware_ValidToken(t *testing.T) {
 		w.Write([]byte("success"))
 	})
 
-	authMiddleware := AuthMiddleware(expectedToken, logger)
+	authMiddleware := AuthMiddleware(func() string { return expectedToken }, logger)
 	handler := authMiddleware(nextHandler)
 
 	req := httptest.NewRequest("POST", "/api/v1/test", nil)

@@ -62,16 +62,13 @@ func validateBearerToken(r *http.Request, expectedToken string) error {
 // API-02: Bearer token validation
 // API-05: Security requirements (constant time comparison, JSON error format)
 //
-// Usage:
-//
-//	mux := http.NewServeMux()
-//	authMiddleware := AuthMiddleware(cfg.BearerToken, logger)
-//	mux.Handle("/api/v1/protected", authMiddleware(protectedHandler))
-func AuthMiddleware(expectedToken string, logger *slog.Logger) func(http.Handler) http.Handler {
+// getToken is called on every request to get the current expected token.
+// This enables hot-reloading the bearer token without restarting the API server.
+func AuthMiddleware(getToken func() string, logger *slog.Logger) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			// Validate Bearer token
-			err := validateBearerToken(r, expectedToken)
+			// Validate Bearer token — read current token dynamically
+			err := validateBearerToken(r, getToken())
 			if err != nil {
 				// Extract error details
 				var errorCode, errorMsg string

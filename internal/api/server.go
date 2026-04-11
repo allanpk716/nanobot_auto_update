@@ -78,7 +78,7 @@ func NewServer(cfg *config.APIConfig, im *instance.InstanceManager, fullCfg *con
 	// Trigger update endpoint with auth (Phase 28: API-01, API-02)
 	instanceCount := len(im.GetInstanceNames())
 	triggerHandler := NewTriggerHandler(im, cfg, logger, updateLogger, notif, instanceCount)
-	authMiddleware := AuthMiddleware(cfg.BearerToken, logger)
+	authMiddleware := AuthMiddleware(func() string { return cfg.BearerToken }, logger)
 
 	// Wrap handler with auth middleware
 	// API-01: POST /api/v1/trigger-update endpoint exists

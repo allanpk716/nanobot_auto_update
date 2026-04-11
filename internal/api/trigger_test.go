@@ -506,7 +506,7 @@ func TestTriggerHandler_WithAuth(t *testing.T) {
 	}
 	ul := updatelog.NewUpdateLogger(logger, "")
 	triggerHandler := NewTriggerHandler(mock, cfg, logger, ul, nil, 3)
-	authMiddleware := AuthMiddleware(cfg.BearerToken, logger)
+	authMiddleware := AuthMiddleware(func() string { return cfg.BearerToken }, logger)
 
 	handler := authMiddleware(http.HandlerFunc(triggerHandler.Handle))
 

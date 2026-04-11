@@ -25,7 +25,7 @@ func newTestQueryAuthMiddleware() func(http.Handler) http.Handler {
 		BearerToken: "test-token-12345678901234567890",
 		Timeout:     30 * time.Second,
 	}
-	return AuthMiddleware(cfg.BearerToken, logger)
+	return AuthMiddleware(func() string { return cfg.BearerToken }, logger)
 }
 
 // Test 1: GET /api/v1/update-logs returns 200 with empty data when no logs exist
