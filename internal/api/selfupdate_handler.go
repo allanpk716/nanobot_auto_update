@@ -21,6 +21,7 @@ type SelfUpdateChecker interface {
 	NeedUpdate(currentVersion string) (bool, *selfupdate.ReleaseInfo, error)
 	Update(currentVersion string) error
 	GetProgress() *selfupdate.ProgressState
+	InvalidateCache()
 }
 
 // UpdateMutex is the interface for shared update lock operations.
@@ -98,7 +99,13 @@ func defaultRestartFn(exePath string) {
 
 // HandleCheck handles GET /api/v1/self-update/check requests.
 // Returns current version info, latest version info, and self-update status (API-03).
+// Invalidates cache before checking to ensure freshly published releases are detected.
 func (h *SelfUpdateHandler) HandleCheck(w http.ResponseWriter, r *http.Request) {
+	// Invalidate cache to ensure user-initiated checks always get fresh data from GitHub.
+	// Without this, a stale cache from page-load-time auto-check could hide newly
+	// published releases for up to cacheTTL (1 hour).
+	h.updater.InvalidateCache()
+
 	needsUpdate, releaseInfo, err := h.updater.NeedUpdate(h.version)
 	if err != nil {
 		h.logger.Error("Failed to check for updates", "error", err)

@@ -232,6 +232,37 @@ func TestCache_Expiry(t *testing.T) {
 	assert.Equal(t, 2, hitCount)
 }
 
+func TestInvalidateCache(t *testing.T) {
+	hitCount := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hitCount++
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		fmt.Fprint(w, validReleaseJSON("v1.0.0"))
+	}))
+	defer server.Close()
+
+	u := newTestUpdater(server.URL)
+
+	// First call populates cache
+	_, err := u.CheckLatest()
+	require.NoError(t, err)
+	assert.Equal(t, 1, hitCount)
+
+	// Second call within TTL should use cache
+	_, err = u.CheckLatest()
+	require.NoError(t, err)
+	assert.Equal(t, 1, hitCount, "expected cache hit, no additional server request")
+
+	// Invalidate cache
+	u.InvalidateCache()
+
+	// Third call should hit server again (cache was cleared)
+	_, err = u.CheckLatest()
+	require.NoError(t, err)
+	assert.Equal(t, 2, hitCount, "expected cache miss after InvalidateCache")
+}
+
 func TestCheckLatest_NoZipAsset(t *testing.T) {
 	// Return a release without a windows_amd64.zip asset
 	release := map[string]interface{}{

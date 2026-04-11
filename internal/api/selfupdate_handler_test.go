@@ -42,6 +42,8 @@ func (m *mockSelfUpdateChecker) GetProgress() *selfupdate.ProgressState {
 	return &selfupdate.ProgressState{Stage: "idle"}
 }
 
+func (m *mockSelfUpdateChecker) InvalidateCache() {}
+
 // mockUpdateMutex is a mock implementation of UpdateMutex for testing.
 type mockUpdateMutex struct {
 	isUpdating   atomic.Bool
@@ -302,6 +304,8 @@ func (m *panicSelfUpdateChecker) GetProgress() *selfupdate.ProgressState {
 	return &selfupdate.ProgressState{Stage: "idle"}
 }
 
+func (m *panicSelfUpdateChecker) InvalidateCache() {}
+
 // TestSelfUpdateCheck_StatusDuringUpdate tests check shows "updating" status
 func TestSelfUpdateCheck_StatusDuringUpdate(t *testing.T) {
 	// Create a checker that blocks on Update for a while
@@ -359,6 +363,8 @@ func (m *slowSelfUpdateChecker) Update(currentVersion string) error {
 func (m *slowSelfUpdateChecker) GetProgress() *selfupdate.ProgressState {
 	return &selfupdate.ProgressState{Stage: "idle"}
 }
+
+func (m *slowSelfUpdateChecker) InvalidateCache() {}
 
 // TestSelfUpdateAuth tests auth middleware integration (API-01)
 func TestSelfUpdateAuth(t *testing.T) {

@@ -123,6 +123,14 @@ func (u *Updater) GetProgress() *ProgressState {
 	return &ProgressState{Stage: "idle"}
 }
 
+// InvalidateCache clears the cached release info so the next CheckLatest call
+// will fetch fresh data from GitHub. Use this before user-initiated version checks
+// to ensure stale cache does not hide newly published releases.
+func (u *Updater) InvalidateCache() {
+	u.cachedRelease = nil
+	u.cacheTime = time.Time{}
+}
+
 // CheckLatest checks GitHub for the latest release. Results are cached for cacheTTL (1 hour).
 // Returns ReleaseInfo with version, download URL, and checksum URL (UPDATE-01, UPDATE-06).
 func (u *Updater) CheckLatest() (*ReleaseInfo, error) {
