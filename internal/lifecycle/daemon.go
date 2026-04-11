@@ -83,6 +83,7 @@ func restartAsDaemon() (bool, error) {
 	if err != nil {
 		return false, fmt.Errorf("failed to create daemon log file: %w", err)
 	}
+	defer logFile.Close() // ensures cleanup on error paths (os.Exit bypasses defer)
 	cmd.Stdin = nil
 	cmd.Stdout = logFile
 	cmd.Stderr = logFile
