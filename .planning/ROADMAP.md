@@ -155,7 +155,11 @@ Plans:
   2. User can read any instance's nanobot config.json via GET /api/v1/instances/{name}/nanobot-config and receive valid JSON
   3. User can update any instance's nanobot config.json via PUT /api/v1/instances/{name}/nanobot-config and the file is updated on disk
   4. Copying an instance clones the nanobot config.json to the new directory with port and name fields updated
-**Plans**: TBD
+**Plans**: 2 plans
+
+Plans:
+- [ ] 52-01-PLAN.md — NanobotConfigManager core (path parsing, default config, file read/write) + NanobotConfigHandler GET/PUT endpoints + route registration
+- [ ] 52-02-PLAN.md — Callback injection into InstanceConfigHandler for create/copy flows + comprehensive tests
 
 ### Phase 53: Instance Management UI
 **Goal**: Users can manage all instances and nanobot configurations through a visual web interface without touching config files
@@ -180,8 +184,8 @@ Phases execute in numeric order: 50 -> 51 -> 52 -> 53
 |-------|-----------|----------------|--------|-----------|
 | 50. Instance Config CRUD API | v0.12 | 2/2 | Complete    | 2026-04-11 |
 | 51. Instance Lifecycle Control API | v0.12 | 2/2 | Complete    | 2026-04-12 |
-| 52. Nanobot Config Management API | v0.12 | 0/? | Not started | - |
+| 52. Nanobot Config Management API | v0.12 | 0/2 | Planned | - |
 | 53. Instance Management UI | v0.12 | 0/? | Not started | - |
 
 ---
-*Last updated: 2026-04-11 (Phase 51 planned)*
+*Last updated: 2026-04-12 (Phase 52 planned)*
