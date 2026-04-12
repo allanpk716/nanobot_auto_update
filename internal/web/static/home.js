@@ -1,26 +1,148 @@
 // DOM elements
 const instancesGrid = document.getElementById('instances-grid');
 
-// Load instance status from API
+// Auth token (shared with self-update module)
+let authToken = '';
+let pollTimer = null;
+let pollStartTime = 0;
+let isUpdating = false;
+
+// Get Bearer token, fetch and cache if not already available
+async function getToken() {
+    if (authToken) return authToken;
+    try {
+        const resp = await fetch('/api/v1/web-config');
+        if (!resp.ok) throw new Error('web-config unavailable');
+        const data = await resp.json();
+        authToken = data.auth_token;
+        return authToken;
+    } catch (e) {
+        console.error('Failed to get auth token:', e);
+        return null;
+    }
+}
+
+// Toast notification system
+function showToast(message, type) {
+    // type: "success" or "error"
+    const toastContainer = document.getElementById('toast-container');
+    const toast = document.createElement('div');
+    toast.className = 'toast toast-' + type;
+    toast.textContent = message;
+    toastContainer.insertBefore(toast, toastContainer.firstChild);
+    setTimeout(function() {
+        toast.classList.add('toast-fade-out');
+        setTimeout(function() {
+            if (toast.parentNode) toast.parentNode.removeChild(toast);
+        }, 300);
+    }, 3000);
+}
+
+// Modal system
+function showModal(title, bodyHtml, footerHtml) {
+    var container = document.getElementById('modal-container');
+    document.getElementById('modal-title').textContent = title;
+    document.getElementById('modal-body').innerHTML = bodyHtml || '';
+    document.getElementById('modal-footer').innerHTML = footerHtml || '';
+    container.style.display = 'flex';
+    return container;
+}
+
+function closeModal() {
+    document.getElementById('modal-container').style.display = 'none';
+}
+
+// Placeholder dialog functions for Plans 02 and 03
+function showCreateDialog() {
+    showToast('即将推出', 'success');
+}
+
+function showEditDialog(name) {
+    showToast('即将推出', 'success');
+}
+
+function showCopyDialog(name) {
+    showToast('即将推出', 'success');
+}
+
+function showDeleteDialog(name, isRunning) {
+    showToast('即将推出', 'success');
+}
+
+function showNanobotConfigDialog(name) {
+    showToast('即将推出', 'success');
+}
+
+// Load instance configs and status from APIs
 async function loadInstances() {
     try {
-        const response = await fetch('/api/v1/instances/status');
-        const data = await response.json();
+        var results = await Promise.allSettled([
+            fetch('/api/v1/instances/status').then(function(r) { return r.json(); }),
+            getToken().then(function(token) {
+                if (!token) throw new Error('no token');
+                return fetch('/api/v1/instance-configs', {
+                    headers: { 'Authorization': 'Bearer ' + token }
+                }).then(function(r) {
+                    if (!r.ok) throw new Error('HTTP ' + r.status);
+                    return r.json();
+                });
+            })
+        ]);
 
-        // Clear loading state
+        var statusResult = results[0];
+        var configResult = results[1];
+
+        var statusMap = {};
+        var statusOk = statusResult.status === 'fulfilled';
+        var configOk = configResult.status === 'fulfilled';
+
+        if (statusOk && statusResult.value && statusResult.value.instances) {
+            statusResult.value.instances.forEach(function(inst) {
+                statusMap[inst.name] = inst.running;
+            });
+        }
+
         instancesGrid.innerHTML = '';
 
-        // If no instances, show message
-        if (data.instances.length === 0) {
-            instancesGrid.innerHTML = '<div class="empty-state"><h2>无实例配置</h2><p>请在配置文件中添加实例</p></div>';
+        // Both rejected - error state
+        if (!statusOk && !configOk) {
+            instancesGrid.innerHTML = '<div class="empty-state"><h2>加载失败</h2><p>无法获取实例列表，请检查服务器状态</p></div>';
             return;
         }
 
-        // Render instance cards
-        data.instances.forEach(instance => {
-            const card = createInstanceCard(instance);
-            instancesGrid.appendChild(card);
-        });
+        // Configs available - render full cards
+        if (configOk && configResult.value && configResult.value.instances) {
+            var configs = configResult.value.instances;
+            if (configs.length === 0) {
+                instancesGrid.innerHTML = '<div class="empty-state"><h2>无实例配置</h2><p>无实例配置，点击「+ 新建实例」创建第一个实例。</p></div>';
+                return;
+            }
+            configs.forEach(function(cfg) {
+                var isRunning = statusOk ? (statusMap[cfg.name] || false) : null;
+                var card = createInstanceCard(cfg, isRunning);
+                instancesGrid.appendChild(card);
+            });
+            return;
+        }
+
+        // Status only (auth failed) - render status-only cards
+        if (statusOk && statusResult.value && statusResult.value.instances) {
+            var statuses = statusResult.value.instances;
+            if (statuses.length === 0) {
+                instancesGrid.innerHTML = '<div class="empty-state"><h2>无实例配置</h2><p>请在配置文件中添加实例</p></div>';
+                return;
+            }
+            statuses.forEach(function(inst) {
+                var card = createInstanceCard({ name: inst.name, port: inst.port }, inst.running);
+                // Disable secondary buttons when auth failed
+                var secondaryBtns = card.querySelectorAll('.btn-secondary');
+                secondaryBtns.forEach(function(btn) { btn.disabled = true; });
+                instancesGrid.appendChild(card);
+            });
+            return;
+        }
+
+        instancesGrid.innerHTML = '<div class="empty-state"><h2>加载失败</h2><p>无法获取实例列表，请检查服务器状态</p></div>';
     } catch (error) {
         console.error('Failed to load instance status:', error);
         instancesGrid.innerHTML = '<div class="empty-state"><h2>加载失败</h2><p>无法获取实例列表，请检查服务器状态</p></div>';
@@ -28,96 +150,230 @@ async function loadInstances() {
 }
 
 // Create instance card element
-function createInstanceCard(instance) {
-    const card = document.createElement('div');
+function createInstanceCard(config, isRunning) {
+    var card = document.createElement('div');
     card.className = 'instance-card';
 
-    // Status indicator
-    const statusClass = instance.running ? 'status-running' : 'status-stopped';
-    const statusText = instance.running ? '运行中' : '已停止';
+    // Card header area: name link + status indicator
+    var headerDiv = document.createElement('div');
+    headerDiv.style.display = 'flex';
+    headerDiv.style.alignItems = 'center';
+    headerDiv.style.gap = 'var(--spacing-xs)';
+    headerDiv.style.marginBottom = 'var(--spacing-sm)';
 
-    const nameLink = document.createElement('a');
-    nameLink.href = '/logs/' + encodeURIComponent(instance.name);
+    var nameLink = document.createElement('a');
+    nameLink.href = '/logs/' + encodeURIComponent(config.name);
     nameLink.className = 'instance-name';
-    nameLink.textContent = instance.name;
-    card.appendChild(nameLink);
+    nameLink.textContent = config.name;
+    headerDiv.appendChild(nameLink);
 
-    const infoDiv = document.createElement('div');
+    // Status dot indicator
+    if (isRunning !== null && isRunning !== undefined) {
+        var statusDot = document.createElement('span');
+        statusDot.className = isRunning ? 'status-dot status-dot-running' : 'status-dot status-dot-stopped';
+        headerDiv.appendChild(statusDot);
+
+        var statusSpan = document.createElement('span');
+        statusSpan.className = isRunning ? 'status-running' : 'status-stopped';
+        statusSpan.textContent = isRunning ? '运行中' : '已停止';
+        headerDiv.appendChild(statusSpan);
+    }
+
+    card.appendChild(headerDiv);
+
+    // Config info section
+    var infoDiv = document.createElement('div');
     infoDiv.className = 'instance-info';
 
-    const portRow = document.createElement('div');
-    portRow.className = 'info-row';
-    const portLabel = document.createElement('span');
-    portLabel.className = 'label';
-    portLabel.textContent = '端口:';
-    const portValue = document.createElement('span');
-    portValue.className = 'value';
-    portValue.textContent = instance.port;
-    portRow.appendChild(portLabel);
-    portRow.appendChild(portValue);
-    infoDiv.appendChild(portRow);
+    // Port row
+    if (config.port !== undefined) {
+        var portRow = document.createElement('div');
+        portRow.className = 'info-row';
+        var portLabel = document.createElement('span');
+        portLabel.className = 'label';
+        portLabel.textContent = '端口:';
+        var portValue = document.createElement('span');
+        portValue.className = 'value';
+        portValue.textContent = config.port;
+        portRow.appendChild(portLabel);
+        portRow.appendChild(portValue);
+        infoDiv.appendChild(portRow);
+    }
 
-    const statusRow = document.createElement('div');
-    statusRow.className = 'info-row';
-    const statusLabel = document.createElement('span');
-    statusLabel.className = 'label';
-    statusLabel.textContent = '状态:';
-    const statusValue = document.createElement('span');
-    statusValue.className = 'value ' + statusClass;
-    statusValue.textContent = statusText;
-    statusRow.appendChild(statusLabel);
-    statusRow.appendChild(statusValue);
-    infoDiv.appendChild(statusRow);
+    // Start command row
+    if (config.start_command) {
+        var cmdRow = document.createElement('div');
+        cmdRow.className = 'info-row';
+        var cmdLabel = document.createElement('span');
+        cmdLabel.className = 'label';
+        cmdLabel.textContent = '命令:';
+        var cmdValue = document.createElement('span');
+        cmdValue.className = 'value command-text';
+        if (config.start_command.length > 40) {
+            cmdValue.textContent = config.start_command.substring(0, 40) + '...';
+            cmdValue.title = config.start_command;
+        } else {
+            cmdValue.textContent = config.start_command;
+        }
+        cmdRow.appendChild(cmdLabel);
+        cmdRow.appendChild(cmdValue);
+        infoDiv.appendChild(cmdRow);
+    }
+
+    // Startup timeout row
+    if (config.startup_timeout !== undefined) {
+        var timeoutRow = document.createElement('div');
+        timeoutRow.className = 'info-row';
+        var timeoutLabel = document.createElement('span');
+        timeoutLabel.className = 'label';
+        timeoutLabel.textContent = '启动超时:';
+        var timeoutValue = document.createElement('span');
+        timeoutValue.className = 'value';
+        timeoutValue.textContent = config.startup_timeout + '秒';
+        timeoutRow.appendChild(timeoutLabel);
+        timeoutRow.appendChild(timeoutValue);
+        infoDiv.appendChild(timeoutRow);
+    }
+
+    // Auto-start row
+    if (config.auto_start !== undefined) {
+        var autoRow = document.createElement('div');
+        autoRow.className = 'info-row';
+        var autoLabel = document.createElement('span');
+        autoLabel.className = 'label';
+        autoLabel.textContent = '自动启动:';
+        var autoValue = document.createElement('span');
+        autoValue.className = 'value';
+        if (config.auto_start === null || config.auto_start === undefined) {
+            var tag = document.createElement('span');
+            tag.className = 'auto-start-tag auto-start-default';
+            tag.textContent = '默认';
+            autoValue.appendChild(tag);
+        } else if (config.auto_start === true) {
+            var tagYes = document.createElement('span');
+            tagYes.className = 'auto-start-tag auto-start-yes';
+            tagYes.textContent = '是';
+            autoValue.appendChild(tagYes);
+        } else {
+            var tagNo = document.createElement('span');
+            tagNo.className = 'auto-start-tag auto-start-no';
+            tagNo.textContent = '否';
+            autoValue.appendChild(tagNo);
+        }
+        autoRow.appendChild(autoLabel);
+        autoRow.appendChild(autoValue);
+        infoDiv.appendChild(autoRow);
+    }
+
     card.appendChild(infoDiv);
 
-    const restartBtn = document.createElement('button');
-    restartBtn.className = 'btn-restart';
-    restartBtn.dataset.instance = instance.name;
-    restartBtn.textContent = '重启实例';
-    restartBtn.addEventListener('click', function() {
-        restartInstance(instance.name, restartBtn);
-    });
-    card.appendChild(restartBtn);
+    // Primary action area (start/stop)
+    var primaryDiv = document.createElement('div');
+    primaryDiv.className = 'card-actions-primary';
+
+    if (isRunning !== null && isRunning !== undefined) {
+        var actionBtn = document.createElement('button');
+        if (isRunning) {
+            actionBtn.className = 'btn-action btn-stop';
+            actionBtn.textContent = '停止';
+            actionBtn.addEventListener('click', function() {
+                handleLifecycleAction(config.name, 'stop', actionBtn);
+            });
+        } else {
+            actionBtn.className = 'btn-action btn-start';
+            actionBtn.textContent = '启动';
+            actionBtn.addEventListener('click', function() {
+                handleLifecycleAction(config.name, 'start', actionBtn);
+            });
+        }
+        primaryDiv.appendChild(actionBtn);
+    }
+
+    card.appendChild(primaryDiv);
+
+    // Secondary action row
+    var secondaryDiv = document.createElement('div');
+    secondaryDiv.className = 'card-actions-secondary';
+
+    var editBtn = document.createElement('button');
+    editBtn.className = 'btn-secondary';
+    editBtn.textContent = '编辑';
+    editBtn.addEventListener('click', function() { showEditDialog(config.name); });
+    secondaryDiv.appendChild(editBtn);
+
+    var copyBtn = document.createElement('button');
+    copyBtn.className = 'btn-secondary';
+    copyBtn.textContent = '复制';
+    copyBtn.addEventListener('click', function() { showCopyDialog(config.name); });
+    secondaryDiv.appendChild(copyBtn);
+
+    var deleteBtn = document.createElement('button');
+    deleteBtn.className = 'btn-secondary btn-delete-danger';
+    deleteBtn.textContent = '删除';
+    deleteBtn.addEventListener('click', function() { showDeleteDialog(config.name, isRunning); });
+    secondaryDiv.appendChild(deleteBtn);
+
+    var configBtn = document.createElement('button');
+    configBtn.className = 'btn-secondary';
+    configBtn.textContent = '配置';
+    configBtn.addEventListener('click', function() { showNanobotConfigDialog(config.name); });
+    secondaryDiv.appendChild(configBtn);
+
+    card.appendChild(secondaryDiv);
 
     return card;
 }
 
-// Restart instance function
-async function restartInstance(instanceName, button) {
-    const originalText = button.textContent;
+// Handle lifecycle actions (start/stop) with loading state and timeout
+async function handleLifecycleAction(instanceName, action, button) {
+    var originalText = button.textContent;
+    var originalClass = button.className;
+    var loadingText = action === 'start' ? '启动中...' : '停止中...';
+
+    // Set loading state
+    button.disabled = true;
+    button.classList.add('loading');
+    button.textContent = loadingText;
+
+    // AbortController with timeout
+    var timeout = action === 'start' ? 65000 : 35000;
+    var controller = new AbortController();
+    var timeoutId = setTimeout(function() { controller.abort(); }, timeout);
 
     try {
-        // Disable button and show loading state
-        button.disabled = true;
-        button.classList.add('loading');
-        button.textContent = '重启中...';
+        var token = await getToken();
+        if (!token) {
+            showToast('获取认证令牌失败', 'error');
+            return;
+        }
 
-        // Call restart API
-        const response = await fetch(`/api/v1/instances/${instanceName}/restart`, {
-            method: 'POST'
+        var response = await fetch('/api/v1/instances/' + encodeURIComponent(instanceName) + '/' + action, {
+            method: 'POST',
+            headers: { 'Authorization': 'Bearer ' + token },
+            signal: controller.signal
         });
 
-        const data = await response.json();
+        var data = await response.json();
 
-        if (response.ok && data.success) {
-            button.textContent = '重启成功';
-            // Refresh instance status after 2 seconds
-            setTimeout(() => {
-                loadInstances();
-            }, 2000);
+        if (response.ok) {
+            var actionLabel = action === 'start' ? '启动' : '停止';
+            showToast('实例 ' + instanceName + ' 已' + actionLabel + '成功', 'success');
+            loadInstances();
         } else {
-            throw new Error(data.error || '重启失败');
+            showToast(actionLabel + '实例 ' + instanceName + ' 失败: ' + (data.message || data.error || '未知错误'), 'error');
         }
     } catch (error) {
-        console.error('Failed to restart instance:', error);
-        button.textContent = '重启失败';
-        alert(`重启实例 ${instanceName} 失败: ${error.message}`);
-        // Restore button after 2 seconds
-        setTimeout(() => {
-            button.textContent = originalText;
-            button.disabled = false;
-            button.classList.remove('loading');
-        }, 2000);
+        if (error.name === 'AbortError') {
+            showToast('操作超时，请稍后查看实例状态', 'error');
+        } else {
+            var failLabel = action === 'start' ? '启动' : '停止';
+            showToast(failLabel + '实例 ' + instanceName + ' 失败: ' + error.message, 'error');
+        }
+    } finally {
+        clearTimeout(timeoutId);
+        button.classList.remove('loading');
+        button.disabled = false;
+        button.textContent = originalText;
     }
 }
 
@@ -134,15 +390,31 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Initialize self-update module
     initSelfUpdate();
+
+    // New instance button
+    document.getElementById('btn-new-instance').addEventListener('click', function() {
+        showCreateDialog();
+    });
+
+    // Modal close handlers
+    document.getElementById('modal-close').addEventListener('click', closeModal);
+    document.getElementById('modal-container').addEventListener('click', function(e) {
+        if (e.target.id === 'modal-container') closeModal();
+    });
+
+    // Escape key to close modal
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') closeModal();
+    });
 });
 
 // Load version for header badge (no auth required)
 async function loadHeaderVersion() {
     try {
-        const resp = await fetch('/api/v1/version');
+        var resp = await fetch('/api/v1/version');
         if (resp.ok) {
-            const data = await resp.json();
-            const badge = document.getElementById('header-version');
+            var data = await resp.json();
+            var badge = document.getElementById('header-version');
             if (badge && data.version) {
                 badge.textContent = 'v' + data.version.replace(/^v/, '');
             }
@@ -152,20 +424,14 @@ async function loadHeaderVersion() {
     }
 }
 
-// Self-update module
-let authToken = '';
-let pollTimer = null;
-let pollStartTime = 0;
-let isUpdating = false;
-
-// Initialize self-update module
+// Self-update module: Initialize
 async function initSelfUpdate() {
     try {
-        const resp = await fetch('/api/v1/web-config');
+        var resp = await fetch('/api/v1/web-config');
         if (!resp.ok) {
             throw new Error('web-config unavailable');
         }
-        const data = await resp.json();
+        var data = await resp.json();
         authToken = data.auth_token;
         // Load current version from check API
         await loadCurrentVersion();
@@ -175,7 +441,7 @@ async function initSelfUpdate() {
     } catch (e) {
         // web-config fetch failed (non-localhost)
         console.error('Failed to init self-update:', e);
-        const section = document.getElementById('selfupdate-section');
+        var section = document.getElementById('selfupdate-section');
         section.innerHTML = '<p class="selfupdate-warning">请在本地访问以使用自更新功能</p>';
     }
 }
@@ -183,11 +449,11 @@ async function initSelfUpdate() {
 // Load current version from version API (no auth required)
 async function loadCurrentVersion() {
     try {
-        const resp = await fetch('/api/v1/version');
+        var resp = await fetch('/api/v1/version');
         if (!resp.ok) {
             throw new Error('version API failed');
         }
-        const data = await resp.json();
+        var data = await resp.json();
         document.getElementById('current-version').textContent = data.version;
     } catch (e) {
         console.error('Failed to load current version:', e);
@@ -197,9 +463,9 @@ async function loadCurrentVersion() {
 
 // Check for updates
 async function checkUpdate() {
-    const btn = document.getElementById('btn-check-update');
-    const startBtn = document.getElementById('btn-start-update');
-    const resultDiv = document.getElementById('update-result');
+    var btn = document.getElementById('btn-check-update');
+    var startBtn = document.getElementById('btn-start-update');
+    var resultDiv = document.getElementById('update-result');
 
     if (isUpdating) return;
 
@@ -209,45 +475,45 @@ async function checkUpdate() {
     startBtn.disabled = true;
 
     try {
-        const resp = await fetch('/api/v1/self-update/check', {
+        var resp = await fetch('/api/v1/self-update/check', {
             headers: { 'Authorization': 'Bearer ' + authToken }
         });
         if (!resp.ok) {
             throw new Error('check API returned ' + resp.status);
         }
-        const data = await resp.json();
+        var data = await resp.json();
 
         if (!data.needs_update) {
             // Already up to date
             resultDiv.className = 'update-result visible';
             resultDiv.innerHTML = '';
-            const infoDiv = document.createElement('div');
+            var infoDiv = document.createElement('div');
             infoDiv.className = 'update-info';
-            const label = document.createElement('span');
+            var label = document.createElement('span');
             label.className = 'info-label';
             label.textContent = '已是最新版本';
             infoDiv.appendChild(label);
-            const value = document.createElement('span');
+            var value = document.createElement('span');
             value.className = 'info-value';
             value.textContent = data.current_version;
             infoDiv.appendChild(value);
             resultDiv.appendChild(infoDiv);
             startBtn.disabled = true;
         } else {
-            // New version available — render details
+            // New version available - render details
             resultDiv.className = 'update-result visible';
             resultDiv.innerHTML = '';
 
-            const infoDiv = document.createElement('div');
+            var infoDiv = document.createElement('div');
             infoDiv.className = 'update-info';
 
             // Version row
-            const versionRow = document.createElement('div');
+            var versionRow = document.createElement('div');
             versionRow.style.marginBottom = '4px';
-            const versionLabel = document.createElement('span');
+            var versionLabel = document.createElement('span');
             versionLabel.className = 'info-label';
             versionLabel.textContent = '最新版本:';
-            const versionValue = document.createElement('span');
+            var versionValue = document.createElement('span');
             versionValue.className = 'info-value';
             versionValue.textContent = data.latest_version;
             versionRow.appendChild(versionLabel);
@@ -256,21 +522,21 @@ async function checkUpdate() {
 
             // Date row
             if (data.published_at) {
-                let dateStr = '';
+                var dateStr = '';
                 try {
-                    const d = new Date(data.published_at);
+                    var d = new Date(data.published_at);
                     dateStr = d.getFullYear() + '-' +
                         String(d.getMonth() + 1).padStart(2, '0') + '-' +
                         String(d.getDate()).padStart(2, '0');
                 } catch (e) {
                     dateStr = data.published_at;
                 }
-                const dateRow = document.createElement('div');
+                var dateRow = document.createElement('div');
                 dateRow.style.marginBottom = '4px';
-                const dateLabel = document.createElement('span');
+                var dateLabel = document.createElement('span');
                 dateLabel.className = 'info-label';
                 dateLabel.textContent = '发布日期:';
-                const dateValue = document.createElement('span');
+                var dateValue = document.createElement('span');
                 dateValue.className = 'info-value';
                 dateValue.textContent = dateStr;
                 dateRow.appendChild(dateLabel);
@@ -282,12 +548,12 @@ async function checkUpdate() {
 
             // Release notes with expand/collapse (textContent for XSS safety)
             if (data.release_notes) {
-                const notesDiv = document.createElement('div');
+                var notesDiv = document.createElement('div');
                 notesDiv.className = 'release-notes';
                 notesDiv.textContent = data.release_notes;
                 resultDiv.appendChild(notesDiv);
 
-                const toggleBtn = document.createElement('span');
+                var toggleBtn = document.createElement('span');
                 toggleBtn.className = 'release-notes-toggle';
                 toggleBtn.textContent = '展开';
                 toggleBtn.addEventListener('click', function() {
@@ -308,7 +574,7 @@ async function checkUpdate() {
         console.error('Failed to check for updates:', e);
         resultDiv.className = 'update-result visible';
         resultDiv.innerHTML = '';
-        const errorDiv = document.createElement('div');
+        var errorDiv = document.createElement('div');
         errorDiv.className = 'update-error';
         errorDiv.textContent = '检测更新失败，请查看控制台获取详情';
         resultDiv.appendChild(errorDiv);
@@ -321,24 +587,24 @@ async function checkUpdate() {
 
 // Start update
 async function startUpdate() {
-    const btn = document.getElementById('btn-start-update');
+    var btn = document.getElementById('btn-start-update');
     if (isUpdating || btn.disabled) return;
 
     try {
         btn.disabled = true;
         document.getElementById('btn-check-update').disabled = true;
 
-        const resp = await fetch('/api/v1/self-update', {
+        var resp = await fetch('/api/v1/self-update', {
             method: 'POST',
             headers: { 'Authorization': 'Bearer ' + authToken }
         });
 
         if (resp.status === 409) {
             // Already updating
-            const resultDiv = document.getElementById('update-result');
+            var resultDiv = document.getElementById('update-result');
             resultDiv.className = 'update-result visible';
             resultDiv.innerHTML = '';
-            const errorDiv = document.createElement('div');
+            var errorDiv = document.createElement('div');
             errorDiv.className = 'update-error';
             errorDiv.textContent = '更新已在进行中，请稍后再试';
             resultDiv.appendChild(errorDiv);
@@ -357,10 +623,10 @@ async function startUpdate() {
         startProgressPolling();
     } catch (e) {
         console.error('Failed to start update:', e);
-        const resultDiv = document.getElementById('update-result');
+        var resultDiv = document.getElementById('update-result');
         resultDiv.className = 'update-result visible';
         resultDiv.innerHTML = '';
-        const errorDiv = document.createElement('div');
+        var errorDiv = document.createElement('div');
         errorDiv.className = 'update-error';
         errorDiv.textContent = '启动更新失败，请查看控制台获取详情';
         resultDiv.appendChild(errorDiv);
@@ -371,28 +637,28 @@ async function startUpdate() {
 
 // Progress polling (500ms interval, 60s timeout)
 function startProgressPolling() {
-    const resultDiv = document.getElementById('update-result');
+    var resultDiv = document.getElementById('update-result');
     resultDiv.className = 'update-result visible';
     resultDiv.innerHTML = '';
 
-    const container = document.createElement('div');
+    var container = document.createElement('div');
     container.className = 'progress-container';
 
-    const statusEl = document.createElement('div');
+    var statusEl = document.createElement('div');
     statusEl.className = 'progress-status';
     statusEl.id = 'progress-status';
     statusEl.textContent = '检查中...';
     container.appendChild(statusEl);
 
-    const barTrack = document.createElement('div');
+    var barTrack = document.createElement('div');
     barTrack.className = 'progress-bar-track';
-    const barFill = document.createElement('div');
+    var barFill = document.createElement('div');
     barFill.className = 'progress-bar-fill';
     barFill.id = 'progress-fill';
     barTrack.appendChild(barFill);
     container.appendChild(barTrack);
 
-    const textEl = document.createElement('div');
+    var textEl = document.createElement('div');
     textEl.className = 'progress-text';
     textEl.id = 'progress-text';
     container.appendChild(textEl);
@@ -406,7 +672,7 @@ function startProgressPolling() {
             pollTimer = null;
             isUpdating = false;
             resultDiv.innerHTML = '';
-            const errorDiv = document.createElement('div');
+            var errorDiv = document.createElement('div');
             errorDiv.className = 'update-error';
             errorDiv.textContent = '更新超时，请检查服务状态';
             resultDiv.appendChild(errorDiv);
@@ -416,26 +682,26 @@ function startProgressPolling() {
         }
 
         try {
-            const resp = await fetch('/api/v1/self-update/check', {
+            var resp = await fetch('/api/v1/self-update/check', {
                 headers: { 'Authorization': 'Bearer ' + authToken }
             });
             if (!resp.ok) {
-                // Network error during poll — might be restarting
+                // Network error during poll - might be restarting
                 return;
             }
-            const data = await resp.json();
-            const progress = data.progress;
+            var data = await resp.json();
+            var progress = data.progress;
 
-            const currentStatusEl = document.getElementById('progress-status');
-            const currentFillEl = document.getElementById('progress-fill');
-            const currentTextEl = document.getElementById('progress-text');
+            var currentStatusEl = document.getElementById('progress-status');
+            var currentFillEl = document.getElementById('progress-fill');
+            var currentTextEl = document.getElementById('progress-text');
 
             if (!progress || progress.stage === 'idle') {
                 if (currentStatusEl) currentStatusEl.textContent = '检查中...';
             } else if (progress.stage === 'checking') {
                 if (currentStatusEl) currentStatusEl.textContent = '检查中...';
             } else if (progress.stage === 'downloading') {
-                const pct = Math.max(0, Math.min(100, Number(progress.download_percent) || 0));
+                var pct = Math.max(0, Math.min(100, Number(progress.download_percent) || 0));
                 if (currentStatusEl) currentStatusEl.textContent = '下载中 ' + pct + '%';
                 if (currentFillEl) currentFillEl.style.width = pct + '%';
                 if (currentTextEl) currentTextEl.textContent = pct + '%';
@@ -447,7 +713,7 @@ function startProgressPolling() {
                 pollTimer = null;
                 isUpdating = false;
                 resultDiv.innerHTML = '';
-                const successDiv = document.createElement('div');
+                var successDiv = document.createElement('div');
                 successDiv.className = 'update-success';
                 successDiv.textContent = '更新完成，服务即将重启';
                 resultDiv.appendChild(successDiv);
@@ -457,9 +723,9 @@ function startProgressPolling() {
                 clearInterval(pollTimer);
                 pollTimer = null;
                 isUpdating = false;
-                const errorMsg = progress.error || '未知错误';
+                var errorMsg = progress.error || '未知错误';
                 resultDiv.innerHTML = '';
-                const errorDiv = document.createElement('div');
+                var errorDiv = document.createElement('div');
                 errorDiv.className = 'update-error';
                 errorDiv.textContent = '更新失败: ' + errorMsg;
                 resultDiv.appendChild(errorDiv);
@@ -467,7 +733,7 @@ function startProgressPolling() {
                 document.getElementById('btn-check-update').disabled = false;
             }
         } catch (e) {
-            // Network error — service might be restarting
+            // Network error - service might be restarting
             console.log('Poll request failed (service may be restarting):', e.message);
         }
     }, 500);
