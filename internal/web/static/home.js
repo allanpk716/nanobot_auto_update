@@ -39,10 +39,16 @@ function showToast(message, type) {
 }
 
 // Modal system
-function showModal(title, bodyHtml, footerHtml) {
+function showModal(title, bodyContent, footerHtml) {
     var container = document.getElementById('modal-container');
     document.getElementById('modal-title').textContent = title;
-    document.getElementById('modal-body').innerHTML = bodyHtml || '';
+    var body = document.getElementById('modal-body');
+    body.innerHTML = '';
+    if (bodyContent && typeof bodyContent === 'object' && bodyContent.nodeType) {
+        body.appendChild(bodyContent);
+    } else {
+        body.innerHTML = bodyContent || '';
+    }
     document.getElementById('modal-footer').innerHTML = footerHtml || '';
     container.style.display = 'flex';
     return container;
@@ -107,31 +113,30 @@ function displayServerFieldErrors(errors) {
     });
 }
 
-// Build instance form HTML for create/edit dialogs
+// Build instance form HTML template (static structure only, no dynamic data)
 function buildInstanceFormHtml(options) {
-    // options: { nameValue, nameReadOnly, portValue, cmdValue, timeoutValue, autoStartValue }
     var nameReadonlyAttr = options.nameReadOnly ? ' readonly' : '';
     var autoStartActive = (options.autoStartValue === null || options.autoStartValue === undefined || options.autoStartValue === true);
 
     return '<div class="form-grid">' +
         '<div class="form-group">' +
             '<label for="field-name">名称</label>' +
-            '<input type="text" id="field-name" value="' + escapeAttr(options.nameValue || '') + '"' + nameReadonlyAttr + ' required>' +
+            '<input type="text" id="field-name" value=""' + nameReadonlyAttr + ' required>' +
             '<span class="field-error" id="error-name"></span>' +
         '</div>' +
         '<div class="form-group">' +
             '<label for="field-port">端口</label>' +
-            '<input type="number" id="field-port" value="' + (options.portValue || '') + '" min="1" max="65535" required>' +
+            '<input type="number" id="field-port" value="" min="1" max="65535" required>' +
             '<span class="field-error" id="error-port"></span>' +
         '</div>' +
         '<div class="form-group full-width">' +
             '<label for="field-start-command">启动命令</label>' +
-            '<input type="text" id="field-start-command" value="' + escapeAttr(options.cmdValue || '') + '" required>' +
+            '<input type="text" id="field-start-command" value="" required>' +
             '<span class="field-error" id="error-start-command"></span>' +
         '</div>' +
         '<div class="form-group">' +
             '<label for="field-startup-timeout">启动超时(秒)</label>' +
-            '<input type="number" id="field-startup-timeout" value="' + (options.timeoutValue || 30) + '" min="5">' +
+            '<input type="number" id="field-startup-timeout" value="" min="5">' +
             '<span class="field-error" id="error-startup-timeout"></span>' +
         '</div>' +
         '<div class="form-group">' +
@@ -144,6 +149,14 @@ function buildInstanceFormHtml(options) {
     '</div>';
 }
 
+// Set instance form field values via DOM API (XSS-safe: avoids innerHTML with user data)
+function populateInstanceForm(options) {
+    document.getElementById('field-name').value = options.nameValue || '';
+    document.getElementById('field-port').value = options.portValue || '';
+    document.getElementById('field-start-command').value = options.cmdValue || '';
+    document.getElementById('field-startup-timeout').value = options.timeoutValue || 30;
+}
+
 // Escape HTML attribute value
 function escapeAttr(str) {
     return str.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -152,16 +165,13 @@ function escapeAttr(str) {
 // Show create instance dialog
 function showCreateDialog() {
     var formHtml = buildInstanceFormHtml({
-        nameValue: '',
         nameReadOnly: false,
-        portValue: '',
-        cmdValue: '',
-        timeoutValue: 30,
         autoStartValue: null
     });
     var footerHtml = '<button class="btn-form-cancel" onclick="closeModal()">取消</button>' +
         '<button class="btn-form-primary" id="btn-submit-form">创建</button>';
     showModal('新建实例', formHtml, footerHtml);
+    populateInstanceForm({nameValue: '', portValue: '', cmdValue: '', timeoutValue: 30});
 
     // Toggle switch handler
     var toggleEl = document.getElementById('toggle-auto-start');
@@ -249,16 +259,13 @@ function showEditDialog(instanceName) {
         if (!cfg) return;
 
         var formHtml = buildInstanceFormHtml({
-            nameValue: cfg.name,
             nameReadOnly: true,
-            portValue: cfg.port,
-            cmdValue: cfg.start_command,
-            timeoutValue: cfg.startup_timeout,
             autoStartValue: cfg.auto_start
         });
         var footerHtml = '<button class="btn-form-cancel" onclick="closeModal()">取消</button>' +
             '<button class="btn-form-primary" id="btn-submit-form">保存更改</button>';
         showModal('编辑实例 - ' + cfg.name, formHtml, footerHtml);
+        populateInstanceForm({nameValue: cfg.name, portValue: cfg.port, cmdValue: cfg.start_command, timeoutValue: cfg.startup_timeout});
 
         // Toggle switch handler
         var toggleEl = document.getElementById('toggle-auto-start');
@@ -351,18 +358,16 @@ function showCopyDialog(sourceName) {
         var suggestedPort = cfg.port + 1;
         if (suggestedPort > 65535) suggestedPort = cfg.port;
 
-        var formHtml = '<div class="source-info-box">源实例: ' + escapeAttr(sourceName) + '</div>' +
+        var formHtml = '<div class="source-info-box">源实例: <span id="source-name-display"></span></div>' +
             buildInstanceFormHtml({
-                nameValue: sourceName + '-copy',
                 nameReadOnly: false,
-                portValue: suggestedPort,
-                cmdValue: cfg.start_command,
-                timeoutValue: cfg.startup_timeout,
                 autoStartValue: cfg.auto_start
             });
         var footerHtml = '<button class="btn-form-cancel" onclick="closeModal()">取消</button>' +
             '<button class="btn-form-primary" id="btn-submit-form">复制实例</button>';
         showModal('复制实例', formHtml, footerHtml);
+        populateInstanceForm({nameValue: sourceName + '-copy', portValue: suggestedPort, cmdValue: cfg.start_command, timeoutValue: cfg.startup_timeout});
+        document.getElementById('source-name-display').textContent = sourceName;
 
         // Toggle switch handler
         var toggleEl = document.getElementById('toggle-auto-start');
@@ -484,11 +489,9 @@ function showDeleteDialog(instanceName, isRunning) {
         bodyContainer.appendChild(mainText);
         bodyContainer.appendChild(infoBox);
 
-        var bodyHtml = bodyContainer.innerHTML;
-
         var footerHtml = '<button class="btn-form-cancel" onclick="closeModal()">取消</button>' +
             '<button class="btn-form-danger" id="btn-confirm-delete">删除</button>';
-        showModal('删除实例', bodyHtml, footerHtml);
+        showModal('删除实例', bodyContainer, footerHtml);
 
         // Delete button handler
         document.getElementById('btn-confirm-delete').addEventListener('click', async function() {
