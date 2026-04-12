@@ -115,6 +115,13 @@ func NewServer(cfg *config.APIConfig, im *instance.InstanceManager, fullCfg *con
 		mux.Handle("DELETE /api/v1/instance-configs/{name}", authMiddleware(http.HandlerFunc(instanceConfigHandler.HandleDelete)))
 		mux.Handle("POST /api/v1/instance-configs/{name}/copy", authMiddleware(http.HandlerFunc(instanceConfigHandler.HandleCopy)))
 
+		// Instance lifecycle control endpoints (Phase 51: LC-01, LC-02, LC-03)
+		lifecycleHandler := NewInstanceLifecycleHandler(im, logger)
+		mux.Handle("POST /api/v1/instances/{name}/start",
+			authMiddleware(http.HandlerFunc(lifecycleHandler.HandleStart)))
+		mux.Handle("POST /api/v1/instances/{name}/stop",
+			authMiddleware(http.HandlerFunc(lifecycleHandler.HandleStop)))
+
 	// Create HTTP server
 	// SSE-07: WriteTimeout=0 to support SSE long connections
 	httpServer := &http.Server{
