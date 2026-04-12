@@ -530,8 +530,258 @@ function showDeleteDialog(instanceName, isRunning) {
     });
 }
 
-function showNanobotConfigDialog(name) {
-    showToast('即将推出', 'success');
+async function showNanobotConfigDialog(instanceName) {
+    // Helper: get nested value from object by dot-separated path
+    function getNestedValue(obj, path) {
+        var keys = path.split('.');
+        var current = obj;
+        for (var i = 0; i < keys.length; i++) {
+            if (current === null || current === undefined) return undefined;
+            current = current[keys[i]];
+        }
+        return current;
+    }
+
+    // Helper: set nested value in object, creating intermediate objects if needed
+    function setNestedValue(obj, path, value) {
+        var keys = path.split('.');
+        var current = obj;
+        for (var i = 0; i < keys.length - 1; i++) {
+            if (current[keys[i]] === null || current[keys[i]] === undefined || typeof current[keys[i]] !== 'object') {
+                current[keys[i]] = {};
+            }
+            current = current[keys[i]];
+        }
+        current[keys[keys.length - 1]] = value;
+    }
+
+    // Helper: find first provider with a non-empty apiKey
+    function findFirstApiKey(providers) {
+        if (!providers || typeof providers !== 'object') return { providerName: null, apiKey: '' };
+        var keys = Object.keys(providers);
+        for (var i = 0; i < keys.length; i++) {
+            var p = providers[keys[i]];
+            if (p && p.apiKey && typeof p.apiKey === 'string' && p.apiKey.trim() !== '') {
+                return { providerName: keys[i], apiKey: p.apiKey };
+            }
+        }
+        return { providerName: null, apiKey: '' };
+    }
+
+    // Step 1: Load current nanobot config
+    try {
+        var token = await getToken();
+        if (!token) {
+            showToast('获取认证令牌失败', 'error');
+            return;
+        }
+        var resp = await fetch('/api/v1/instances/' + encodeURIComponent(instanceName) + '/nanobot-config', {
+            headers: { 'Authorization': 'Bearer ' + token }
+        });
+        if (!resp.ok) {
+            showToast('加载 ' + instanceName + ' 配置失败', 'error');
+            return;
+        }
+        var data = await resp.json();
+        var currentConfig = data.config;
+
+        // Step 2: Build modal body HTML with hybrid editor layout
+        var bodyHtml = '<div class="hybrid-editor">' +
+            '<div class="hybrid-editor-left">' +
+                '<div class="nanobot-section-label">常用参数</div>' +
+                '<div class="form-group">' +
+                    '<label>模型</label>' +
+                    '<input type="text" id="nb-model" class="nb-field" data-path="agents.defaults.model">' +
+                '</div>' +
+                '<div class="form-group">' +
+                    '<label>提供商</label>' +
+                    '<input type="text" id="nb-provider" class="nb-field" data-path="agents.defaults.provider">' +
+                '</div>' +
+                '<div class="form-group">' +
+                    '<label>API 密钥</label>' +
+                    '<div class="api-key-wrapper">' +
+                        '<input type="password" id="nb-apikey" placeholder="输入 API 密钥...">' +
+                        '<button type="button" class="api-key-toggle" id="nb-apikey-toggle">显示</button>' +
+                    '</div>' +
+                '</div>' +
+                '<div class="form-group">' +
+                    '<label>网关端口</label>' +
+                    '<input type="number" id="nb-port" class="nb-field" data-path="gateway.port" min="1" max="65535">' +
+                '</div>' +
+                '<div class="form-group">' +
+                    '<label>Telegram Token</label>' +
+                    '<input type="text" id="nb-telegram-token" placeholder="输入 Telegram Bot Token...">' +
+                '</div>' +
+            '</div>' +
+            '<div class="hybrid-editor-right">' +
+                '<label>完整 JSON 配置</label>' +
+                '<textarea id="nb-json" class="nanobot-json-textarea"></textarea>' +
+                '<div id="nb-json-error" class="json-error"></div>' +
+            '</div>' +
+        '</div>';
+
+        // Step 3: Footer with cancel and save buttons
+        var footerHtml = '<button class="btn-form-cancel" onclick="closeModal()">取消</button>' +
+            '<button class="btn-form-primary" id="btn-save-nanobot-config">保存配置</button>';
+
+        // Step 4: Show modal and add modal-wide class
+        showModal('Nanobot 配置 - ' + instanceName, bodyHtml, footerHtml);
+        var dialog = document.querySelector('.modal-dialog');
+        if (dialog) dialog.classList.add('modal-wide');
+
+        // Step 5: Populate initial values from loaded config
+        var modelVal = getNestedValue(currentConfig, 'agents.defaults.model') || '';
+        var providerVal = getNestedValue(currentConfig, 'agents.defaults.provider') || '';
+        var portVal = getNestedValue(currentConfig, 'gateway.port') || '';
+        var telegramVal = getNestedValue(currentConfig, 'channels.telegram.token') || '';
+        var apiResult = findFirstApiKey(getNestedValue(currentConfig, 'providers'));
+
+        document.getElementById('nb-model').value = modelVal;
+        document.getElementById('nb-provider').value = providerVal;
+        document.getElementById('nb-apikey').value = apiResult.apiKey;
+        document.getElementById('nb-port').value = portVal;
+        document.getElementById('nb-telegram-token').value = telegramVal;
+        document.getElementById('nb-json').value = JSON.stringify(currentConfig, null, 2);
+
+        // Step 6: API key show/hide toggle
+        var apiKeyInput = document.getElementById('nb-apikey');
+        var apiKeyToggle = document.getElementById('nb-apikey-toggle');
+        apiKeyToggle.addEventListener('click', function() {
+            if (apiKeyInput.type === 'password') {
+                apiKeyInput.type = 'text';
+                apiKeyToggle.textContent = '隐藏';
+            } else {
+                apiKeyInput.type = 'password';
+                apiKeyToggle.textContent = '显示';
+            }
+        });
+
+        // Step 7: Bidirectional sync with syncGuard
+        var syncGuard = false;
+
+        // Form -> JSON sync: attach 'input' listeners to all form fields
+        var formFields = ['nb-model', 'nb-provider', 'nb-apikey', 'nb-port', 'nb-telegram-token'];
+        formFields.forEach(function(fieldId) {
+            document.getElementById(fieldId).addEventListener('input', function() {
+                if (syncGuard) return;
+
+                var jsonStr = document.getElementById('nb-json').value;
+                try {
+                    var jsonObj = JSON.parse(jsonStr);
+
+                    // Update corresponding path in JSON object
+                    if (fieldId === 'nb-model') {
+                        setNestedValue(jsonObj, 'agents.defaults.model', this.value);
+                    } else if (fieldId === 'nb-provider') {
+                        setNestedValue(jsonObj, 'agents.defaults.provider', this.value);
+                    } else if (fieldId === 'nb-apikey') {
+                        // Update the apiKey of the current provider
+                        var currentProvider = document.getElementById('nb-provider').value.trim();
+                        var providers = getNestedValue(jsonObj, 'providers');
+                        if (providers && currentProvider && providers[currentProvider]) {
+                            providers[currentProvider].apiKey = this.value;
+                        } else if (apiResult.providerName && providers && providers[apiResult.providerName]) {
+                            providers[apiResult.providerName].apiKey = this.value;
+                        } else if (providers) {
+                            // Create provider entry if needed
+                            if (currentProvider) {
+                                providers[currentProvider] = providers[currentProvider] || {};
+                                providers[currentProvider].apiKey = this.value;
+                            }
+                        }
+                    } else if (fieldId === 'nb-port') {
+                        var portNum = parseInt(this.value, 10);
+                        setNestedValue(jsonObj, 'gateway.port', isNaN(portNum) ? this.value : portNum);
+                    } else if (fieldId === 'nb-telegram-token') {
+                        setNestedValue(jsonObj, 'channels.telegram.token', this.value);
+                    }
+
+                    syncGuard = true;
+                    document.getElementById('nb-json').value = JSON.stringify(jsonObj, null, 2);
+                    syncGuard = false;
+                    document.getElementById('nb-json-error').textContent = '';
+                } catch (e) {
+                    // JSON parse error - don't update textarea
+                }
+            });
+        });
+
+        // JSON -> Form sync: attach 'input' listener to textarea
+        document.getElementById('nb-json').addEventListener('input', function() {
+            if (syncGuard) return;
+
+            var jsonStr = this.value;
+            try {
+                var jsonObj = JSON.parse(jsonStr);
+                document.getElementById('nb-json-error').textContent = '';
+
+                syncGuard = true;
+                document.getElementById('nb-model').value = getNestedValue(jsonObj, 'agents.defaults.model') || '';
+                document.getElementById('nb-provider').value = getNestedValue(jsonObj, 'agents.defaults.provider') || '';
+                document.getElementById('nb-port').value = getNestedValue(jsonObj, 'gateway.port') || '';
+
+                // API key: find first non-empty apiKey from providers
+                var apiKeyResult = findFirstApiKey(getNestedValue(jsonObj, 'providers'));
+                document.getElementById('nb-apikey').value = apiKeyResult.apiKey;
+
+                document.getElementById('nb-telegram-token').value = getNestedValue(jsonObj, 'channels.telegram.token') || '';
+                syncGuard = false;
+            } catch (e) {
+                document.getElementById('nb-json-error').textContent = 'JSON 格式错误: ' + e.message;
+            }
+        });
+
+        // Step 8: Save handler
+        document.getElementById('btn-save-nanobot-config').addEventListener('click', async function() {
+            var saveBtn = this;
+            var jsonStr = document.getElementById('nb-json').value;
+            var jsonObj;
+            try {
+                jsonObj = JSON.parse(jsonStr);
+            } catch (e) {
+                document.getElementById('nb-json-error').textContent = 'JSON 格式错误: ' + e.message;
+                return;
+            }
+
+            saveBtn.disabled = true;
+            saveBtn.textContent = '保存中...';
+
+            try {
+                var tkn = await getToken();
+                if (!tkn) {
+                    showToast('获取认证令牌失败', 'error');
+                    saveBtn.disabled = false;
+                    saveBtn.textContent = '保存配置';
+                    return;
+                }
+                var saveResp = await fetch('/api/v1/instances/' + encodeURIComponent(instanceName) + '/nanobot-config', {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': 'Bearer ' + tkn
+                    },
+                    body: JSON.stringify(jsonObj)
+                });
+
+                if (saveResp.ok) {
+                    closeModal();
+                    showToast('配置已保存。重启实例以应用更改。', 'success');
+                } else {
+                    var errData = await saveResp.json().catch(function() { return {}; });
+                    showToast('保存配置失败: ' + (errData.message || errData.error || '未知错误'), 'error');
+                    saveBtn.disabled = false;
+                    saveBtn.textContent = '保存配置';
+                }
+            } catch (e) {
+                showToast('保存配置失败: ' + e.message, 'error');
+                saveBtn.disabled = false;
+                saveBtn.textContent = '保存配置';
+            }
+        });
+
+    } catch (e) {
+        showToast('加载 ' + instanceName + ' 配置失败: ' + e.message, 'error');
+    }
 }
 
 // Load instance configs and status from APIs

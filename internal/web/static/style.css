@@ -835,3 +835,97 @@ main {
     font-size: 13px;
     color: #1e40af;
 }
+
+/* Nanobot config hybrid editor (D-09: left-right split) */
+.hybrid-editor {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--spacing-md);
+    min-height: 400px;
+}
+@media (max-width: 768px) {
+    .hybrid-editor {
+        grid-template-columns: 1fr;
+    }
+}
+.hybrid-editor-left {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-md);
+    border-right: 1px solid #e5e7eb;
+    padding-right: var(--spacing-md);
+}
+.hybrid-editor-right {
+    display: flex;
+    flex-direction: column;
+}
+.hybrid-editor-right label {
+    font-size: 13px;
+    font-weight: 600;
+    color: #333;
+    margin-bottom: var(--spacing-xs);
+}
+.nanobot-json-textarea {
+    flex: 1;
+    min-height: 400px;
+    padding: var(--spacing-sm);
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    font-family: 'Consolas', 'Monaco', monospace;
+    font-size: 12px;
+    line-height: 1.5;
+    resize: vertical;
+    background-color: #fafafa;
+    color: #333;
+    tab-size: 2;
+}
+.nanobot-json-textarea:focus {
+    outline: none;
+    border-color: #2563eb;
+    box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.2);
+}
+
+/* Nanobot editor section labels */
+.nanobot-section-label {
+    font-size: 14px;
+    font-weight: 600;
+    color: #2563eb;
+    margin-bottom: var(--spacing-xs);
+    padding-bottom: var(--spacing-xs);
+    border-bottom: 1px solid #e0e7ff;
+}
+
+/* Wider modal for nanobot config (D-09: space for split view) */
+.modal-dialog.modal-wide {
+    max-width: 900px;
+    width: 90vw;
+}
+
+/* JSON parse error indicator */
+.json-error {
+    color: #dc2626;
+    font-size: 12px;
+    margin-top: var(--spacing-xs);
+}
+
+/* API key show/hide toggle */
+.api-key-wrapper {
+    position: relative;
+    display: flex;
+    gap: var(--spacing-xs);
+}
+.api-key-wrapper input {
+    flex: 1;
+}
+.api-key-toggle {
+    padding: var(--spacing-xs) var(--spacing-sm);
+    background-color: #f5f5f5;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    font-size: 12px;
+    cursor: pointer;
+    white-space: nowrap;
+}
+.api-key-toggle:hover {
+    background-color: #e5e5e5;
+}
