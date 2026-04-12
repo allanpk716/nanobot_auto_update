@@ -140,7 +140,11 @@ Plans:
   1. User can start a stopped instance via POST /api/v1/instances/{name}/start and the instance begins listening on its configured port
   2. User can stop a running instance via POST /api/v1/instances/{name}/stop and the instance process terminates
   3. All CRUD and lifecycle endpoints return 401 Unauthorized when Bearer token is missing or incorrect (reuses existing constant-time auth)
-**Plans**: TBD
+**Plans**: 2 plans
+
+Plans:
+- [ ] 51-01-PLAN.md — InstanceLifecycleHandler with HandleStart/HandleStop + route registration with auth middleware
+- [ ] 51-02-PLAN.md — Comprehensive handler tests for start/stop/auth/error scenarios
 
 ### Phase 52: Nanobot Config Management API
 **Goal**: Users can read and write nanobot's own config.json for any instance through the API, with automatic directory and default config creation
@@ -175,9 +179,9 @@ Phases execute in numeric order: 50 -> 51 -> 52 -> 53
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
 | 50. Instance Config CRUD API | v0.12 | 2/2 | Complete    | 2026-04-11 |
-| 51. Instance Lifecycle Control API | v0.12 | 0/? | Not started | - |
+| 51. Instance Lifecycle Control API | v0.12 | 0/2 | Planned | - |
 | 52. Nanobot Config Management API | v0.12 | 0/? | Not started | - |
 | 53. Instance Management UI | v0.12 | 0/? | Not started | - |
 
 ---
-*Last updated: 2026-04-11 (Phase 50 planned)*
+*Last updated: 2026-04-11 (Phase 51 planned)*
