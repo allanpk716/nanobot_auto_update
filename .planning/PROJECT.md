@@ -88,6 +88,11 @@
 - ✓ TELE-07: 未产生 trigger 日志的实例无监控开销 (TestMonitor_NoTriggerNoNotifications)
 - ✓ TELE-09: 实例停止时取消监控,不发送虚假通知 (TestMonitor_StopCancelsMonitor)
 
+**v0.12 Lifecycle Control API** — 2026-04-12 (Phase 51):
+- ✓ LC-01: POST /api/v1/instances/{name}/start 启动已停止的实例 (409 已运行)
+- ✓ LC-02: POST /api/v1/instances/{name}/stop 停止运行中的实例 (409 已停止)
+- ✓ LC-03: 生命周期端点 Bearer Token 认证 (401 未授权/错误 token)
+
 **v0.11 Windows 服务自启动** — 2026-04-11 (Phases 46-49):
 - ✓ SVC-01: svc.IsWindowsService() 检测运行模式，自动选择服务/控制台模式
 - ✓ SVC-02: svc.Handler Execute 方法处理服务启动/停止/关机请求
@@ -342,10 +347,10 @@ auto_start: false  # true: 注册为 Windows 服务, false: 控制台模式
 ## Current State
 
 **Shipped:** v0.11 Windows 服务自启动 (2026-04-11)
-**In Progress:** v0.12 实例管理与配置编辑
-**Total:** 11 milestones shipped, 49 phases, ~21,492 LOC Go
+**In Progress:** v0.12 实例管理与配置编辑 — Phase 51 (Lifecycle API) complete
+**Total:** 11 milestones shipped, 51 phases, ~21,492 LOC Go
 
-*Last updated: 2026-04-11 after v0.12 milestone started*
+*Last updated: 2026-04-12 after Phase 51 completion*
 
 ## Evolution
 
