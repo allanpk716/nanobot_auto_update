@@ -111,7 +111,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 50: Instance Config CRUD API** - Backend API for creating, reading, updating, deleting instance configurations with validation (completed 2026-04-11)
 - [x] **Phase 51: Instance Lifecycle Control API** - Backend API for start/stop operations on individual instances with auth (completed 2026-04-12)
-- [x] **Phase 52: Nanobot Config Management API** - Backend API for reading/writing nanobot config.json per instance with auto-directory setup (completed 2026-04-12)
+- [x] **Phase 52: Nanobot Config Management API** - Backend API for reading/writing nanobot config.json per instance with auto-directory setup (completed 2026-04-12)
 - [ ] **Phase 53: Instance Management UI** - Full web interface with instance cards, CRUD dialogs, lifecycle controls, and nanobot config editor
 
 ## Phase Details
@@ -172,8 +172,12 @@ Plans:
   4. User can copy an instance via dialog with new name/port, and both auto-updater and nanobot configs are cloned
   5. User can delete an instance with a confirmation dialog that warns if the instance is running
   6. User can edit nanobot config via a hybrid editor with structured form for common fields (API key, model, telegram token) and raw JSON text editor
-**Plans**: TBD
-**UI hint**: yes
+**Plans**: 3 plans
+
+Plans:
+- [ ] 53-01-PLAN.md — Instance card redesign + modal/toast system + authenticated API integration (UI-01)
+- [ ] 53-02-PLAN.md — Create/Edit/Copy/Delete CRUD dialogs with form validation (UI-02, UI-03, UI-04, UI-05)
+- [ ] 53-03-PLAN.md — Nanobot config hybrid editor with bidirectional sync (UI-06)
 
 ## Progress
 
@@ -185,7 +189,7 @@ Phases execute in numeric order: 50 -> 51 -> 52 -> 53
 | 50. Instance Config CRUD API | v0.12 | 2/2 | Complete    | 2026-04-11 |
 | 51. Instance Lifecycle Control API | v0.12 | 2/2 | Complete    | 2026-04-12 |
 | 52. Nanobot Config Management API | v0.12 | 2/2 | Complete    | 2026-04-12 |
-| 53. Instance Management UI | v0.12 | 0/? | Not started | - |
+| 53. Instance Management UI | v0.12 | 0/3 | Planned | - |
 
 ---
-*Last updated: 2026-04-12 (Phase 52 planned)*
+*Last updated: 2026-04-12 (Phase 53 planned)*
