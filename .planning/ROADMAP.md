@@ -111,7 +111,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 50: Instance Config CRUD API** - Backend API for creating, reading, updating, deleting instance configurations with validation (completed 2026-04-11)
 - [x] **Phase 51: Instance Lifecycle Control API** - Backend API for start/stop operations on individual instances with auth (completed 2026-04-12)
-- [ ] **Phase 52: Nanobot Config Management API** - Backend API for reading/writing nanobot config.json per instance with auto-directory setup
+- [x] **Phase 52: Nanobot Config Management API** - Backend API for reading/writing nanobot config.json per instance with auto-directory setup (completed 2026-04-12)
 - [ ] **Phase 53: Instance Management UI** - Full web interface with instance cards, CRUD dialogs, lifecycle controls, and nanobot config editor
 
 ## Phase Details
@@ -158,8 +158,8 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 52-01-PLAN.md — NanobotConfigManager core (path parsing, default config, file read/write) + NanobotConfigHandler GET/PUT endpoints + route registration
-- [ ] 52-02-PLAN.md — Callback injection into InstanceConfigHandler for create/copy flows + comprehensive tests
+- [x] 52-01-PLAN.md — NanobotConfigManager core (path parsing, default config, file read/write) + NanobotConfigHandler GET/PUT endpoints + route registration
+- [x] 52-02-PLAN.md — Callback injection into InstanceConfigHandler for create/copy flows + comprehensive tests
 
 ### Phase 53: Instance Management UI
 **Goal**: Users can manage all instances and nanobot configurations through a visual web interface without touching config files
@@ -184,7 +184,7 @@ Phases execute in numeric order: 50 -> 51 -> 52 -> 53
 |-------|-----------|----------------|--------|-----------|
 | 50. Instance Config CRUD API | v0.12 | 2/2 | Complete    | 2026-04-11 |
 | 51. Instance Lifecycle Control API | v0.12 | 2/2 | Complete    | 2026-04-12 |
-| 52. Nanobot Config Management API | v0.12 | 0/2 | Planned | - |
+| 52. Nanobot Config Management API | v0.12 | 2/2 | Complete    | 2026-04-12 |
 | 53. Instance Management UI | v0.12 | 0/? | Not started | - |
 
 ---
