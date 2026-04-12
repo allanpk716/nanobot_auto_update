@@ -4,14 +4,14 @@ milestone: v0.12
 milestone_name: 实例管理与配置编辑
 status: executing
 stopped_at: Phase 50 context gathered
-last_updated: "2026-04-12T02:04:18.403Z"
-last_activity: 2026-04-12 -- Phase 51 planning complete
+last_updated: "2026-04-12T02:42:54.262Z"
+last_activity: 2026-04-12
 progress:
   total_phases: 4
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 4
-  completed_plans: 2
-  percent: 50
+  completed_plans: 4
+  percent: 100
 ---
 
 # Project State
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-11)
 
 **Core value:** 自动保持 nanobot 处于最新版本,无需用户手动干预。
-**Current focus:** Phase 50 — instance-config-crud-api
+**Current focus:** Phase 51 — instance-lifecycle-control-api
 
 ## Current Position
 
-Phase: 51
+Phase: 52
 Plan: Not started
-Status: Ready to execute
-Last activity: 2026-04-12 -- Phase 51 planning complete
+Status: Executing Phase 51
+Last activity: 2026-04-12
 
 Progress: [░░░░░░░░░░] 0%
 

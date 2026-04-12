@@ -110,7 +110,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 **Milestone Goal:** 在 Web 后台界面完整管理 nanobot 实例的生命周期（CRUD + 启停）和 nanobot 自身配置文件
 
 - [x] **Phase 50: Instance Config CRUD API** - Backend API for creating, reading, updating, deleting instance configurations with validation (completed 2026-04-11)
-- [ ] **Phase 51: Instance Lifecycle Control API** - Backend API for start/stop operations on individual instances with auth
+- [x] **Phase 51: Instance Lifecycle Control API** - Backend API for start/stop operations on individual instances with auth (completed 2026-04-12)
 - [ ] **Phase 52: Nanobot Config Management API** - Backend API for reading/writing nanobot config.json per instance with auto-directory setup
 - [ ] **Phase 53: Instance Management UI** - Full web interface with instance cards, CRUD dialogs, lifecycle controls, and nanobot config editor
 
@@ -143,8 +143,8 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 51-01-PLAN.md — InstanceLifecycleHandler with HandleStart/HandleStop + route registration with auth middleware
-- [ ] 51-02-PLAN.md — Comprehensive handler tests for start/stop/auth/error scenarios
+- [x] 51-01-PLAN.md — InstanceLifecycleHandler with HandleStart/HandleStop + route registration with auth middleware
+- [x] 51-02-PLAN.md — Comprehensive handler tests for start/stop/auth/error scenarios
 
 ### Phase 52: Nanobot Config Management API
 **Goal**: Users can read and write nanobot's own config.json for any instance through the API, with automatic directory and default config creation
@@ -179,7 +179,7 @@ Phases execute in numeric order: 50 -> 51 -> 52 -> 53
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
 | 50. Instance Config CRUD API | v0.12 | 2/2 | Complete    | 2026-04-11 |
-| 51. Instance Lifecycle Control API | v0.12 | 0/2 | Planned | - |
+| 51. Instance Lifecycle Control API | v0.12 | 2/2 | Complete    | 2026-04-12 |
 | 52. Nanobot Config Management API | v0.12 | 0/? | Not started | - |
 | 53. Instance Management UI | v0.12 | 0/? | Not started | - |
 
