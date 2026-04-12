@@ -329,12 +329,205 @@ function showEditDialog(instanceName) {
     });
 }
 
-function showCopyDialog(name) {
-    showToast('即将推出', 'success');
+// Show copy instance dialog
+function showCopyDialog(sourceName) {
+    // Fetch source instance config
+    getToken().then(function(token) {
+        if (!token) {
+            showToast('获取认证令牌失败', 'error');
+            return;
+        }
+        return fetch('/api/v1/instance-configs/' + encodeURIComponent(sourceName), {
+            headers: { 'Authorization': 'Bearer ' + token }
+        });
+    }).then(function(resp) {
+        if (!resp || !resp.ok) {
+            throw new Error('获取实例配置失败');
+        }
+        return resp.json();
+    }).then(function(cfg) {
+        if (!cfg) return;
+
+        var suggestedPort = cfg.port + 1;
+        if (suggestedPort > 65535) suggestedPort = cfg.port;
+
+        var formHtml = '<div class="source-info-box">源实例: ' + escapeAttr(sourceName) + '</div>' +
+            buildInstanceFormHtml({
+                nameValue: sourceName + '-copy',
+                nameReadOnly: false,
+                portValue: suggestedPort,
+                cmdValue: cfg.start_command,
+                timeoutValue: cfg.startup_timeout,
+                autoStartValue: cfg.auto_start
+            });
+        var footerHtml = '<button class="btn-form-cancel" onclick="closeModal()">取消</button>' +
+            '<button class="btn-form-primary" id="btn-submit-form">复制实例</button>';
+        showModal('复制实例', formHtml, footerHtml);
+
+        // Toggle switch handler
+        var toggleEl = document.getElementById('toggle-auto-start');
+        var toggleLabel = document.getElementById('toggle-auto-start-label');
+        toggleEl.addEventListener('click', function() {
+            toggleEl.classList.toggle('active');
+            toggleLabel.textContent = toggleEl.classList.contains('active') ? '开启' : '关闭';
+        });
+
+        // Submit button handler
+        document.getElementById('btn-submit-form').addEventListener('click', async function() {
+            if (!validateInstanceForm()) return;
+
+            var submitBtn = this;
+            submitBtn.disabled = true;
+            submitBtn.textContent = '复制中...';
+
+            var toggleEl = document.getElementById('toggle-auto-start');
+            var autoStart = toggleEl.classList.contains('active');
+            var newName = document.getElementById('field-name').value.trim();
+
+            var body = {
+                name: newName,
+                port: parseInt(document.getElementById('field-port').value, 10),
+                start_command: document.getElementById('field-start-command').value.trim(),
+                startup_timeout: parseInt(document.getElementById('field-startup-timeout').value, 10) || 30,
+                auto_start: autoStart
+            };
+
+            try {
+                var token = await getToken();
+                if (!token) {
+                    showToast('获取认证令牌失败', 'error');
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = '复制实例';
+                    return;
+                }
+                var resp = await fetch('/api/v1/instance-configs/' + encodeURIComponent(sourceName) + '/copy', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': 'Bearer ' + token
+                    },
+                    body: JSON.stringify(body)
+                });
+                var data = await resp.json();
+
+                if (resp.ok) {
+                    closeModal();
+                    showToast('实例已复制为 ' + newName, 'success');
+                    loadInstances();
+                } else if (resp.status === 422 && data.errors) {
+                    displayServerFieldErrors(data.errors);
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = '复制实例';
+                } else {
+                    showToast('复制实例失败: ' + (data.message || data.error || '未知错误'), 'error');
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = '复制实例';
+                }
+            } catch (e) {
+                showToast('复制实例失败: ' + e.message, 'error');
+                submitBtn.disabled = false;
+                submitBtn.textContent = '复制实例';
+            }
+        });
+    }).catch(function(e) {
+        showToast('获取实例配置失败: ' + e.message, 'error');
+    });
 }
 
-function showDeleteDialog(name, isRunning) {
-    showToast('即将推出', 'success');
+// Show delete instance confirmation dialog
+function showDeleteDialog(instanceName, isRunning) {
+    var warningHtml = '';
+    if (isRunning) {
+        warningHtml = '<div class="delete-warning">警告: 该实例正在运行中，删除前将自动停止该实例。</div>';
+    }
+
+    // Fetch instance config for details
+    getToken().then(function(token) {
+        if (!token) {
+            showToast('获取认证令牌失败', 'error');
+            return;
+        }
+        return fetch('/api/v1/instance-configs/' + encodeURIComponent(instanceName), {
+            headers: { 'Authorization': 'Bearer ' + token }
+        });
+    }).then(function(resp) {
+        if (!resp || !resp.ok) {
+            throw new Error('获取实例配置失败');
+        }
+        return resp.json();
+    }).then(function(cfg) {
+        if (!cfg) return;
+
+        var mainText = document.createElement('div');
+        mainText.style.marginBottom = 'var(--spacing-md)';
+        mainText.style.fontSize = '16px';
+        var questionText = document.createElement('span');
+        questionText.textContent = '确定要删除实例 "' + instanceName + '" 吗？';
+        mainText.appendChild(questionText);
+
+        var infoBox = document.createElement('div');
+        infoBox.className = 'delete-info-box';
+        var portInfo = document.createElement('div');
+        portInfo.textContent = '端口: ' + cfg.port;
+        infoBox.appendChild(portInfo);
+        var cmdInfo = document.createElement('div');
+        cmdInfo.textContent = '命令: ' + cfg.start_command;
+        infoBox.appendChild(cmdInfo);
+
+        var bodyContainer = document.createElement('div');
+        if (warningHtml) {
+            var warningDiv = document.createElement('div');
+            warningDiv.className = 'delete-warning';
+            warningDiv.textContent = '警告: 该实例正在运行中，删除前将自动停止该实例。';
+            bodyContainer.appendChild(warningDiv);
+        }
+        bodyContainer.appendChild(mainText);
+        bodyContainer.appendChild(infoBox);
+
+        var bodyHtml = bodyContainer.innerHTML;
+
+        var footerHtml = '<button class="btn-form-cancel" onclick="closeModal()">取消</button>' +
+            '<button class="btn-form-danger" id="btn-confirm-delete">删除</button>';
+        showModal('删除实例', bodyHtml, footerHtml);
+
+        // Delete button handler
+        document.getElementById('btn-confirm-delete').addEventListener('click', async function() {
+            var deleteBtn = this;
+            deleteBtn.disabled = true;
+            deleteBtn.textContent = '删除中...';
+
+            try {
+                var token = await getToken();
+                if (!token) {
+                    showToast('获取认证令牌失败', 'error');
+                    deleteBtn.disabled = false;
+                    deleteBtn.textContent = '删除';
+                    return;
+                }
+                var resp = await fetch('/api/v1/instance-configs/' + encodeURIComponent(instanceName), {
+                    method: 'DELETE',
+                    headers: { 'Authorization': 'Bearer ' + token }
+                });
+
+                if (resp.ok) {
+                    closeModal();
+                    showToast('实例 ' + instanceName + ' 已删除', 'success');
+                    loadInstances();
+                } else {
+                    var data = await resp.json().catch(function() { return {}; });
+                    showToast('删除失败: ' + (data.message || data.error || '未知错误'), 'error');
+                    deleteBtn.disabled = false;
+                    deleteBtn.textContent = '删除';
+                }
+            } catch (e) {
+                showToast('删除失败: ' + e.message, 'error');
+                deleteBtn.disabled = false;
+                deleteBtn.textContent = '删除';
+            }
+        });
+    }).catch(function(e) {
+        showToast('获取实例配置失败: ' + e.message, 'error');
+    });
 }
 
 function showNanobotConfigDialog(name) {

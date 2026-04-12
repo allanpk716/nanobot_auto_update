@@ -786,3 +786,52 @@ main {
 .btn-form-cancel:hover {
     background-color: #f5f5f5;
 }
+
+/* Delete dialog styles */
+.delete-warning {
+    background-color: #fef2f2;
+    border: 1px solid #fecaca;
+    border-radius: 4px;
+    padding: var(--spacing-md);
+    margin-bottom: var(--spacing-md);
+    color: #991b1b;
+    font-weight: 500;
+}
+.delete-info-box {
+    background-color: #f9fafb;
+    border: 1px solid #e5e7eb;
+    border-radius: 4px;
+    padding: var(--spacing-sm) var(--spacing-md);
+    margin: var(--spacing-md) 0;
+    font-size: 13px;
+    color: #333;
+}
+.btn-form-danger {
+    padding: var(--spacing-sm) var(--spacing-lg);
+    background-color: #dc2626;
+    color: #ffffff;
+    border: 1px solid #dc2626;
+    border-radius: 4px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+.btn-form-danger:hover:not(:disabled) {
+    background-color: #b91c1c;
+}
+.btn-form-danger:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+/* Copy dialog source info */
+.source-info-box {
+    background-color: #e0e7ff;
+    border: 1px solid #a5b4fc;
+    border-radius: 4px;
+    padding: var(--spacing-sm) var(--spacing-md);
+    margin-bottom: var(--spacing-md);
+    font-size: 13px;
+    color: #1e40af;
+}
