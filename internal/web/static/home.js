@@ -52,13 +52,281 @@ function closeModal() {
     document.getElementById('modal-container').style.display = 'none';
 }
 
-// Placeholder dialog functions for Plans 02 and 03
-function showCreateDialog() {
-    showToast('即将推出', 'success');
+// Validate instance form fields, returns true if valid
+function validateInstanceForm() {
+    var valid = true;
+    var nameInput = document.getElementById('field-name');
+    var portInput = document.getElementById('field-port');
+    var cmdInput = document.getElementById('field-start-command');
+    var timeoutInput = document.getElementById('field-startup-timeout');
+
+    // Clear previous errors
+    document.querySelectorAll('.field-error').forEach(function(el) { el.textContent = ''; });
+
+    // Name validation
+    var name = nameInput.value.trim();
+    if (!name) {
+        document.getElementById('error-name').textContent = '名称不能为空';
+        valid = false;
+    } else if (name.length > 64) {
+        document.getElementById('error-name').textContent = '名称长度不能超过64个字符';
+        valid = false;
+    }
+
+    // Port validation
+    var port = parseInt(portInput.value, 10);
+    if (isNaN(port) || port < 1 || port > 65535) {
+        document.getElementById('error-port').textContent = '端口必须在1-65535之间';
+        valid = false;
+    }
+
+    // Start command validation
+    if (!cmdInput.value.trim()) {
+        document.getElementById('error-start-command').textContent = '启动命令不能为空';
+        valid = false;
+    }
+
+    // Startup timeout validation
+    var timeout = parseInt(timeoutInput.value, 10);
+    if (isNaN(timeout) || (timeout > 0 && timeout < 5)) {
+        document.getElementById('error-startup-timeout').textContent = '启动超时不能小于5秒';
+        valid = false;
+    }
+
+    return valid;
 }
 
-function showEditDialog(name) {
-    showToast('即将推出', 'success');
+// Display server validation errors (422) in form
+function displayServerFieldErrors(errors) {
+    if (!errors || !errors.length) return;
+    errors.forEach(function(err) {
+        var errorEl = document.getElementById('error-' + err.field);
+        if (errorEl) {
+            errorEl.textContent = err.message;
+        }
+    });
+}
+
+// Build instance form HTML for create/edit dialogs
+function buildInstanceFormHtml(options) {
+    // options: { nameValue, nameReadOnly, portValue, cmdValue, timeoutValue, autoStartValue }
+    var nameReadonlyAttr = options.nameReadOnly ? ' readonly' : '';
+    var autoStartActive = (options.autoStartValue === null || options.autoStartValue === undefined || options.autoStartValue === true);
+
+    return '<div class="form-grid">' +
+        '<div class="form-group">' +
+            '<label for="field-name">名称</label>' +
+            '<input type="text" id="field-name" value="' + escapeAttr(options.nameValue || '') + '"' + nameReadonlyAttr + ' required>' +
+            '<span class="field-error" id="error-name"></span>' +
+        '</div>' +
+        '<div class="form-group">' +
+            '<label for="field-port">端口</label>' +
+            '<input type="number" id="field-port" value="' + (options.portValue || '') + '" min="1" max="65535" required>' +
+            '<span class="field-error" id="error-port"></span>' +
+        '</div>' +
+        '<div class="form-group full-width">' +
+            '<label for="field-start-command">启动命令</label>' +
+            '<input type="text" id="field-start-command" value="' + escapeAttr(options.cmdValue || '') + '" required>' +
+            '<span class="field-error" id="error-start-command"></span>' +
+        '</div>' +
+        '<div class="form-group">' +
+            '<label for="field-startup-timeout">启动超时(秒)</label>' +
+            '<input type="number" id="field-startup-timeout" value="' + (options.timeoutValue || 30) + '" min="5">' +
+            '<span class="field-error" id="error-startup-timeout"></span>' +
+        '</div>' +
+        '<div class="form-group">' +
+            '<label>自动启动</label>' +
+            '<div class="toggle-container">' +
+                '<div class="toggle-switch' + (autoStartActive ? ' active' : '') + '" id="toggle-auto-start"></div>' +
+                '<span class="toggle-label" id="toggle-auto-start-label">' + (autoStartActive ? '开启' : '关闭') + '</span>' +
+            '</div>' +
+        '</div>' +
+    '</div>';
+}
+
+// Escape HTML attribute value
+function escapeAttr(str) {
+    return str.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+// Show create instance dialog
+function showCreateDialog() {
+    var formHtml = buildInstanceFormHtml({
+        nameValue: '',
+        nameReadOnly: false,
+        portValue: '',
+        cmdValue: '',
+        timeoutValue: 30,
+        autoStartValue: null
+    });
+    var footerHtml = '<button class="btn-form-cancel" onclick="closeModal()">取消</button>' +
+        '<button class="btn-form-primary" id="btn-submit-form">创建</button>';
+    showModal('新建实例', formHtml, footerHtml);
+
+    // Toggle switch handler
+    var toggleEl = document.getElementById('toggle-auto-start');
+    var toggleLabel = document.getElementById('toggle-auto-start-label');
+    toggleEl.addEventListener('click', function() {
+        toggleEl.classList.toggle('active');
+        toggleLabel.textContent = toggleEl.classList.contains('active') ? '开启' : '关闭';
+    });
+
+    // Submit button handler
+    document.getElementById('btn-submit-form').addEventListener('click', async function() {
+        if (!validateInstanceForm()) return;
+
+        var submitBtn = this;
+        submitBtn.disabled = true;
+        submitBtn.textContent = '创建中...';
+
+        var toggleEl = document.getElementById('toggle-auto-start');
+        var autoStart = toggleEl.classList.contains('active');
+
+        var body = {
+            name: document.getElementById('field-name').value.trim(),
+            port: parseInt(document.getElementById('field-port').value, 10),
+            start_command: document.getElementById('field-start-command').value.trim(),
+            startup_timeout: parseInt(document.getElementById('field-startup-timeout').value, 10) || 30,
+            auto_start: autoStart
+        };
+
+        try {
+            var token = await getToken();
+            if (!token) {
+                showToast('获取认证令牌失败', 'error');
+                submitBtn.disabled = false;
+                submitBtn.textContent = '创建';
+                return;
+            }
+            var resp = await fetch('/api/v1/instance-configs', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': 'Bearer ' + token
+                },
+                body: JSON.stringify(body)
+            });
+            var data = await resp.json();
+
+            if (resp.ok) {
+                closeModal();
+                showToast('实例 ' + body.name + ' 创建成功', 'success');
+                loadInstances();
+            } else if (resp.status === 422 && data.errors) {
+                displayServerFieldErrors(data.errors);
+                submitBtn.disabled = false;
+                submitBtn.textContent = '创建';
+            } else {
+                showToast('创建实例失败: ' + (data.message || data.error || '未知错误'), 'error');
+                submitBtn.disabled = false;
+                submitBtn.textContent = '创建';
+            }
+        } catch (e) {
+            showToast('创建实例失败: ' + e.message, 'error');
+            submitBtn.disabled = false;
+            submitBtn.textContent = '创建';
+        }
+    });
+}
+
+// Show edit instance dialog
+function showEditDialog(instanceName) {
+    // Fetch current config first
+    getToken().then(function(token) {
+        if (!token) {
+            showToast('获取认证令牌失败', 'error');
+            return;
+        }
+        return fetch('/api/v1/instance-configs/' + encodeURIComponent(instanceName), {
+            headers: { 'Authorization': 'Bearer ' + token }
+        });
+    }).then(function(resp) {
+        if (!resp || !resp.ok) {
+            throw new Error('获取实例配置失败');
+        }
+        return resp.json();
+    }).then(function(cfg) {
+        if (!cfg) return;
+
+        var formHtml = buildInstanceFormHtml({
+            nameValue: cfg.name,
+            nameReadOnly: true,
+            portValue: cfg.port,
+            cmdValue: cfg.start_command,
+            timeoutValue: cfg.startup_timeout,
+            autoStartValue: cfg.auto_start
+        });
+        var footerHtml = '<button class="btn-form-cancel" onclick="closeModal()">取消</button>' +
+            '<button class="btn-form-primary" id="btn-submit-form">保存更改</button>';
+        showModal('编辑实例 - ' + cfg.name, formHtml, footerHtml);
+
+        // Toggle switch handler
+        var toggleEl = document.getElementById('toggle-auto-start');
+        var toggleLabel = document.getElementById('toggle-auto-start-label');
+        toggleEl.addEventListener('click', function() {
+            toggleEl.classList.toggle('active');
+            toggleLabel.textContent = toggleEl.classList.contains('active') ? '开启' : '关闭';
+        });
+
+        // Submit button handler
+        document.getElementById('btn-submit-form').addEventListener('click', async function() {
+            if (!validateInstanceForm()) return;
+
+            var submitBtn = this;
+            submitBtn.disabled = true;
+            submitBtn.textContent = '保存中...';
+
+            var toggleEl = document.getElementById('toggle-auto-start');
+            var autoStart = toggleEl.classList.contains('active');
+
+            var body = {
+                name: cfg.name,
+                port: parseInt(document.getElementById('field-port').value, 10),
+                start_command: document.getElementById('field-start-command').value.trim(),
+                startup_timeout: parseInt(document.getElementById('field-startup-timeout').value, 10) || 30,
+                auto_start: autoStart
+            };
+
+            try {
+                var token = await getToken();
+                if (!token) {
+                    showToast('获取认证令牌失败', 'error');
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = '保存更改';
+                    return;
+                }
+                var resp = await fetch('/api/v1/instance-configs/' + encodeURIComponent(cfg.name), {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': 'Bearer ' + token
+                    },
+                    body: JSON.stringify(body)
+                });
+                var data = await resp.json();
+
+                if (resp.ok) {
+                    closeModal();
+                    showToast('实例 ' + cfg.name + ' 更新成功', 'success');
+                    loadInstances();
+                } else if (resp.status === 422 && data.errors) {
+                    displayServerFieldErrors(data.errors);
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = '保存更改';
+                } else {
+                    showToast('更新实例失败: ' + (data.message || data.error || '未知错误'), 'error');
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = '保存更改';
+                }
+            } catch (e) {
+                showToast('更新实例失败: ' + e.message, 'error');
+                submitBtn.disabled = false;
+                submitBtn.textContent = '保存更改';
+            }
+        });
+    }).catch(function(e) {
+        showToast('获取实例配置失败: ' + e.message, 'error');
+    });
 }
 
 function showCopyDialog(name) {
