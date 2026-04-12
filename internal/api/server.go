@@ -126,9 +126,9 @@ func NewServer(cfg *config.APIConfig, im *instance.InstanceManager, fullCfg *con
 	// Nanobot config management endpoints (Phase 52: NC-02, NC-03)
 	nanobotConfigManager := nanobot.NewConfigManager(logger)
 	nanobotConfigHandler := NewNanobotConfigHandler(nanobotConfigManager, func() *config.Config { return fullCfg }, logger)
-	mux.Handle("GET /api/v1/instance-configs/{name}/nanobot-config",
+	mux.Handle("GET /api/v1/instances/{name}/nanobot-config",
 		authMiddleware(http.HandlerFunc(nanobotConfigHandler.HandleGet)))
-	mux.Handle("PUT /api/v1/instance-configs/{name}/nanobot-config",
+	mux.Handle("PUT /api/v1/instances/{name}/nanobot-config",
 		authMiddleware(http.HandlerFunc(nanobotConfigHandler.HandlePut)))
 
 	// Phase 52: Wire nanobot config creation into instance create/copy/delete flows (D-09)

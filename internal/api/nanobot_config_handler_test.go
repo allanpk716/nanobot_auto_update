@@ -63,9 +63,9 @@ func TestHandleGetNanobotConfig_Success(t *testing.T) {
 	require.NoError(t, err)
 
 	mux := http.NewServeMux()
-	mux.Handle("GET /api/v1/instance-configs/{name}/nanobot-config", withAuth(handler.HandleGet, token))
+	mux.Handle("GET /api/v1/instances/{name}/nanobot-config", withAuth(handler.HandleGet, token))
 
-	req := authenticatedRequest("GET", "/api/v1/instance-configs/test-instance/nanobot-config", token, nil)
+	req := authenticatedRequest("GET", "/api/v1/instances/test-instance/nanobot-config", token, nil)
 	req.SetPathValue("name", "test-instance")
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, req)
@@ -86,9 +86,9 @@ func TestHandleGetNanobotConfig_InstanceNotFound(t *testing.T) {
 	handler, token, _ := setupNanobotConfigTest(t)
 
 	mux := http.NewServeMux()
-	mux.Handle("GET /api/v1/instance-configs/{name}/nanobot-config", withAuth(handler.HandleGet, token))
+	mux.Handle("GET /api/v1/instances/{name}/nanobot-config", withAuth(handler.HandleGet, token))
 
-	req := authenticatedRequest("GET", "/api/v1/instance-configs/unknown/nanobot-config", token, nil)
+	req := authenticatedRequest("GET", "/api/v1/instances/unknown/nanobot-config", token, nil)
 	req.SetPathValue("name", "unknown")
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, req)
@@ -105,9 +105,9 @@ func TestHandleGetNanobotConfig_LazyCreationFallback(t *testing.T) {
 
 	// Do NOT create the nanobot config file -- test lazy-creation fallback
 	mux := http.NewServeMux()
-	mux.Handle("GET /api/v1/instance-configs/{name}/nanobot-config", withAuth(handler.HandleGet, token))
+	mux.Handle("GET /api/v1/instances/{name}/nanobot-config", withAuth(handler.HandleGet, token))
 
-	req := authenticatedRequest("GET", "/api/v1/instance-configs/test-instance/nanobot-config", token, nil)
+	req := authenticatedRequest("GET", "/api/v1/instances/test-instance/nanobot-config", token, nil)
 	req.SetPathValue("name", "test-instance")
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, req)
@@ -154,9 +154,9 @@ func TestHandleGetNanobotConfig_LazyCreationFails(t *testing.T) {
 
 	token := "test-token-123456789012345678901"
 	mux := http.NewServeMux()
-	mux.Handle("GET /api/v1/instance-configs/{name}/nanobot-config", withAuth(handler.HandleGet, token))
+	mux.Handle("GET /api/v1/instances/{name}/nanobot-config", withAuth(handler.HandleGet, token))
 
-	req := authenticatedRequest("GET", "/api/v1/instance-configs/bad-instance/nanobot-config", token, nil)
+	req := authenticatedRequest("GET", "/api/v1/instances/bad-instance/nanobot-config", token, nil)
 	req.SetPathValue("name", "bad-instance")
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, req)
@@ -173,9 +173,9 @@ func TestHandleGetNanobotConfig_AuthRequired(t *testing.T) {
 	handler, _, _ := setupNanobotConfigTest(t)
 
 	mux := http.NewServeMux()
-	mux.Handle("GET /api/v1/instance-configs/{name}/nanobot-config", withAuth(handler.HandleGet, ""))
+	mux.Handle("GET /api/v1/instances/{name}/nanobot-config", withAuth(handler.HandleGet, ""))
 
-	req := httptest.NewRequest("GET", "/api/v1/instance-configs/test-instance/nanobot-config", nil)
+	req := httptest.NewRequest("GET", "/api/v1/instances/test-instance/nanobot-config", nil)
 	req.SetPathValue("name", "test-instance")
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, req)
@@ -197,10 +197,10 @@ func TestHandlePutNanobotConfig_Success(t *testing.T) {
 	require.NoError(t, err)
 
 	mux := http.NewServeMux()
-	mux.Handle("PUT /api/v1/instance-configs/{name}/nanobot-config", withAuth(handler.HandlePut, token))
+	mux.Handle("PUT /api/v1/instances/{name}/nanobot-config", withAuth(handler.HandlePut, token))
 
 	body := `{"gateway":{"port":18791,"host":"0.0.0.0"},"agents":{"defaults":{"model":"glm-5-turbo"}}}`
-	req := authenticatedRequest("PUT", "/api/v1/instance-configs/test-instance/nanobot-config", token, strings.NewReader(body))
+	req := authenticatedRequest("PUT", "/api/v1/instances/test-instance/nanobot-config", token, strings.NewReader(body))
 	req.SetPathValue("name", "test-instance")
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, req)
@@ -224,9 +224,9 @@ func TestHandlePutNanobotConfig_InvalidJSON(t *testing.T) {
 	handler, token, _ := setupNanobotConfigTest(t)
 
 	mux := http.NewServeMux()
-	mux.Handle("PUT /api/v1/instance-configs/{name}/nanobot-config", withAuth(handler.HandlePut, token))
+	mux.Handle("PUT /api/v1/instances/{name}/nanobot-config", withAuth(handler.HandlePut, token))
 
-	req := authenticatedRequest("PUT", "/api/v1/instance-configs/test-instance/nanobot-config", token, strings.NewReader("{invalid json"))
+	req := authenticatedRequest("PUT", "/api/v1/instances/test-instance/nanobot-config", token, strings.NewReader("{invalid json"))
 	req.SetPathValue("name", "test-instance")
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, req)
@@ -242,10 +242,10 @@ func TestHandlePutNanobotConfig_InstanceNotFound(t *testing.T) {
 	handler, token, _ := setupNanobotConfigTest(t)
 
 	mux := http.NewServeMux()
-	mux.Handle("PUT /api/v1/instance-configs/{name}/nanobot-config", withAuth(handler.HandlePut, token))
+	mux.Handle("PUT /api/v1/instances/{name}/nanobot-config", withAuth(handler.HandlePut, token))
 
 	body := `{"gateway":{"port":18791}}`
-	req := authenticatedRequest("PUT", "/api/v1/instance-configs/unknown/nanobot-config", token, strings.NewReader(body))
+	req := authenticatedRequest("PUT", "/api/v1/instances/unknown/nanobot-config", token, strings.NewReader(body))
 	req.SetPathValue("name", "unknown")
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, req)
@@ -261,9 +261,9 @@ func TestHandlePutNanobotConfig_AuthRequired(t *testing.T) {
 	handler, _, _ := setupNanobotConfigTest(t)
 
 	mux := http.NewServeMux()
-	mux.Handle("PUT /api/v1/instance-configs/{name}/nanobot-config", withAuth(handler.HandlePut, ""))
+	mux.Handle("PUT /api/v1/instances/{name}/nanobot-config", withAuth(handler.HandlePut, ""))
 
-	req := httptest.NewRequest("PUT", "/api/v1/instance-configs/test-instance/nanobot-config", strings.NewReader(`{}`))
+	req := httptest.NewRequest("PUT", "/api/v1/instances/test-instance/nanobot-config", strings.NewReader(`{}`))
 	req.SetPathValue("name", "test-instance")
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, req)
@@ -283,10 +283,10 @@ func TestHandlePutNanobotConfig_ResponseContainsHint(t *testing.T) {
 	require.NoError(t, err)
 
 	mux := http.NewServeMux()
-	mux.Handle("PUT /api/v1/instance-configs/{name}/nanobot-config", withAuth(handler.HandlePut, token))
+	mux.Handle("PUT /api/v1/instances/{name}/nanobot-config", withAuth(handler.HandlePut, token))
 
 	body := `{"gateway":{"port":18791}}`
-	req := authenticatedRequest("PUT", "/api/v1/instance-configs/test-instance/nanobot-config", token, strings.NewReader(body))
+	req := authenticatedRequest("PUT", "/api/v1/instances/test-instance/nanobot-config", token, strings.NewReader(body))
 	req.SetPathValue("name", "test-instance")
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, req)

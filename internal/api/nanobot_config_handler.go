@@ -39,7 +39,7 @@ func findInstanceByNameForNanobotConfig(cfg *config.Config, name string) *config
 	return nil
 }
 
-// HandleGet handles GET /api/v1/instance-configs/{name}/nanobot-config (NC-02).
+// HandleGet handles GET /api/v1/instances/{name}/nanobot-config (NC-02).
 // Returns the nanobot config.json content for a valid instance.
 // Includes lazy-creation fallback: if the nanobot config file is missing for a
 // known instance, auto-creates a default config and returns it.
@@ -97,7 +97,7 @@ func (h *NanobotConfigHandler) HandleGet(w http.ResponseWriter, r *http.Request)
 	})
 }
 
-// HandlePut handles PUT /api/v1/instance-configs/{name}/nanobot-config (NC-03, D-13).
+// HandlePut handles PUT /api/v1/instances/{name}/nanobot-config (NC-03, D-13).
 // Writes the nanobot config.json file for the specified instance.
 // D-13: Only writes the file, does not restart the instance.
 // D-14: Response includes informational hint about restarting.
