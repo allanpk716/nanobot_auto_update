@@ -131,6 +131,17 @@ func NewServer(cfg *config.APIConfig, im *instance.InstanceManager, fullCfg *con
 	mux.Handle("PUT /api/v1/instance-configs/{name}/nanobot-config",
 		authMiddleware(http.HandlerFunc(nanobotConfigHandler.HandlePut)))
 
+	// Phase 52: Wire nanobot config creation into instance create/copy/delete flows (D-09)
+	instanceConfigHandler.SetOnCreateInstance(func(name string, port uint32, startCommand string) error {
+		return nanobotConfigManager.CreateDefaultConfig(name, port, startCommand)
+	})
+	instanceConfigHandler.SetOnCopyInstance(func(sourceName string, sourceStartCommand string, targetName string, targetPort uint32, targetStartCommand string) error {
+		return nanobotConfigManager.CloneConfig(sourceStartCommand, sourceName, targetName, targetPort, targetStartCommand)
+	})
+	instanceConfigHandler.SetOnDeleteInstance(func(name string, startCommand string) error {
+		return nanobotConfigManager.CleanupConfig(startCommand, name)
+	})
+
 	// Create HTTP server
 	// SSE-07: WriteTimeout=0 to support SSE long connections
 	httpServer := &http.Server{

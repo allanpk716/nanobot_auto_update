@@ -67,9 +67,29 @@ func (e *notFoundError) Error() string {
 }
 
 // InstanceConfigHandler handles CRUD operations for instance configurations.
+//
+// Optional lifecycle callbacks (Phase 52):
+// These callbacks are injected via setter methods to extend instance lifecycle
+// events with nanobot config management. They are nil by default and safe to ignore
+// for tests that don't need nanobot config behavior.
+//
+//   - onCreateInstance: Called after a new instance is persisted to config.yaml.
+//     Creates the nanobot config directory and default config.json.
+//     Failure is non-blocking (logged as warning).
+//
+//   - onCopyInstance: Called after a copied instance is persisted to config.yaml.
+//     Clones the source nanobot config.json to the new directory with updated port/workspace.
+//     Failure is non-blocking (logged as warning).
+//
+//   - onDeleteInstance: Called after an instance is removed from config.yaml.
+//     Removes the nanobot config directory for the deleted instance.
+//     Failure is non-blocking (logged as warning).
 type InstanceConfigHandler struct {
-	getConfig func() *config.Config // injected for testability; production uses config.GetCurrentConfig
-	logger    *slog.Logger
+	getConfig        func() *config.Config // injected for testability; production uses config.GetCurrentConfig
+	logger           *slog.Logger
+	onCreateInstance func(name string, port uint32, startCommand string) error                                                                                                                                  // Phase 52: nanobot config creation
+	onCopyInstance   func(sourceName string, sourceStartCommand string, targetName string, targetPort uint32, targetStartCommand string) error                                                                  // Phase 52: nanobot config clone
+	onDeleteInstance func(name string, startCommand string) error                                                                                                                                               // Phase 52: nanobot config directory cleanup
 }
 
 // NewInstanceConfigHandler creates a new InstanceConfigHandler.
@@ -79,6 +99,24 @@ func NewInstanceConfigHandler(getConfig func() *config.Config, logger *slog.Logg
 		getConfig: getConfig,
 		logger:    logger.With("source", "api-instance-config"),
 	}
+}
+
+// SetOnCreateInstance sets the callback invoked after creating a new instance.
+// The callback receives the instance name, port, and startCommand.
+func (h *InstanceConfigHandler) SetOnCreateInstance(fn func(name string, port uint32, startCommand string) error) {
+	h.onCreateInstance = fn
+}
+
+// SetOnCopyInstance sets the callback invoked after copying an instance.
+// The callback receives the source instance info and target instance info.
+func (h *InstanceConfigHandler) SetOnCopyInstance(fn func(sourceName string, sourceStartCommand string, targetName string, targetPort uint32, targetStartCommand string) error) {
+	h.onCopyInstance = fn
+}
+
+// SetOnDeleteInstance sets the callback invoked after deleting an instance.
+// The callback receives the instance name and startCommand for path resolution.
+func (h *InstanceConfigHandler) SetOnDeleteInstance(fn func(name string, startCommand string) error) {
+	h.onDeleteInstance = fn
 }
 
 // toResponse converts an internal InstanceConfig to a JSON response.
@@ -245,6 +283,16 @@ func (h *InstanceConfigHandler) HandleCreate(w http.ResponseWriter, r *http.Requ
 
 	h.logger.Info("Instance config created", "name", ic.Name)
 
+	// Phase 52: Create nanobot config directory with default config (NC-01)
+	if h.onCreateInstance != nil {
+		if err := h.onCreateInstance(ic.Name, ic.Port, ic.StartCommand); err != nil {
+			h.logger.Warn("Failed to create nanobot config for new instance",
+				"name", ic.Name, "error", err)
+			// Non-blocking: instance is created, nanobot config can be fixed via PUT endpoint
+			// or auto-created on next GET (lazy-creation fallback in HandleGet)
+		}
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(toResponse(ic))
@@ -312,11 +360,15 @@ func (h *InstanceConfigHandler) HandleUpdate(w http.ResponseWriter, r *http.Requ
 func (h *InstanceConfigHandler) HandleDelete(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 
+	// Capture instance info before UpdateConfig removes it
+	var deletedStartCommand string
+
 	err := config.UpdateConfig(func(cfg *config.Config) error {
-		index, _ := findInstanceByName(cfg, name)
+		index, ic := findInstanceByName(cfg, name)
 		if index == -1 {
 			return &notFoundError{name: name}
 		}
+		deletedStartCommand = ic.StartCommand
 		cfg.Instances = append(cfg.Instances[:index], cfg.Instances[index+1:]...)
 		return nil
 	})
@@ -328,6 +380,15 @@ func (h *InstanceConfigHandler) HandleDelete(w http.ResponseWriter, r *http.Requ
 		}
 		writeJSONError(w, http.StatusInternalServerError, "internal_error", err.Error())
 		return
+	}
+
+	// Phase 52: Clean up nanobot config directory for deleted instance
+	if h.onDeleteInstance != nil {
+		if err := h.onDeleteInstance(name, deletedStartCommand); err != nil {
+			h.logger.Warn("Failed to clean up nanobot config for deleted instance",
+				"name", name, "error", err)
+			// Non-blocking: instance is deleted from config.yaml, orphaned dir can be cleaned manually
+		}
 	}
 
 	// Stop all nanobot processes after config update.
@@ -367,12 +428,16 @@ func (h *InstanceConfigHandler) HandleCopy(w http.ResponseWriter, r *http.Reques
 	}
 
 	var clonedInstance config.InstanceConfig
+	var sourceStartCommand string
 
 	err = config.UpdateConfig(func(cfg *config.Config) error {
 		sourceIndex, sourceIC := findInstanceByName(cfg, sourceName)
 		if sourceIndex == -1 {
 			return &notFoundError{name: sourceName}
 		}
+
+		// Capture sourceStartCommand before any modifications
+		sourceStartCommand = sourceIC.StartCommand
 
 		// Clone the source instance config
 		clonedInstance = *sourceIC
@@ -458,6 +523,18 @@ func (h *InstanceConfigHandler) HandleCopy(w http.ResponseWriter, r *http.Reques
 	}
 
 	h.logger.Info("Instance config copied", "source", sourceName, "new_name", clonedInstance.Name, "new_port", clonedInstance.Port)
+
+	// Phase 52: Clone nanobot config to new instance directory (NC-04)
+	// Note: Only gateway.port and agents.defaults.workspace are updated in the cloned config.
+	// nanobot config.json has no top-level "name" field.
+	if h.onCopyInstance != nil {
+		if err := h.onCopyInstance(sourceName, sourceStartCommand, clonedInstance.Name, clonedInstance.Port, clonedInstance.StartCommand); err != nil {
+			h.logger.Warn("Failed to clone nanobot config for copied instance",
+				"source", sourceName, "target", clonedInstance.Name, "error", err)
+			// Non-blocking: instance is copied, nanobot config can be fixed via PUT endpoint
+			// or auto-created on next GET (lazy-creation fallback in HandleGet)
+		}
+	}
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)

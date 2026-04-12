@@ -248,3 +248,18 @@ func (cm *ConfigManager) CloneConfig(sourceStartCommand, sourceInstanceName, tar
 	)
 	return nil
 }
+
+// CleanupConfig removes the nanobot config directory for an instance.
+// It resolves the config path via ParseConfigPath and removes the parent directory.
+func (cm *ConfigManager) CleanupConfig(startCommand, instanceName string) error {
+	configPath, err := ParseConfigPath(startCommand, instanceName)
+	if err != nil {
+		return fmt.Errorf("failed to parse config path: %w", err)
+	}
+	configDir := filepath.Dir(configPath)
+	if err := os.RemoveAll(configDir); err != nil {
+		return fmt.Errorf("failed to remove nanobot config directory %s: %w", configDir, err)
+	}
+	cm.logger.Info("Nanobot config directory removed", "instance", instanceName, "path", configDir)
+	return nil
+}

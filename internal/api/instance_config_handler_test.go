@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -587,4 +588,143 @@ func TestHandleCopy_EmptyBody(t *testing.T) {
 	require.NoError(t, json.NewDecoder(rec.Body).Decode(&response))
 	assert.Equal(t, "test-existing-copy", response.Name)
 	assert.Equal(t, uint32(18791), response.Port)
+}
+
+// --- Callback tests (Phase 52: nanobot config lifecycle integration) ---
+
+func TestHandleCreate_InvokesOnCreateCallback(t *testing.T) {
+	handler, token := setupIntegrationTest(t)
+
+	var callbackCalled bool
+	var callbackName string
+	var callbackPort uint32
+	var callbackStartCommand string
+
+	handler.SetOnCreateInstance(func(name string, port uint32, startCommand string) error {
+		callbackCalled = true
+		callbackName = name
+		callbackPort = port
+		callbackStartCommand = startCommand
+		return nil
+	})
+
+	mux := http.NewServeMux()
+	mux.Handle("POST /api/v1/instance-configs", withAuth(handler.HandleCreate, token))
+
+	body := `{"name":"new-instance","port":18791,"start_command":"nanobot gateway","startup_timeout":30}`
+	req := authenticatedRequest("POST", "/api/v1/instance-configs", token, strings.NewReader(body))
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusCreated, rec.Code)
+	assert.True(t, callbackCalled, "onCreateInstance callback should have been called")
+	assert.Equal(t, "new-instance", callbackName)
+	assert.Equal(t, uint32(18791), callbackPort)
+	assert.Equal(t, "nanobot gateway", callbackStartCommand)
+}
+
+func TestHandleCreate_CallbackFailureNonBlocking(t *testing.T) {
+	handler, token := setupIntegrationTest(t)
+
+	handler.SetOnCreateInstance(func(name string, port uint32, startCommand string) error {
+		return fmt.Errorf("simulated nanobot config creation failure")
+	})
+
+	mux := http.NewServeMux()
+	mux.Handle("POST /api/v1/instance-configs", withAuth(handler.HandleCreate, token))
+
+	body := `{"name":"new-instance","port":18791,"start_command":"nanobot gateway","startup_timeout":30}`
+	req := authenticatedRequest("POST", "/api/v1/instance-configs", token, strings.NewReader(body))
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+
+	// Instance should still be created (201) even though callback failed
+	assert.Equal(t, http.StatusCreated, rec.Code)
+
+	var response instanceConfigResponse
+	require.NoError(t, json.NewDecoder(rec.Body).Decode(&response))
+	assert.Equal(t, "new-instance", response.Name)
+}
+
+func TestHandleCopy_InvokesOnCopyCallback(t *testing.T) {
+	handler, token := setupIntegrationTest(t)
+
+	var callbackCalled bool
+	var callbackSourceName string
+	var callbackTargetName string
+	var callbackTargetPort uint32
+
+	handler.SetOnCopyInstance(func(sourceName string, sourceStartCommand string, targetName string, targetPort uint32, targetStartCommand string) error {
+		callbackCalled = true
+		callbackSourceName = sourceName
+		callbackTargetName = targetName
+		callbackTargetPort = targetPort
+		return nil
+	})
+
+	mux := http.NewServeMux()
+	mux.Handle("POST /api/v1/instance-configs/{name}/copy", withAuth(handler.HandleCopy, token))
+
+	body := `{"name":"my-copy","port":18800}`
+	req := authenticatedRequest("POST", "/api/v1/instance-configs/test-existing/copy", token, strings.NewReader(body))
+	req.SetPathValue("name", "test-existing")
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusCreated, rec.Code)
+	assert.True(t, callbackCalled, "onCopyInstance callback should have been called")
+	assert.Equal(t, "test-existing", callbackSourceName)
+	assert.Equal(t, "my-copy", callbackTargetName)
+	assert.Equal(t, uint32(18800), callbackTargetPort)
+}
+
+func TestHandleDelete_InvokesOnDeleteCallback(t *testing.T) {
+	handler, token := setupIntegrationTest(t)
+
+	var callbackCalled bool
+	var callbackName string
+	var callbackStartCommand string
+
+	handler.SetOnDeleteInstance(func(name string, startCommand string) error {
+		callbackCalled = true
+		callbackName = name
+		callbackStartCommand = startCommand
+		return nil
+	})
+
+	mux := http.NewServeMux()
+	mux.Handle("DELETE /api/v1/instance-configs/{name}", withAuth(handler.HandleDelete, token))
+
+	req := authenticatedRequest("DELETE", "/api/v1/instance-configs/test-existing", token, nil)
+	req.SetPathValue("name", "test-existing")
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusOK, rec.Code)
+	assert.True(t, callbackCalled, "onDeleteInstance callback should have been called")
+	assert.Equal(t, "test-existing", callbackName)
+	assert.Equal(t, "nanobot gateway", callbackStartCommand)
+}
+
+func TestHandleDelete_CallbackFailureNonBlocking(t *testing.T) {
+	handler, token := setupIntegrationTest(t)
+
+	handler.SetOnDeleteInstance(func(name string, startCommand string) error {
+		return fmt.Errorf("simulated nanobot config cleanup failure")
+	})
+
+	mux := http.NewServeMux()
+	mux.Handle("DELETE /api/v1/instance-configs/{name}", withAuth(handler.HandleDelete, token))
+
+	req := authenticatedRequest("DELETE", "/api/v1/instance-configs/test-existing", token, nil)
+	req.SetPathValue("name", "test-existing")
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+
+	// Instance should still be deleted (200) even though callback failed
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	var response map[string]string
+	require.NoError(t, json.NewDecoder(rec.Body).Decode(&response))
+	assert.Contains(t, response["message"], "deleted")
 }
