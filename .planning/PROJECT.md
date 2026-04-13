@@ -137,9 +137,26 @@
 - ✓ UI-05: 删除实例确认对话框 (运行中实例警告)
 - ✓ UI-06: Nanobot 配置混合编辑器 (结构化表单 + JSON 文本)
 
+## Current Milestone: v0.18.0 实例管理增强
+
+**Goal:** 增强 Web UI 实例管理的安全性、易用性和配置编辑体验
+
+**Target features:**
+- 删除按钮状态保护（运行中禁用）
+- 创建实例集成配置编辑
+- 删除操作二次确认
+- 自定义配置目录（自动创建/读取已有）
+- JSON 配置编辑器增强（语法高亮 + 实时校验）
+
 ### Active
 
-(None — to be defined in next milestone)
+- **DEL-01**: 实例运行中时删除按钮禁用，仅停止状态可删除
+- **DEL-02**: 删除操作需二次确认对话框
+- **CFG-01**: 创建实例对话框集成 nanobot 配置编辑区域
+- **CFG-02**: 创建实例时允许用户填写 config 保存目录
+- **CFG-03**: 启动时自动创建不存在的配置目录，读取已有目录中的 config 文件
+- **EDT-01**: JSON 配置编辑器支持语法高亮显示
+- **EDT-02**: JSON 配置编辑器实时格式校验，语法错误即时提示用户
 
 ### Out of Scope
 
@@ -377,14 +394,15 @@ auto_start: false  # true: 注册为 Windows 服务, false: 控制台模式
 
 ---
 
-*Last updated: 2026-04-13 after v0.12 milestone completion*
+*Last updated: 2026-04-13 after v0.18.0 milestone started*
 
 ## Current State
 
 **Shipped:** v0.12 实例管理与配置编辑 (2026-04-13)
+**Active:** v0.18.0 实例管理增强
 **Total:** 12 milestones shipped, 53 phases, ~23,400 LOC Go
 
-*Last updated: 2026-04-13 after v0.12 milestone completion*
+*Last updated: 2026-04-13 after v0.18.0 milestone started*
 
 ## Evolution
 
