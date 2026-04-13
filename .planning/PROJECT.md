@@ -88,6 +88,14 @@
 - ✓ TELE-07: 未产生 trigger 日志的实例无监控开销 (TestMonitor_NoTriggerNoNotifications)
 - ✓ TELE-09: 实例停止时取消监控,不发送虚假通知 (TestMonitor_StopCancelsMonitor)
 
+**v0.12 Instance Config CRUD API** — 2026-04-11 (Phase 50):
+- ✓ IC-01: POST 创建实例 (name, port, start_command, startup_timeout, auto_start) 自动持久化到 config.yaml
+- ✓ IC-02: PUT 更新实例配置，500ms 内反映在 config.yaml
+- ✓ IC-03: DELETE 删除实例 (先停止运行中实例再删除)
+- ✓ IC-04: POST 复制实例 (克隆 auto-updater + nanobot 配置)
+- ✓ IC-05: 配置变更自动持久化并触发热重载 (复用 500ms debounce)
+- ✓ IC-06: 配置验证 — 唯一名称、唯一端口、必填字段、端口范围 1-65535
+
 **v0.12 Lifecycle Control API** — 2026-04-12 (Phase 51):
 - ✓ LC-01: POST /api/v1/instances/{name}/start 启动已停止的实例 (409 已运行)
 - ✓ LC-02: POST /api/v1/instances/{name}/stop 停止运行中的实例 (409 已停止)
@@ -115,9 +123,23 @@
 - ✓ API-01: 更新进度状态追踪 (ProgressState + io.TeeReader + atomic.Value)
 - ✓ API-02: Web UI Token API (localhost-only GET /api/v1/web-config)
 
+**v0.12 Nanobot Config Management API** — 2026-04-12 (Phase 52):
+- ✓ NC-01: 创建实例时自动创建 nanobot 配置目录和默认 config.json
+- ✓ NC-02: GET 读取任意实例的 nanobot config.json
+- ✓ NC-03: PUT 更新任意实例的 nanobot config.json
+- ✓ NC-04: 复制实例时克隆 nanobot config.json 到新目录
+
+**v0.12 Instance Management UI** — 2026-04-13 (Phase 53):
+- ✓ UI-01: 卡片式实例列表 (名称/端口/命令/状态/操作按钮)
+- ✓ UI-02: 创建实例对话框 (全配置字段 + nanobot 配置编辑)
+- ✓ UI-03: 编辑实例对话框 (修改自动更新器配置)
+- ✓ UI-04: 复制实例对话框 (克隆配置 + nanobot 配置)
+- ✓ UI-05: 删除实例确认对话框 (运行中实例警告)
+- ✓ UI-06: Nanobot 配置混合编辑器 (结构化表单 + JSON 文本)
+
 ### Active
 
-(None — to be defined in milestone v0.12)
+(None — to be defined in next milestone)
 
 ### Out of Scope
 
@@ -132,6 +154,8 @@
 **uv**: Python 包管理器，用于安装和管理 Python 工具。
 
 **Pushover**: 推送通知服务，用于在更新失败时通知用户。
+
+**v0.12 Shipped:** 2026-04-13 — 实例管理与配置编辑里程碑完成，4 个阶段 (50-53)，9 个计划。Phase 50: CRUD API (UpdateConfig atomic + deep copy + viper ReadInConfig 修复)。Phase 51: Lifecycle API (HandleStart/HandleStop + TryLockUpdate + 12 测试)。Phase 52: Nanobot Config API (ConfigManager + callback injection + 38 测试)。Phase 53: 完整管理 UI (卡片列表 + CRUD 对话框 + 混合配置编辑器 + XSS 安全)。19/19 需求满足。
 
 **v0.11 Windows 服务自启动 Shipped:** 2026-04-11 — Windows 服务自启动里程碑完成，4 个阶段 (46-49)，8 个计划，15 个任务。Phase 46: ServiceConfig + svc.IsWindowsService() 检测。Phase 47: svc.Handler 生命周期管理 + 优雅关闭。Phase 48: ServiceManager (SCM 注册/卸载/恢复策略)。Phase 49: 双模式适配 + 配置热重载 (500ms debounce + 6 组件回调)。11/11 需求满足。
 
@@ -283,6 +307,26 @@
 | 全量替换策略 (StopAll→recreate→StartAll) | 实例配置变更，避免复杂 diff | ✓ Good — Phase 49 |
 | 动态 Bearer Token getter (func() string) | 热重载 Token 无需重启 API 服务器 | ✓ Good — Phase 49 |
 | SelfUpdater 仅日志不重建 | 避免破坏 SelfUpdateHandler 的引用 | ✓ Good — Phase 49 |
+| UpdateConfig atomic read-modify-write (updateMu + deepCopyConfig) | 防止并发 API 竞态条件，隔离深拷贝避免 backing array 污染 | ✓ Good — Phase 50 |
+| ReadInConfig-before-WriteConfig pattern | 修复 viper 状态丢失 bug，确保非 v.Set() 键不丢失 | ✓ Good — Phase 50 |
+| skipReload flag on hotReloadState | UpdateConfig 写入时抑制 WatchConfig 重载，防止状态损坏 | ✓ Good — Phase 50 |
+| Injected config reader (getConfig closure) | Handler 可测试，无需 NewServer 签名变更 | ✓ Good — Phase 50 |
+| validationError/notFoundError custom types | errors.As 路由，422 字段级错误详情 | ✓ Good — Phase 50 |
+| context.Background() for lifecycle ops | 防止客户端断连导致孤立进程 (start 60s, stop 30s) | ✓ Good — Phase 51 |
+| TryLockUpdate guard on lifecycle handlers | 生命周期操作与 TriggerUpdate/SelfUpdate 序列化 | ✓ Good — Phase 51 |
+| 409 Conflict for wrong-state operations | 清晰的状态错误反馈 (已运行→start, 已停止→stop) | ✓ Good — Phase 51 |
+| SetPIDForTest cross-package helper | api 包测试可注入运行状态，production-code 非 _test.go | ✓ Good — Phase 51 |
+| NanobotConfigManager with ParseConfigPath | 从 start_command --config 提取路径，os.UserHomeDir() Windows 兼容 | ✓ Good — Phase 52 |
+| Lazy-creation fallback on GET | 缺失配置文件自动创建默认 config.json | ✓ Good — Phase 52 |
+| Callback injection (onCreate/onCopy/onDelete) | 非阻塞回调，失败仅 warn 不阻断主操作 | ✓ Good — Phase 52 |
+| setter methods for optional callbacks | nil by default，现有测试无需修改 | ✓ Good — Phase 52 |
+| Promise.allSettled dual-API fetch | 认证失败时优雅降级为 status-only 卡片 | ✓ Good — Phase 53 |
+| Modal system (Escape/overlay/X close) | 统一对话框管理，DOM API 防 XSS | ✓ Good — Phase 53 |
+| Toast prepend + 3s auto-dismiss | 最新通知置顶，CSS fade-out 动画 | ✓ Good — Phase 53 |
+| Shared form builder (buildInstanceFormHtml) | Create/Edit/Copy 复用表单，避免代码重复 | ✓ Good — Phase 53 |
+| syncGuard bidirectional sync | 防止 form↔JSON 无限循环，JSON 为保存数据源 | ✓ Good — Phase 53 |
+| textContent for all user data | XSS 安全渲染，innerHTML 仅用于静态模板 | ✓ Good — Phase 53 |
+| API key password field + show/hide toggle | 敏感信息默认隐藏 (T-53-11 缓解) | ✓ Good — Phase 53 |
 
 ## Configuration
 
@@ -333,24 +377,14 @@ auto_start: false  # true: 注册为 Windows 服务, false: 控制台模式
 
 ---
 
-## Current Milestone: v0.12 实例管理与配置编辑
-
-**Goal:** 在 Web 后台界面完整管理 nanobot 实例的生命周期（CRUD + 启停）和 nanobot 自身配置文件
-
-**Target features:**
-- 实例 CRUD（新建、复制、编辑、删除实例配置）
-- 实例生命周期控制（启动、停止、重启单个实例）
-- 配置持久化（界面修改自动保存到 config.yaml）
-- nanobot 配置编辑器（表单 + JSON 混合模式编辑 nanobot config.json）
-- 目录自动管理（新建实例时自动创建配置目录和默认 config.json）
+*Last updated: 2026-04-13 after v0.12 milestone completion*
 
 ## Current State
 
-**Shipped:** v0.11 Windows 服务自启动 (2026-04-11)
-**In Progress:** v0.12 实例管理与配置编辑 — Phase 51 (Lifecycle API) complete
-**Total:** 11 milestones shipped, 51 phases, ~21,492 LOC Go
+**Shipped:** v0.12 实例管理与配置编辑 (2026-04-13)
+**Total:** 12 milestones shipped, 53 phases, ~23,400 LOC Go
 
-*Last updated: 2026-04-12 after Phase 51 completion*
+*Last updated: 2026-04-13 after v0.12 milestone completion*
 
 ## Evolution
 

@@ -1,5 +1,18 @@
 # Milestones
 
+## v0.12 实例管理与配置编辑 (Shipped: 2026-04-13)
+
+**Phases completed:** 4 phases, 9 plans, 19 tasks
+
+**Key accomplishments:**
+
+- Comprehensive test coverage for all 6 CRUD endpoints and UpdateConfig with fix for viper state corruption during rapid writes
+- Card-based instance management UI with full-config display, modal/toast components, dual-API Promise.allSettled fetch, and authenticated lifecycle controls (AbortController timeouts)
+- Four complete CRUD dialog systems (Create, Edit, Copy, Delete) with shared form builder, inline validation, Chinese UI text, toggle switch component, and authenticated API integration
+- Hybrid nanobot config editor with left-right split view, structured form for common parameters, raw JSON textarea for full config editing, bidirectional sync protected by syncGuard, and authenticated API integration with restart hint
+
+---
+
 ## v0.11 Windows 服务自启动 (Shipped: 2026-04-11)
 
 **Phases completed:** 4 phases, 8 plans, 15 tasks
