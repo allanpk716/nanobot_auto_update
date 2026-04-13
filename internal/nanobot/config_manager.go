@@ -32,9 +32,20 @@ func NewConfigManager(logger *slog.Logger) *ConfigManager {
 	}
 }
 
+// resolveWorkspace returns the workspace path for a nanobot instance based on its start_command.
+// With --config: uses ~/.nanobot-{instanceName} (instance-specific directory).
+// Without --config: uses ~/.nanobot (nanobot's default directory).
+func resolveWorkspace(startCommand, instanceName string) string {
+	matches := configPathRegex.FindStringSubmatch(startCommand)
+	if len(matches) >= 2 {
+		return "~/.nanobot-" + instanceName
+	}
+	return "~/.nanobot"
+}
+
 // ParseConfigPath extracts the nanobot config.json path from a start_command.
 // D-01: Uses regex to extract --config parameter value from startCommand.
-// D-02: Falls back to ~/.nanobot-{instanceName}/config.json when --config is absent.
+// D-02: Falls back to ~/.nanobot/config.json when --config is absent (nanobot gateway default).
 // D-03: Resolves ~ using os.UserHomeDir() and constructs paths with filepath.Join.
 func ParseConfigPath(startCommand, instanceName string) (string, error) {
 	matches := configPathRegex.FindStringSubmatch(startCommand)
@@ -56,12 +67,14 @@ func ParseConfigPath(startCommand, instanceName string) (string, error) {
 		return absPath, nil
 	}
 
-	// Fallback: ~/.nanobot-{instanceName}/config.json
+	// Fallback: ~/.nanobot/config.json
+	// When start_command has no --config (e.g., "nanobot gateway"), nanobot uses
+	// ~/.nanobot/config.json as its default config path.
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
 		return "", fmt.Errorf("failed to resolve home directory: %w", err)
 	}
-	return filepath.Join(homeDir, ".nanobot-"+instanceName, "config.json"), nil
+	return filepath.Join(homeDir, ".nanobot", "config.json"), nil
 }
 
 // GenerateDefaultConfig creates a default nanobot configuration map.
@@ -183,8 +196,14 @@ func (cm *ConfigManager) CreateDefaultConfig(instanceName string, port uint32, s
 		return fmt.Errorf("failed to parse config path for instance %q: %w", instanceName, err)
 	}
 
-	// Use ~/.nanobot-{name} form for workspace in nanobot config (how nanobot reads it)
-	workspace := "~/.nanobot-" + instanceName
+	// Determine workspace based on whether start_command has --config.
+	// With --config: workspace matches the config directory (~/.nanobot-{name}).
+	// Without --config: nanobot default workspace is ~/.nanobot.
+	matches := configPathRegex.FindStringSubmatch(startCommand)
+	workspace := "~/.nanobot"
+	if len(matches) >= 2 {
+		workspace = "~/.nanobot-" + instanceName
+	}
 
 	defaultConfig := GenerateDefaultConfig(port, workspace)
 
@@ -218,7 +237,7 @@ func (cm *ConfigManager) CloneConfig(sourceStartCommand, sourceInstanceName, tar
 		if os.IsNotExist(err) {
 			cm.logger.Warn("Source nanobot config not found, generating default",
 				"source_instance", sourceInstanceName, "source_path", sourceConfigPath)
-			workspace := "~/.nanobot-" + targetInstanceName
+			workspace := resolveWorkspace(targetStartCommand, targetInstanceName)
 			configData = GenerateDefaultConfig(targetPort, workspace)
 		} else {
 			return fmt.Errorf("failed to read source nanobot config: %w", err)
@@ -233,7 +252,7 @@ func (cm *ConfigManager) CloneConfig(sourceStartCommand, sourceInstanceName, tar
 	// Update agents.defaults.workspace to target instance name
 	if agents, ok := configData["agents"].(map[string]interface{}); ok {
 		if defaults, ok := agents["defaults"].(map[string]interface{}); ok {
-			defaults["workspace"] = "~/.nanobot-" + targetInstanceName
+			defaults["workspace"] = resolveWorkspace(targetStartCommand, targetInstanceName)
 		}
 	}
 
@@ -249,17 +268,33 @@ func (cm *ConfigManager) CloneConfig(sourceStartCommand, sourceInstanceName, tar
 	return nil
 }
 
-// CleanupConfig removes the nanobot config directory for an instance.
-// It resolves the config path via ParseConfigPath and removes the parent directory.
+// CleanupConfig removes the nanobot config for an instance.
+// For instance-specific directories (e.g., ~/.nanobot-{name}/), removes the entire directory.
+// For the default ~/.nanobot/ directory, only removes the config.json file to preserve
+// other nanobot data (workspace, etc.) that may be shared.
 func (cm *ConfigManager) CleanupConfig(startCommand, instanceName string) error {
 	configPath, err := ParseConfigPath(startCommand, instanceName)
 	if err != nil {
 		return fmt.Errorf("failed to parse config path: %w", err)
 	}
-	configDir := filepath.Dir(configPath)
-	if err := os.RemoveAll(configDir); err != nil {
-		return fmt.Errorf("failed to remove nanobot config directory %s: %w", configDir, err)
+
+	// Check if this is the default ~/.nanobot/config.json path
+	homeDir, _ := os.UserHomeDir()
+	defaultConfigPath := filepath.Join(homeDir, ".nanobot", "config.json")
+
+	if configPath == defaultConfigPath {
+		// Default path: only remove the config file, not the shared directory
+		if err := os.Remove(configPath); err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("failed to remove nanobot config %s: %w", configPath, err)
+		}
+		cm.logger.Info("Nanobot config file removed", "instance", instanceName, "path", configPath)
+	} else {
+		// Instance-specific path: remove the entire directory
+		configDir := filepath.Dir(configPath)
+		if err := os.RemoveAll(configDir); err != nil {
+			return fmt.Errorf("failed to remove nanobot config directory %s: %w", configDir, err)
+		}
+		cm.logger.Info("Nanobot config directory removed", "instance", instanceName, "path", configDir)
 	}
-	cm.logger.Info("Nanobot config directory removed", "instance", instanceName, "path", configDir)
 	return nil
 }

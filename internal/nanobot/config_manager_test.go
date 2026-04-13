@@ -36,7 +36,7 @@ func TestParseConfigPath_WithoutConfigFlag(t *testing.T) {
 	require.NoError(t, err)
 	homeDir, err := os.UserHomeDir()
 	require.NoError(t, err)
-	expected := filepath.Join(homeDir, ".nanobot-my-instance", "config.json")
+	expected := filepath.Join(homeDir, ".nanobot", "config.json")
 	assert.Equal(t, expected, path)
 }
 
@@ -51,7 +51,7 @@ func TestParseConfigPath_EmptyCommand(t *testing.T) {
 	require.NoError(t, err)
 	homeDir, err := os.UserHomeDir()
 	require.NoError(t, err)
-	expected := filepath.Join(homeDir, ".nanobot-test", "config.json")
+	expected := filepath.Join(homeDir, ".nanobot", "config.json")
 	assert.Equal(t, expected, path)
 }
 
