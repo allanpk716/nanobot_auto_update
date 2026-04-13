@@ -52,6 +52,19 @@ type hotReloadState struct {
 
 var globalHotReload *hotReloadState
 
+// InitConfigState initializes the global config state without file watching.
+// Use this when GetCurrentConfig() is needed but file watching is not (e.g., console mode).
+// If WatchConfig is called later, it will take over and enable hot-reload.
+func InitConfigState(cfg *Config) {
+	if globalHotReload != nil {
+		return
+	}
+	globalHotReload = &hotReloadState{
+		current: cfg,
+		running: false,
+	}
+}
+
 // WatchConfig starts watching the config file for changes (D-04).
 // Only call this in service mode. Console mode does not use hot reload.
 // The callbacks define how each config section is rebuilt when changed.

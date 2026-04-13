@@ -411,8 +411,12 @@ func main() {
 		return
 	}
 
-	components, err := lifecycle.AppStartup(cfg, logger, Version, updateLogger, notif, createComponents, startInstances)
-	if err != nil {
+		// Console mode: initialize config state so GetCurrentConfig() works
+		// (service mode uses WatchConfig instead)
+		config.InitConfigState(cfg)
+
+		components, err := lifecycle.AppStartup(cfg, logger, Version, updateLogger, notif, createComponents, startInstances)
+		if err != nil {
 		logger.Error("Failed to start application", "error", err)
 		// AppStartup already cleaned up partial components via rollback
 		os.Exit(1)
