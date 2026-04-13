@@ -109,6 +109,16 @@ func NewServer(cfg *config.APIConfig, im *instance.InstanceManager, fullCfg *con
 	// Instance config CRUD endpoints (Phase 50: IC-01 through IC-06)
 	// Handler receives config.GetCurrentConfig as the config reader -- no NewServer signature change needed.
 	instanceConfigHandler := NewInstanceConfigHandler(config.GetCurrentConfig, logger)
+	instanceConfigHandler.SetOnStopInstance(func(ctx context.Context, name string) error {
+			inst, err := im.GetLifecycle(name)
+			if err != nil {
+				return err
+			}
+			if !inst.IsRunning() {
+				return nil
+			}
+			return inst.StopForUpdate(ctx)
+		})
 	mux.Handle("GET /api/v1/instance-configs", authMiddleware(http.HandlerFunc(instanceConfigHandler.HandleList)))
 	mux.Handle("POST /api/v1/instance-configs", authMiddleware(http.HandlerFunc(instanceConfigHandler.HandleCreate)))
 	mux.Handle("GET /api/v1/instance-configs/{name}", authMiddleware(http.HandlerFunc(instanceConfigHandler.HandleGet)))

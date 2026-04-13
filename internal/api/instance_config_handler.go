@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/HQGroup/nanobot-auto-updater/internal/config"
-	"github.com/HQGroup/nanobot-auto-updater/internal/lifecycle"
+	"github.com/HQGroup/nanobot-auto-updater/internal/nanobot"
 )
 
 // instanceConfigRequest is the JSON body for create/update/copy requests.
@@ -84,12 +84,17 @@ func (e *notFoundError) Error() string {
 //   - onDeleteInstance: Called after an instance is removed from config.yaml.
 //     Removes the nanobot config directory for the deleted instance.
 //     Failure is non-blocking (logged as warning).
+//
+// Optional onStopInstance (for targeted instance stop on delete):
+//   - onStopInstance: Called when an instance is deleted to stop only that instance
+//     by PID, instead of killing all nanobot processes system-wide.
 type InstanceConfigHandler struct {
 	getConfig        func() *config.Config // injected for testability; production uses config.GetCurrentConfig
 	logger           *slog.Logger
 	onCreateInstance func(name string, port uint32, startCommand string) error                                                                                                                                  // Phase 52: nanobot config creation
 	onCopyInstance   func(sourceName string, sourceStartCommand string, targetName string, targetPort uint32, targetStartCommand string) error                                                                  // Phase 52: nanobot config clone
 	onDeleteInstance func(name string, startCommand string) error                                                                                                                                               // Phase 52: nanobot config directory cleanup
+	onStopInstance   func(ctx context.Context, name string) error                                                                                                                                                // targeted instance stop by PID
 }
 
 // NewInstanceConfigHandler creates a new InstanceConfigHandler.
@@ -117,6 +122,13 @@ func (h *InstanceConfigHandler) SetOnCopyInstance(fn func(sourceName string, sou
 // The callback receives the instance name and startCommand for path resolution.
 func (h *InstanceConfigHandler) SetOnDeleteInstance(fn func(name string, startCommand string) error) {
 	h.onDeleteInstance = fn
+}
+
+// SetOnStopInstance sets the callback invoked to stop a specific instance by PID
+// when it is deleted. This replaces the old StopAllNanobots approach.
+// The callback receives a context and the instance name.
+func (h *InstanceConfigHandler) SetOnStopInstance(fn func(ctx context.Context, name string) error) {
+	h.onStopInstance = fn
 }
 
 // toResponse converts an internal InstanceConfig to a JSON response.
@@ -382,22 +394,32 @@ func (h *InstanceConfigHandler) HandleDelete(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	// Phase 52: Clean up nanobot config directory for deleted instance
+	// Stop only the deleted instance (not all instances).
+	// Uses onStopInstance callback to target the specific PID.
+	if h.onStopInstance != nil {
+		ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
+		defer cancel()
+		if err := h.onStopInstance(ctx, name); err != nil {
+			h.logger.Warn("Failed to stop deleted instance, it may exit on its own",
+				"name", name, "error", err)
+		} else {
+			h.logger.Info("Stopped deleted instance", "name", name)
+		}
+	}
+
+	// Phase 52: Clean up nanobot config directory for deleted instance.
+	// Skip cleanup if other instances share the same config path (default gateway).
 	if h.onDeleteInstance != nil {
-		if err := h.onDeleteInstance(name, deletedStartCommand); err != nil {
+		skipCleanup := h.shouldSkipConfigCleanup(name, deletedStartCommand)
+		if skipCleanup {
+			h.logger.Info("Skipping nanobot config cleanup: other instances share the same config path",
+				"name", name, "start_command", deletedStartCommand)
+		} else if err := h.onDeleteInstance(name, deletedStartCommand); err != nil {
 			h.logger.Warn("Failed to clean up nanobot config for deleted instance",
 				"name", name, "error", err)
 			// Non-blocking: instance is deleted from config.yaml, orphaned dir can be cleaned manually
 		}
 	}
-
-	// Stop all nanobot processes after config update.
-	// Known limitation: StopAllNanobots stops ALL nanobot.exe processes system-wide,
-	// not just the deleted instance. Hot-reload will restart remaining instances within ~500ms.
-	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
-	defer cancel()
-	lifecycle.StopAllNanobots(ctx, 5*time.Second, h.logger)
-	h.logger.Warn("StopAllNanobots stops all nanobot processes; remaining instances will restart via hot-reload within 500ms")
 
 	h.logger.Info("Instance config deleted", "name", name)
 
@@ -406,6 +428,35 @@ func (h *InstanceConfigHandler) HandleDelete(w http.ResponseWriter, r *http.Requ
 	json.NewEncoder(w).Encode(map[string]string{
 		"message": fmt.Sprintf("Instance %q deleted", name),
 	})
+}
+
+// shouldSkipConfigCleanup returns true if other instances in the config share
+// the same nanobot config path as the deleted instance. This prevents deleting
+// a shared config file (e.g., ~/.nanobot/config.json) that other default gateway
+// instances depend on.
+func (h *InstanceConfigHandler) shouldSkipConfigCleanup(deletedName, deletedStartCommand string) bool {
+	cfg := h.getConfig()
+	if cfg == nil {
+		return false
+	}
+
+	// Resolve the deleted instance's config path
+	deletedPath, err := nanobot.ParseConfigPath(deletedStartCommand, deletedName)
+	if err != nil {
+		return false
+	}
+
+	// Check if any remaining instance resolves to the same path
+	for _, ic := range cfg.Instances {
+		otherPath, err := nanobot.ParseConfigPath(ic.StartCommand, ic.Name)
+		if err != nil {
+			continue
+		}
+		if otherPath == deletedPath {
+			return true // Another instance uses the same config file
+		}
+	}
+	return false
 }
 
 // HandleCopy handles POST /api/v1/instance-configs/{name}/copy
