@@ -550,6 +550,20 @@ func (h *InstanceConfigHandler) HandleCopy(w http.ResponseWriter, r *http.Reques
 			clonedInstance.AutoStart = &val
 		}
 
+		// Prevent config path collision: if the copy resolves to the same config file
+		// as the source, auto-generate a unique --config path for the copy.
+		// This prevents CloneConfig from silently overwriting the source's config
+		// (which would corrupt the source instance's port, workspace, and skills).
+		sourceCfgPath, _ := nanobot.ParseConfigPath(sourceStartCommand, sourceName)
+		targetCfgPath, _ := nanobot.ParseConfigPath(clonedInstance.StartCommand, clonedInstance.Name)
+		if sourceCfgPath == targetCfgPath {
+			uniqueConfigPath := fmt.Sprintf("~/.nanobot-%s/config.json", clonedInstance.Name)
+			newStartCmd := nanobot.UpdateStartCommandConfig(clonedInstance.StartCommand, uniqueConfigPath)
+			clonedInstance.StartCommand = newStartCmd
+			h.logger.Info("Auto-generated unique config path for copied instance",
+				"instance", clonedInstance.Name, "config_path", uniqueConfigPath)
+		}
+
 		details := validateInstanceConfig(&clonedInstance, cfg.Instances, -1)
 		if len(details) > 0 {
 			return &validationError{details: details}

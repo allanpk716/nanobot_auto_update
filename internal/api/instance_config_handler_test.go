@@ -531,8 +531,8 @@ func TestHandleCopy_DefaultNamePort(t *testing.T) {
 	// Default: name = source + "-copy", port = source + 1
 	assert.Equal(t, "test-existing-copy", response.Name)
 	assert.Equal(t, uint32(18791), response.Port)
-	// Should copy start_command and startup_timeout from source
-	assert.Equal(t, "nanobot gateway", response.StartCommand)
+	// Should auto-generate a unique --config path to prevent config path collision
+	assert.Equal(t, "nanobot gateway --config ~/.nanobot-test-existing-copy/config.json", response.StartCommand)
 	assert.Equal(t, uint32(30), response.StartupTimeout)
 }
 

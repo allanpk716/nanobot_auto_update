@@ -231,6 +231,18 @@ func (cm *ConfigManager) CloneConfig(sourceStartCommand, sourceInstanceName, tar
 		return fmt.Errorf("failed to parse target config path: %w", err)
 	}
 
+	// Safety guard: if source and target resolve to the same config file, skip cloning.
+	// This prevents silently overwriting the source instance's config (port, workspace, skills).
+	// The caller (HandleCopy) should normally prevent this by auto-generating a unique
+	// --config path, but this guard protects against any remaining code path.
+	if sourceConfigPath == targetConfigPath {
+		cm.logger.Warn("CloneConfig: source and target config paths are identical, skipping clone to prevent corruption",
+			"source_instance", sourceInstanceName,
+			"target_instance", targetInstanceName,
+			"config_path", sourceConfigPath)
+		return nil
+	}
+
 	// Read source config; generate default if missing
 	configData, err := cm.ReadConfig(sourceConfigPath)
 	if err != nil {
@@ -266,6 +278,18 @@ func (cm *ConfigManager) CloneConfig(sourceStartCommand, sourceInstanceName, tar
 		"target_path", targetConfigPath,
 	)
 	return nil
+}
+
+// UpdateStartCommandConfig replaces or appends the --config flag in a start_command.
+// If the start_command already contains --config, the path is replaced.
+// If not, --config <path> is appended to the command.
+func UpdateStartCommandConfig(startCommand, configPath string) string {
+	if configPathRegex.MatchString(startCommand) {
+		// Replace existing --config value
+		return configPathRegex.ReplaceAllString(startCommand, "--config "+configPath)
+	}
+	// Append --config to the command
+	return startCommand + " --config " + configPath
 }
 
 // CleanupConfig removes the nanobot config for an instance.
