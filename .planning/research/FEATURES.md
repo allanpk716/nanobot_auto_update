@@ -1,215 +1,186 @@
 # Feature Landscape
 
-**Domain:** Instance startup notifications and Telegram connection log-pattern monitoring
-**Researched:** 2026-04-06
-**Scope:** v0.9 milestone ONLY -- Pushover notifications for instance startup results, log-pattern-triggered Telegram connection monitoring with 30-second timeout
-**Confidence:** HIGH (based on thorough codebase analysis and existing pattern inventory)
+**Domain:** Embedded Web UI enhancements for JSON config editing, delete protection, and config directory management
+**Researched:** 2026-04-13
+**Scope:** v0.18.0 milestone -- Instance management Web UI enhancements (7 requirements: DEL-01, DEL-02, CFG-01, CFG-02, CFG-03, EDT-01, EDT-02)
+**Confidence:** HIGH (based on existing codebase analysis, current UI patterns, and established JSON editor ecosystem knowledge)
 
 ## Table Stakes
 
-Features users expect. Missing = the monitoring service feels incomplete -- why monitor health but not tell me when startup fails?
+Features users expect. Missing = the management UI feels incomplete or unsafe.
 
 | Feature | Why Expected | Complexity | Dependencies on Existing | Notes |
 |---------|--------------|------------|--------------------------|-------|
-| Instance startup result notification (Pushover) | The service already starts instances at boot and monitors health. Not notifying on startup failure means the user has no idea an instance is down until they check manually. This is a gap in the existing notification coverage. | Low | `notifier.Notifier` interface (already injected into `TriggerHandler`), `instance.AutoStartResult` struct (already returned from `StartAllInstances`), async goroutine + panic recovery pattern from `TriggerHandler` and `NotificationManager` | The `StartAllInstances` method already returns `AutoStartResult` with `Started`, `Failed`, `Skipped` fields. The notification code just needs to read this result and call `notif.Notify()`. No new infrastructure needed. |
-| Per-instance startup notification | In multi-instance setups, the user needs to know which specific instance(s) failed, not just "something failed." The existing `AutoStartResult.Failed` already contains `InstanceError` with `InstanceName`, `Port`, and `Err`. | Low | Same as above. `AutoStartResult.Failed` is `[]*InstanceError` with all the fields needed. | Format the notification message to list each failed instance by name and error. Follow the same multi-instance formatting pattern as `notifier.Notifier.formatUpdateResultMessage`. |
-| Telegram connection monitoring triggered by log pattern | When nanobot starts a Telegram bot, it logs "Starting Telegram bot" (or similar). If the connection then fails (httpx.ConnectError per the documented bug), the process stays running but is non-functional. The monitor should detect this pattern and notify. | Medium | `logbuffer.LogBuffer` subscriber system (`Subscribe()`/`Unsubscribe()`), `notifier.Notifier` interface, existing `captureLogs` goroutine that writes to `LogBuffer` | This is the novel feature. The existing LogBuffer already has a `Subscribe()` method that streams new log entries to a channel. A new "log watcher" component can subscribe to each instance's buffer and look for patterns. |
-| 30-second timeout for Telegram connection success/failure | After "Starting Telegram bot" is detected in logs, wait up to 30 seconds for a success or failure indicator. If neither appears, treat as failure. | Low | `context.WithTimeout` (standard Go pattern used throughout codebase), `time.AfterFunc` (used in `NotificationManager`) | The timeout is a simple `time.AfterFunc` or `select` with `time.After(30*time.Second)`. No new infrastructure. |
-| Failure notification on Telegram connection timeout | If Telegram connection does not succeed within 30 seconds, send Pushover notification. | Low | `notifier.Notifier` interface | Same notification pattern as all other alerts. Title like "Nanobot Telegram 连接超时" with instance name and port. |
+| Delete button disabled when instance running (DEL-01) | Deleting a running instance can cause orphaned processes, corrupted state, and data loss. Every admin panel that manages running services disables destructive actions on active resources. Portainer, Docker Desktop, PM2 all do this. | Low | `createInstanceCard()` in home.js already has `isRunning` parameter. Just add `deleteBtn.disabled = isRunning` condition. | Currently the delete dialog (UI-05) shows a warning for running instances but still allows deletion. Changing to disable-first is a strict safety upgrade. |
+| Delete confirmation dialog (DEL-02) | Already built in v0.12 (UI-05). The `showDeleteDialog()` function fetches instance config, shows running warning, and has cancel/delete buttons. This requirement is already satisfied. | None | Already exists in home.js lines 443-534. | **Already shipped in v0.12.** No additional work needed. This requirement is a no-op. |
+| JSON syntax highlighting (EDT-01) | The current `nanobot-json-textarea` is a plain `<textarea>` with monospace font and no color. For a JSON config editor editing complex nested structures (agents.defaults, providers, channels, gateway), plain text makes it hard to spot structure. Every modern config editor provides syntax highlighting. | Medium | Current hybrid editor in `showNanobotConfigDialog()` (home.js lines 536-788). The `syncGuard` bidirectional sync between form fields and JSON textarea. | Must preserve the syncGuard pattern. The highlighted editor must still support `getValue()`/`setValue()` for sync. |
+| Real-time JSON validation (EDT-02) | Current implementation already has `try { JSON.parse(jsonStr) } catch(e)` with error display in `#nb-json-error` div (lines 713-734). This is table stakes for any JSON editor. The improvement is to enhance the UX: show error location (line, column), highlight the problematic area, and provide instant feedback as user types (not just on save). | Low-Medium | Current validation in JSON->Form sync listener and save handler. The `#nb-json-error` div already exists. | Enhancement of existing behavior, not a new feature. The baseline is already working. |
 
 ## Differentiators
 
-Features that elevate the monitoring quality. Not expected, but valued.
+Features that set the product apart from other management UIs. Not required, but valuable.
 
 | Feature | Value Proposition | Complexity | Dependencies on Existing | Notes |
 |---------|-------------------|------------|--------------------------|-------|
-| Configurable log patterns per instance | Instead of hardcoding "Starting Telegram bot", allow per-instance `watch_patterns` in config.yaml. Each pattern has a trigger string, success string, failure string, and timeout. | Medium | `config.InstanceConfig` struct, `config.yaml` | Makes the log watcher generic rather than Telegram-specific. Future-proof for monitoring any subprocess lifecycle event (database connections, API server readiness, etc.). Example: `watch_patterns: [{trigger: "Starting Telegram bot", success: "Telegram bot connected", failure: "ConnectError", timeout: 30s}]` |
-| Success notification for Telegram connection | Send a Pushover notification when Telegram connects successfully within the timeout window. | Low | Same notification infrastructure | Gives the user positive confirmation. Should be optional/configurable to avoid notification fatigue. |
-| Log pattern matching with regex support | Support regex patterns instead of just string contains, for more flexible matching. | Low | `regexp` standard library | `strings.Contains` is sufficient for the known patterns. Regex adds flexibility for future patterns. Low cost to add. |
+| Config directory field in create dialog (CFG-02) | Currently, config directory is auto-derived from `start_command --config` flag or defaults to `~/.nanobot/`. Allowing users to specify a custom config directory gives them full control over where nanobot configs live. This matters for users with multiple environments or shared storage. | Medium | `ParseConfigPath()` in config_manager.go extracts from `--config` flag. Need to add a new UI field and pass the value through the create API. Backend needs to store config_dir per instance and use it when resolving paths. | Requires backend change: new `config_dir` field in `InstanceConfig` struct, modification to `ParseConfigPath` to accept explicit directory. |
+| Auto-create config directory on startup (CFG-03) | When a user specifies a custom config directory that does not exist, the system should create it automatically and optionally read any existing config.json from it. This prevents "directory not found" errors and makes the first-time setup smooth. | Low | `WriteConfig()` already calls `os.MkdirAll(dir, 0755)` (config_manager.go line 177). `HandleGet` already has lazy-creation fallback for missing config files. | Partially implemented. The auto-create on write exists; what is new is: (1) creating the directory at instance startup time rather than on first config write, and (2) reading existing config.json from the directory if it already exists when creating the instance. |
+| Integrated config editor in create dialog (CFG-01) | Currently, creating an instance is a two-step process: create the instance, then open the config editor. Integrating the config editor into the create dialog lets users set up everything in one flow. Reduces friction for the common "create + configure" workflow. | Medium-High | Existing `showCreateDialog()` and `showNanobotConfigDialog()` are separate functions. The hybrid editor HTML template from nanobot config dialog needs to be embedded into the create dialog. | This is the most complex feature. Requires: (1) combining two separate dialog flows, (2) creating an instance first (to get API endpoints), (3) then editing config in same dialog, or (4) buffering config edits and submitting both atomically. |
+| Error line highlighting in JSON editor | When JSON has a syntax error, highlight the exact line and column where the error occurs (red underline, gutter marker). This is a quality-of-life feature that makes fixing errors much faster than reading "Unexpected token at position 142". | Low-Medium | Depends on EDT-01 (syntax highlighting editor). Native feature of Ace Editor and CodeMirror. | If using Ace Editor, this comes free with JSON mode. If using custom approach, requires manual error position parsing from `JSON.parse` error messages. |
+| JSON format/pretty-print button | A "Format" button that reformats the JSON with proper indentation (2 spaces). Users may paste minified JSON or accidentally break formatting. | Low | Current save handler already does `JSON.stringify(jsonObj, null, 2)`. | Simple button that parses and re-stringifies. Add to the JSON editor toolbar area. |
 
 ## Anti-Features
 
-Features to explicitly NOT build. These are traps that would overcomplicate a focused monitoring feature.
+Features that seem good but create problems. Explicitly exclude.
 
-| Anti-Feature | Why Avoid | What to Do Instead |
-|--------------|-----------|-------------------|
-| Telegram API polling / direct health checks | The monitor's job is to watch the subprocess, not to independently verify Telegram connectivity. Polling `api.telegram.org` would duplicate nanobot's own connectivity logic and introduce proxy/authentication complexity (the whole reason nanobot has the httpx.ConnectError in the first place). | Log-pattern monitoring only. The subprocess logs are the source of truth for its own connection state. |
-| Retry logic for Telegram connections | If Telegram connection fails, the monitor should notify, not retry. Retrying is nanobot's responsibility (or the user's via config). The monitor is an observer, not an actor. | Single detection + notification. If user wants retries, they configure nanobot's own retry behavior. |
-| Log pattern matching via external rules engine / DSL | Over-engineering. The patterns are known and few: "Starting Telegram bot" (trigger), some form of success/failure indicator. | Hardcode the known patterns for v0.9. If needed later, add `watch_patterns` config as a differentiator. |
-| WebSocket or SSE for Telegram connection status | The existing SSE infrastructure is for log streaming. Adding Telegram status streaming mixes concerns. | Pushover notification only. The user gets alerted on failure. If they want real-time status, they look at the existing log viewer. |
-| Automatic remediation (restart on Telegram failure) | Restarting the instance on Telegram failure is tempting but dangerous: it could create restart loops, mask underlying proxy/network issues, and the user explicitly chose the startup command. The monitor should observe and alert, not act. | Notify only. Let the user decide whether to restart, fix proxy config, or take other action. |
-| Per-instance notification routing | Sending different instances' notifications to different Pushover users/groups. | Single Pushover destination (existing pattern). If multi-user notification is needed later, it is a separate milestone. |
-| Startup notification for successful auto-start (all instances succeeded) | Sending "all 3 instances started successfully" adds notification noise. The user cares about failures. | Only notify on failure or partial failure (following existing pattern from `notifier.Notifier.NotifyUpdateResult` which skips when no errors). Success notification for Telegram connection is a differentiator because it confirms a specific async lifecycle event, not a routine startup. |
+| Anti-Feature | Why Requested | Why Problematic | Alternative |
+|--------------|---------------|-----------------|-------------|
+| Monaco Editor for JSON editing | VS Code-quality editing with IntelliSense, schema validation, auto-complete | Monaco is 2-5 MB (min) / ~700 KB (gzip). This project uses `embed.FS` for single-binary deployment with no build step. Adding a 700 KB+ dependency would significantly increase binary size. Monaco requires AMD loader, web workers, and complex setup. Overkill for editing a single config.json file. | Ace Editor (~300 KB, ~90 KB gzip, CDN or embedded) or CodeMirror 6 (~40 KB gzipped). For this use case, even a custom lightweight highlighter is sufficient. |
+| JSON Schema validation | Validate config against a formal schema (e.g., "gateway.port must be number") | Requires maintaining a schema that matches nanobot's internal config structure. Every nanobot version change would require schema updates. The nanobot project does not publish a formal JSON Schema. Server-side validation is better handled by nanobot itself when it reads the config. | Keep validation to syntax correctness (valid JSON). Let nanobot handle semantic validation on startup. |
+| Auto-save on edit | Save config changes automatically as user types | Risk of saving broken JSON mid-edit. Conflicts with the existing pattern where the user explicitly clicks "Save". Also, the config API (`PUT /nanobot-config`) does a full file write -- auto-save would cause excessive I/O and race conditions with form<->JSON sync. | Keep explicit save button. Add unsaved changes indicator (dot in title or "unsaved" badge) as a lighter alternative. |
+| Undo/redo in JSON editor | Ctrl+Z / Ctrl+Y support for JSON editing | Ace Editor and CodeMirror provide this built-in, but if using a custom textarea approach, implementing a proper undo stack is surprisingly complex (handle multi-character input, selection replacement, programmatic changes from sync). The syncGuard bidirectional sync would complicate undo/redo because form changes programmatically update the JSON textarea. | Use Ace Editor if undo/redo is important (it handles this natively). Otherwise, accept that undo is limited to the browser's native textarea undo (which is lost when the textarea value is set programmatically). |
+| Delete button hidden for running instances | Remove the delete button entirely when instance is running, instead of disabling it | Users may not realize delete is even possible. When they stop the instance, the button suddenly appears, which is unexpected. Hidden actions are confusing -- better to show them as disabled with a clear reason. | Disable with tooltip explaining "Stop the instance first to enable deletion". Consistent with how edit/copy buttons are always visible. |
 
 ## Feature Dependencies
 
 ```
-Feature A: Instance startup notifications
-  No hard dependencies beyond existing infrastructure.
-  Reads AutoStartResult from StartAllInstances (already returns this).
-  Uses Notifier.Notify() (already exists).
+EDT-01 (Syntax Highlighting)
+    └──requires──> Choosing JSON editor approach (Ace/CodeMirror/custom)
+                   └──EDT-02 (Real-time Validation) is enhanced by EDT-01
+                       └──Both must preserve syncGuard bidirectional sync
 
-Feature B: Telegram connection log monitoring
-  Depends on: LogBuffer subscriber system (already exists)
-  Depends on: captureLogs writing to LogBuffer (already exists)
-  Depends on: Log patterns being knowable (nanobot logs "Starting Telegram bot")
-  No dependency on Feature A (can be built independently).
+CFG-01 (Integrated Config in Create Dialog)
+    └──requires──> EDT-01 (syntax highlighting editor to embed)
+    └──requires──> CFG-02 (config directory field to pass to backend)
+    └──requires──> Backend API change (atomic create+config or two-step)
 
-Feature B detailed flow:
-  captureLogs (existing) --> LogBuffer.Write (existing) --> subscriber channel
-                                                              |
-  New: TelegramConnectionWatcher.Subscribe to LogBuffer       |
-          |                                                   |
-          +-- pattern match on "Starting Telegram bot"  <-----+
-          |        |
-          |        +-- start 30s timer
-          |        |       |
-          |        |       +-- watch for success pattern (e.g., "bot started")
-          |        |       |
-          |        |       +-- watch for failure pattern (e.g., "ConnectError", "error")
-          |        |       |
-          |        |       +-- 30s timeout without success --> notify failure
-          |        |
-          |        +-- found success within 30s --> (optionally notify success)
-          |
-          +-- no trigger pattern found --> do nothing (passive watch)
+CFG-02 (Custom Config Directory)
+    └──requires──> Backend: new config_dir field in InstanceConfig
+    └──requires──> Backend: modified ParseConfigPath to accept explicit dir
+    └──enhances──> CFG-01 (config dir is part of create dialog form)
+
+CFG-03 (Auto-create Directory / Read Existing)
+    └──requires──> CFG-02 (directory path must come from user or auto-derived)
+    └──enhances──> CFG-01 (show existing config in create dialog if directory exists)
+
+DEL-01 (Delete Button Disabled)
+    └──standalone──> No dependencies. Pure UI change in createInstanceCard().
+
+DEL-02 (Delete Confirmation Dialog)
+    └──already exists──> Shipped in v0.12 (UI-05). No work needed.
 ```
 
-## Detailed Behavioral Specification
+### Dependency Notes
 
-### Instance Startup Notification
+- **EDT-01 and EDT-02 are tightly coupled**: The JSON editor library choice determines how validation is implemented. Ace Editor provides both for free. A custom approach requires separate implementation for each.
+- **CFG-01 is the highest-complexity feature**: It combines two existing separate flows. The implementation order should be: (1) get syntax highlighting working in existing config dialog (EDT-01/EDT-02), (2) add config directory field (CFG-02), (3) then combine into create dialog (CFG-01).
+- **CFG-02 requires backend changes**: The current `InstanceConfig` struct does not have a `config_dir` field. The `ParseConfigPath()` function currently extracts from `start_command --config` flag. Supporting an explicit directory requires both a struct change and a function change.
+- **DEL-01 is independent and trivial**: A single line change in `createInstanceCard()`. Can be done in any phase.
 
-**Trigger:** After `StartAllInstances` completes in `main.go`.
+## MVP Definition
 
-**Behavior:**
-1. Read `AutoStartResult` (already returned).
-2. If `len(result.Failed) > 0`, send Pushover notification.
-3. Message includes: which instances failed (name + port + error), which succeeded.
-4. If `len(result.Failed) == 0`, skip notification (success is the expected state).
-5. Notification is async (goroutine + panic recovery), non-blocking.
-6. If Pushover is not configured (`!notif.IsEnabled()`), log a warning and skip.
+### Launch With (this milestone)
 
-**Integration point:** `main.go` line 224, after `instanceManager.StartAllInstances(autoStartCtx)`. Add notification logic here, same pattern as `TriggerHandler`'s async notification.
+Minimum viable product -- what is needed to fulfill all 7 requirements.
 
-**Notification format (failure):**
-```
-Title: Nanobot 实例启动失败
-Body:
-  启动失败: 2 个实例
+- [x] **DEL-02: Delete confirmation** -- Already shipped in v0.12 (UI-05). No work.
+- [ ] **DEL-01: Delete button disabled when running** -- One-line UI change in `createInstanceCard()`. Add `deleteBtn.disabled = isRunning;` and a tooltip.
+- [ ] **EDT-01 + EDT-02: JSON editor with syntax highlighting and real-time validation** -- Replace plain `<textarea>` with Ace Editor in JSON mode. Ace provides syntax highlighting, error annotations (gutter markers, red underlines), and `session.getAnnotations()` for reading errors. Must preserve `syncGuard` bidirectional sync.
+- [ ] **CFG-02: Config directory field in create dialog** -- Add `<input>` field to `buildInstanceFormHtml()`. Add `config_dir` to `InstanceConfig` struct. Modify `ParseConfigPath()` to accept explicit directory.
+- [ ] **CFG-03: Auto-create directory, read existing config** -- `WriteConfig()` already calls `MkdirAll`. Add logic to read existing config.json when directory already exists.
+- [ ] **CFG-01: Integrated config editor in create dialog** -- Embed the hybrid editor (form + JSON) into the create dialog. Two-step: create instance first, then edit config in same dialog flow.
 
-  失败的实例:
-    x nanobot-me (端口 18790)
-      原因: process exited immediately after start (PID 12345)
-    x nanobot-work (端口 18792)
-      原因: failed to start nanobot: timeout
+### Add After Validation (future milestones)
 
-  成功启动的实例 (1):
-    v nanobot-helper (端口 18791)
-```
+- [ ] **Format/pretty-print button** -- Trigger for adding: users report pasting minified JSON frequently.
+- [ ] **Unsaved changes indicator** -- Trigger for adding: users accidentally close dialog losing edits.
+- [ ] **JSON folding/collapse** -- Trigger for adding: configs become deeply nested and hard to navigate.
 
-### Telegram Connection Monitoring
+### Future Consideration (v2+)
 
-**Trigger:** Log line matching "Starting Telegram bot" (case-insensitive substring) in any instance's LogBuffer.
+- [ ] **Config templates** -- Pre-defined configs for common setups (gateway-only, gateway+telegram, etc.)
+- [ ] **Config diff view** -- Show what changed before saving
+- [ ] **Config import/export** -- Upload/download config.json files
 
-**Behavior:**
-1. A new component (`TelegramWatcher` or generic `LogPatternWatcher`) subscribes to each instance's `LogBuffer` via the existing `Subscribe()` method.
-2. Each incoming `LogEntry.Content` is checked against the trigger pattern.
-3. On trigger match, start a 30-second observation window for that instance.
-4. During the observation window:
-   - If a line matching a success pattern appears (e.g., "bot started", "polling started"), mark as SUCCESS. Optionally notify.
-   - If a line matching a failure pattern appears (e.g., "ConnectError", "ConnectionError", "error while polling"), mark as FAILED. Notify immediately.
-   - If 30 seconds elapse with neither success nor failure pattern, mark as TIMEOUT. Notify.
-5. Each instance can only have one active observation window at a time (prevent duplicates if "Starting Telegram bot" appears multiple times).
+## Feature Prioritization Matrix
 
-**Known patterns from nanobot (python-telegram-bot library):**
-- Trigger: `"Starting Telegram bot"` or `"Starting bot"` (nanobot gateway startup log)
-- Success: `"started polling"` or `"bot started"` (python-telegram-bot successful connection)
-- Failure: `"ConnectError"`, `"ConnectionError"`, `"error while polling"`, `"NetworkError"` (httpx/telegram error patterns)
+| Feature | User Value | Implementation Cost | Priority |
+|---------|------------|---------------------|----------|
+| DEL-01: Delete button disabled | HIGH (safety, prevents accidents) | LOW (one line) | P1 |
+| EDT-01: JSON syntax highlighting | HIGH (usability, readability) | MEDIUM (Ace Editor integration) | P1 |
+| EDT-02: Real-time JSON validation | HIGH (usability, error prevention) | LOW-MEDIUM (Ace provides it free) | P1 |
+| CFG-02: Config directory field | MEDIUM (flexibility) | MEDIUM (frontend + backend) | P1 |
+| CFG-03: Auto-create/read directory | MEDIUM (smooth setup) | LOW (partially done) | P1 |
+| CFG-01: Integrated create+config dialog | MEDIUM (reduces friction) | HIGH (combine two flows) | P2 |
+| DEL-02: Delete confirmation | HIGH (safety) | NONE (already done) | Done |
+| Format button | LOW (nice to have) | LOW | P3 |
+| Unsaved changes indicator | LOW (nice to have) | LOW | P3 |
 
-**Note on pattern accuracy:** The exact log strings need to be verified against actual nanobot output. The patterns above are based on python-telegram-bot source analysis and the documented httpx.ConnectError. This is a known validation point -- the implementation phase should capture real nanobot logs to confirm patterns.
+**Priority key:**
+- P1: Must have for this milestone (6 features)
+- P2: Should have, add when possible (1 feature)
+- P3: Nice to have, future consideration
 
-**Integration point:** After `instanceManager` creation in `main.go`, create and start the watcher for each instance that has a LogBuffer.
+## Implementation Approach: JSON Editor Selection
 
-**Notification format (failure):**
-```
-Title: Nanobot Telegram 连接失败
-Body:
-  实例: nanobot-me (端口 18790)
-  原因: 30 秒内未检测到连接成功
+The critical decision for EDT-01/EDT-02 is which editor approach to use. Given the project constraints:
 
-  最近日志:
-    2026-04-06 10:00:01 - Starting Telegram bot...
-    2026-04-06 10:00:02 - httpx.ConnectError: ...
-```
+| Criterion | Ace Editor (recommended) | CodeMirror 6 | Custom textarea overlay |
+|-----------|------------------------|--------------|------------------------|
+| Bundle size | ~300 KB / ~90 KB gzip | ~40 KB gzip (but needs ESM build) | 0 KB |
+| CDN setup | Simple `<script>` tags | Needs ESM imports or bundler | None (pure vanilla) |
+| JSON syntax highlighting | Built-in mode | Built-in mode | Must implement manually |
+| JSON validation | Built-in worker (error markers in gutter) | Via `@codemirror/lint` plugin | Manual `JSON.parse` + error display |
+| `getValue()`/`setValue()` API | Yes (`editor.getValue()` / `editor.setValue()`) | Yes (more complex state management) | Yes (textarea `.value`) |
+| SyncGuard compatibility | Yes -- replace textarea reads with `editor.getValue()` | Yes -- but more setup | Already working |
+| No build step | Yes -- pure CDN `<script>` | No -- needs ESM bundler or esm.sh CDN | Yes |
+| embed.FS compatible | Yes -- either embed minified files or use CDN | Difficult without bundler | Already embedded |
+| Error line/column highlighting | Yes -- automatic gutter markers | Yes -- via lint plugin | Manual implementation |
+| Themes | Many built-in themes | Modular theme system | Manual CSS |
 
-## MVP Recommendation
+**Recommendation: Ace Editor**
 
-**Build in this order (2 phases):**
+Ace Editor is the best fit because:
+1. **No build step** -- This project has zero JavaScript tooling (no npm, no bundler). Ace works with plain `<script>` tags from CDN or embedded files.
+2. **embed.FS compatible** -- The minified Ace files (ace.js ~300KB, mode-json.js ~10KB) can be embedded in the Go binary via `//go:embed static/*`. Alternatively, load from CDN with a `<script>` tag (requires internet access).
+3. **JSON mode includes validation** -- Setting `session.setMode("ace/mode/json")` automatically enables a web worker that validates JSON and shows error annotations (red markers in gutter, error messages on hover).
+4. **Simple API** -- `editor.getValue()` and `editor.setValue()` map directly to the existing `textarea.value` reads/writes. The syncGuard pattern is preserved with minimal changes.
+5. **Acceptable size** -- ~90 KB gzipped is reasonable for a config editor feature. The overall binary is already ~23,400 LOC Go + embedded assets.
 
-1. **Phase 1: Instance startup notifications**
-   - Add notification call in `main.go` after `StartAllInstances`
-   - Format message from `AutoStartResult`
-   - Async with panic recovery
-   - Only notify on failure/partial failure
-   - Tests: mock Notifier, verify message format, verify no notification on success
+**CDN vs embedded decision:**
+- **CDN approach** (simpler): Add `<script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.32.6/ace.js"></script>` and `mode-json.js` to `home.html`. Requires internet access on the machine running the updater. Problematic if the machine has no internet (but the updater itself needs internet for GitHub Releases, so this is likely acceptable).
+- **Embedded approach** (self-contained): Download minified ace.js and mode-json.js, place in `internal/web/static/vendor/`, embed via `//go:embed static/vendor/*`. Binary size increases ~300 KB. No internet dependency. Consistent with the single-binary deployment philosophy.
+- **Recommendation**: Embed the files. The project strongly values self-contained single-binary deployment (embed.FS for all static assets, self-update mechanism, no external runtime dependencies). Adding a CDN dependency breaks this principle.
 
-2. **Phase 2: Telegram connection monitoring**
-   - New `internal/logwatcher/` package
-   - `LogPatternWatcher` struct with `Subscribe()` to LogBuffer
-   - Pattern matching (strings.Contains for v0.9, not regex)
-   - 30-second timeout with `time.AfterFunc`
-   - Pushover notification on failure/timeout
-   - Tests: pattern matching, timeout behavior, success detection, multi-instance isolation
+## Competitor Feature Analysis
 
-**Defer:**
-- Configurable log patterns (use hardcoded known patterns for v0.9, add config later if needed)
-- Success notification for Telegram connection (add as option after core monitoring works)
-- Regex pattern support (strings.Contains is sufficient for known patterns)
+| Feature | Portainer (Docker) | PM2 (Node.js) | Our Approach |
+|---------|-------------------|---------------|--------------|
+| Delete button protection | Disables delete for running containers, shows tooltip | Stops process before delete | Disable delete button when running, show tooltip |
+| Delete confirmation | Modal with container name, force option | Inline confirmation | Already have modal (UI-05), keep as-is |
+| Config editing | Text editor for env vars, compose YAML | JSON/process file editor with syntax highlighting | Ace Editor JSON mode with syntax highlighting + validation |
+| Create + configure flow | Separate steps (create then configure) | Separate steps | Two-step in same dialog (create then edit config) |
+| Config directory management | Volume mapping (Docker concept) | cwd option | Config directory field in create dialog |
 
-## Existing Infrastructure Inventory
+## Phase Ordering Recommendation
 
-These components already exist and will be reused. No new packages or libraries needed.
+Based on dependencies, recommended implementation order:
 
-| Component | Location | How It's Used for New Features |
-|-----------|----------|-------------------------------|
-| `notifier.Notifier` interface | `internal/notifier/notifier.go` | `Notify(title, message)` for all Pushover notifications. Already injected everywhere. |
-| `notifier.Notifier.IsEnabled()` | `internal/notifier/notifier.go` | Check before sending. Graceful degradation when Pushover not configured. |
-| `logbuffer.LogBuffer` | `internal/logbuffer/buffer.go` | Per-instance circular buffer. `Write()` sends to all subscribers. |
-| `logbuffer.Subscribe()` | `internal/logbuffer/subscriber.go` | Returns `<-chan LogEntry`. New watcher subscribes to receive real-time logs. |
-| `logbuffer.Unsubscribe()` | `internal/logbuffer/subscriber.go` | Clean up subscriber on shutdown. |
-| `LogEntry{Timestamp, Source, Content}` | `internal/logbuffer/buffer.go` | Each captured log line. Content is the raw subprocess output. |
-| `instance.AutoStartResult` | `internal/instance/manager.go` | `Started []string`, `Failed []*InstanceError`, `Skipped []string`. Already populated. |
-| `instance.InstanceError` | `internal/instance/errors.go` | `InstanceName`, `Operation`, `Port`, `Err`. Rich error info for notifications. |
-| `instance.InstanceManager.GetLifecycle()` | `internal/instance/manager.go` | Get specific instance by name, access its LogBuffer. |
-| `instance.InstanceLifecycle.GetLogBuffer()` | `internal/instance/lifecycle.go` | Returns the instance's LogBuffer. Used to subscribe for log watching. |
-| Async notification pattern | `internal/api/trigger.go`, `internal/notification/manager.go` | Goroutine + `defer recover` + `debug.Stack()`. Copy this pattern exactly. |
-| `notification.Notifier` interface (local) | `internal/notification/manager.go` | `IsEnabled()`, `Notify(title, message)`. Same duck-typed interface. |
-| Context + cancel pattern | Multiple files | `context.WithCancel(context.Background())` for lifecycle control. |
-| `config.Config` + viper | `internal/config/config.go` | Add new config fields if needed (watch patterns, timeouts). |
-
-## Edge Cases to Consider
-
-| Edge Case | Handling |
-|-----------|----------|
-| Instance starts, but "Starting Telegram bot" never appears in logs | Watcher stays passive. No false positive. Only activates on trigger pattern. |
-| Multiple "Starting Telegram bot" lines in quick succession | Only one active observation window per instance. New trigger cancels/replaces the old timer. |
-| Instance stops and restarts during observation window | LogBuffer.Clear() is called on restart. Subscriber receives new logs. Old observation should be cancelled on Clear. |
-| Pushover is not configured | `notif.IsEnabled()` returns false. Log warning, skip notification. Same graceful degradation as all existing notifications. |
-| LogBuffer subscriber channel full (100 entries) | Non-blocking send drops logs (existing behavior). Watcher may miss patterns. Log a warning if pattern is missed during observation window. |
-| Very slow log output (nanobot takes 29 seconds to log anything) | 30-second timeout may fire before any log appears. This is correct behavior -- if Telegram doesn't connect in 30s, it is a failure. |
-| Nanobot logs in non-English | Known risk. v0.9 hardcodes English patterns from python-telegram-bot. If nanobot localization changes log messages, patterns will break. Flagged for validation. |
-| Instance has no Telegram channel configured | "Starting Telegram bot" never appears. Watcher stays passive. No false positive. |
+1. **Phase A: DEL-01** -- Delete button disabled. Independent, trivial, immediate safety improvement.
+2. **Phase B: EDT-01 + EDT-02** -- JSON editor upgrade. Core infrastructure change. Replace textarea with Ace Editor in existing config dialog. This is the foundation for CFG-01.
+3. **Phase C: CFG-02 + CFG-03** -- Config directory backend + frontend. Backend changes needed before CFG-01 can work.
+4. **Phase D: CFG-01** -- Integrated create+config dialog. Depends on both Phase B (editor component) and Phase C (config directory field).
 
 ## Sources
 
-- Codebase analysis: `internal/notifier/notifier.go` -- Notifier interface and Pushover integration (HIGH confidence, direct source)
-- Codebase analysis: `internal/logbuffer/subscriber.go` -- Subscribe/Unsubscribe channel pattern (HIGH confidence, direct source)
-- Codebase analysis: `internal/instance/manager.go` -- `AutoStartResult` and `StartAllInstances` (HIGH confidence, direct source)
-- Codebase analysis: `internal/api/trigger.go` -- Async notification pattern with panic recovery (HIGH confidence, direct source)
-- Codebase analysis: `internal/notification/manager.go` -- NotificationManager with cooldown timer pattern (HIGH confidence, direct source)
-- Codebase analysis: `.planning/quick/260406-fge-*/260406-fge-PLAN.md` -- Telegram httpx.ConnectError root cause and nanobot proxy behavior (HIGH confidence, documented diagnosis)
-- python-telegram-bot library: known log patterns for bot startup, polling, and connection errors (MEDIUM confidence, based on library behavior understanding; exact patterns need validation against real nanobot output)
+- Existing codebase analysis: home.js (1462 lines), style.css (932 lines), config_manager.go (301 lines), nanobot_config_handler.go (146 lines)
+- [CSS-Tricks: Editable Textarea with Syntax Highlighting](https://css-tricks.com/creating-an-editable-textarea-that-supports-syntax-highlighted-code/) -- the overlay technique for custom syntax highlighting
+- [GoMakeThings: Vanilla JS Syntax Highlighting](https://gomakethings.com/how-to-add-syntax-highlighting-to-code-as-a-user-types-in-realtime-with-vanilla-javascript/) -- pure vanilla approach without libraries
+- [CodeMirror Reference Manual](https://codemirror.net/docs/ref/) -- CodeMirror 6 modular architecture documentation
+- [CodeMirror Forum: Minimal Setup](https://discuss.codemirror.net/t/minimal-setup-because-by-default-v6-is-50kb-compared-to-v5/4514) -- bundle size discussion
+- Ace Editor CDN: cdnjs.cloudflare.com/ajax/libs/ace -- current version 1.32.6
+- [Reddit: Lightweight vanilla.js JSON editor](https://www.reddit.com/r/javascript/comments/1ltue6z/share_a_lightweight_json_editor/) -- zero-dependency approach
+- UX patterns for delete protection: Based on analysis of Portainer, PM2, Docker Desktop, and standard admin panel patterns (training data, MEDIUM confidence)
 
 ---
-*Feature research for: v0.9 Instance Startup Notifications + Telegram Connection Monitoring milestone*
-*Researched: 2026-04-06*
+*Feature research for: v0.18.0 Instance Management Enhancements*
+*Researched: 2026-04-13*

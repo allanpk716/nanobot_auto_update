@@ -1,470 +1,391 @@
-# Domain Pitfalls: Instance Startup Notifications and Telegram Connection Monitoring
+# Pitfalls Research
 
-**Domain:** Adding log-pattern monitoring with timeout and instance lifecycle notifications to an existing Go Windows service (nanobot-auto-updater)
-**Researched:** 2026-04-06
-**Overall confidence:** HIGH (derived from codebase analysis and verified Go concurrency patterns)
+**Domain:** Embedded vanilla JS web UI enhancements (JSON editor, UI state management, config directory management)
+**Researched:** 2026-04-13
+**Confidence:** MEDIUM (based on codebase analysis, Go stdlib docs, and web search; LOW confidence for CDN-only findings)
 
 ## Critical Pitfalls
 
-Mistakes that cause rewrites, notification spam, or silent monitoring failures.
+Mistakes that cause rewrites, broken features, or deployment failures.
 
 ---
 
-### Pitfall 1: Log Pattern Scanner Race with LogBuffer Write
+### Pitfall 1: CDN Dependencies Break Single-Binary Offline Deployment
 
 **What goes wrong:**
-A new log-pattern scanner subscribes to LogBuffer to detect "Starting Telegram bot". The scanner goroutine reads LogEntry from the subscriber channel, but the LogBuffer's non-blocking send (`select + default`) can drop entries when the channel is full (capacity 100). If the "Starting Telegram bot" line is dropped, the Telegram connection monitor never activates, and a real connection failure goes undetected.
+Adding a JSON editor library via CDN `<script>` tags (e.g., `cdn.jsdelivr.net/npm/jsoneditor@9.10.3/dist/jsoneditor.min.js`) breaks the core value proposition of `embed.FS` single-binary deployment. When the application runs on a machine without internet access -- a common scenario for Windows services behind firewalls -- the JSON editor fails to load. The rest of the UI works (embedded), but the editor area is blank or throws `ReferenceError: JSONEditor is not defined`.
 
 **Why it happens:**
-- LogBuffer.Write() uses non-blocking send: slow subscribers get entries dropped at WARN level
-- The existing subscriber pattern was designed for SSE streaming (loss of one log line is acceptable for UI display)
-- A log-pattern monitor has different requirements: missing a single trigger line means the entire monitoring feature silently fails
-- The scanner goroutine might be slow because it does string matching on every entry, or because it was blocked sending a Pushover notification synchronously
+The project uses `//go:embed static/*` in `internal/web/handler.go` (lines 14-15) to serve all static assets from the Go binary. This makes the application fully self-contained -- no external files needed at runtime. Developers adding a new JS library naturally reach for a CDN `<script>` tag because that is how vanilla JS projects typically work, but it contradicts the architectural constraint of single-binary deployment established in Key Decision "embed.FS + no build tools" (Phase 23).
 
 **How to avoid:**
-1. The pattern scanner goroutine must NEVER block on anything other than reading from the subscriber channel -- no synchronous notification sends, no file I/O, no network calls
-2. When the trigger pattern is detected, hand off to a SEPARATE goroutine for the timeout monitoring and notification logic
-3. Consider using a dedicated channel (not the subscriber channel) for pattern detection, or use a callback hook in LogBuffer.Write() instead of the subscriber pattern
-4. If using the subscriber channel, ensure the scanner goroutine is always ready to receive (use `select` with only the channel read, no additional cases that could block)
+Download the JS library files (and their CSS), place them in `internal/web/static/vendor/` or similar, and reference them via local paths (`/static/vendor/jsoneditor.min.js`). This keeps everything inside the embed.FS boundary. For version pinning, store the vendor files in the repository -- the binary will always have them.
+
+For Ace Editor specifically (~100KB gzipped for JSON mode), the three files needed are:
+- `ace.js` (core)
+- `mode-json.js` (JSON syntax highlighting)
+- `theme-<name>.js` (chosen theme)
+
+Set `ace.config.set("basePath", "/static/vendor/ace/")` so Ace can find its mode/theme workers from the embedded path.
 
 **Warning signs:**
-- LogBuffer WARN logs showing "Subscriber channel full, dropping log" during instance startup
-- Telegram connection monitor never activates even though nanobot output contains "Starting Telegram bot"
-- Tests pass in isolation but fail under load (multiple instances starting simultaneously)
+- HTML contains `<script src="https://cdn...">` or `<link href="https://cdn...">`
+- Browser DevTools shows 404 or net::ERR_INTERNET_DISCONNECTED for library files
+- "Works on my machine" but fails on the actual deployment Windows server
 
 **Phase to address:**
-Phase implementing log-pattern scanner -- the scanner must be designed from the start with the non-blocking constraint in mind.
+EDT-01 phase (JSON editor integration) -- this must be decided before writing any editor code.
 
 ---
 
-### Pitfall 2: time.AfterFunc Callback Accesses Shared State Without Mutex
+### Pitfall 2: JSON Editor Replaces syncGuard Bidirectional Sync With Conflicting State
 
 **What goes wrong:**
-The Telegram connection monitor uses `time.AfterFunc(30*time.Second, callback)` to implement the 30-second timeout. The callback function captures a pointer to the monitor state (e.g., `monitor.pendingInstances`). The main goroutine and the AfterFunc callback goroutine both read/write this state without synchronization, causing a data race.
+The existing nanobot config editor in `home.js` (lines 663-735) uses a `syncGuard` boolean flag to prevent infinite loops between the structured form (left panel) and the JSON textarea (right panel). If a JSON editor library with its own internal state model (Ace Editor, Monaco, jsoneditor) replaces the plain `<textarea>`, the syncGuard pattern breaks because the library holds its own copy of the content. Editing in the editor triggers the library's `onChange` callback, which tries to sync to the form, which tries to sync back to the editor, causing either lost edits or infinite loops.
 
 **Why it happens:**
-- `time.AfterFunc` runs its callback in a NEW goroutine (documented behavior)
-- The callback closure captures variables by reference -- the outer goroutine may have modified them by the time the callback runs
-- The existing NotificationManager (network monitor) already has this pattern correctly: `confirmAndNotify` is called from AfterFunc and accesses state protected by `nm.mu.Lock()`
-- But a NEW component may forget to follow this pattern
+The current syncGuard works because both the form and the `<textarea>` share the same DOM element -- setting `textarea.value` directly mutates the single source of truth. A JSON editor library introduces a JavaScript object model: `ace.edit()` returns an editor instance with its own internal state. The library's `getValue()`/`setValue()` methods may trigger or suppress their own `onChange` events depending on implementation, making the syncGuard flag unreliable.
 
 **How to avoid:**
-1. Any state accessed by the AfterFunc callback MUST be protected by a mutex (the same pattern as NotificationManager)
-2. Lock the mutex at the start of the callback, defer unlock
-3. Check if the state is still relevant (the instance may have already been stopped/restarted by the time the 30 seconds elapse)
-4. Follow the exact pattern from `internal/notification/manager.go`: `confirmAndNotify` acquires the lock, checks if the state is still current, then proceeds or aborts
+Design a clear "source of truth" architecture before integrating any editor library:
+1. **Single source of truth**: The raw JSON string lives in a plain JavaScript variable, NOT in the editor instance.
+2. **Editor is a view**: The editor displays and edits this variable, but all mutations flow through a single update function.
+3. **Guard with a "programmatic update" flag**: When syncing FROM form TO editor, set a flag. The editor's `onChange` handler checks this flag and skips the reverse sync.
+4. **Debounce the editor onChange**: Use `setTimeout(fn, 200)` debounce to prevent rapid-fire sync while the user is typing.
+
+```
+User types in form --> update jsonVar --> syncGuard=true --> editor.setValue(jsonVar) --> syncGuard=false
+User types in editor --> onChange fires --> if syncGuard: return --> update jsonVar --> update form fields
+```
 
 **Warning signs:**
-- `go test -race` detects data race in timeout callback
-- Intermittent nil pointer dereference in AfterFunc callback
-- Notification sent for a stale instance (instance was restarted during the 30s window)
+- Edits in the form don't appear in the editor (or vice versa)
+- Browser DevTools shows rapid CPU usage / stack overflow on edit
+- Values reset after a brief flash
 
 **Phase to address:**
-Phase implementing Telegram connection timeout monitor -- mutex must be in the initial design.
+EDT-01 + EDT-02 phase (JSON editor + validation). Must be resolved before implementing bidirectional sync.
 
 ---
 
-### Pitfall 3: Notification Spam on Service Restart Loop
+### Pitfall 3: Delete Button State Drifts From Actual Instance Status
 
 **What goes wrong:**
-The nanobot-auto-updater service restarts (due to self-update or manual restart). Each restart triggers auto-start of all instances. Each instance start sends a Pushover notification. If the service restarts in a loop (e.g., self-update keeps failing), the user receives dozens of identical notifications within minutes. Pushover free tier limits at 7,500 messages/month -- a restart loop could exhaust this quota in hours.
+The delete button is supposed to be disabled when an instance is running and enabled when stopped (DEL-01). The current implementation rebuilds the entire card grid every 5 seconds via `setInterval(loadInstances, 5000)` (home.js line 1108). During the 5-second polling interval, if a user clicks "Stop" on a running instance, the card grid rebuilds after the stop completes (`loadInstances()` in `handleLifecycleAction` line 1082), but the delete button state on the NEW card depends entirely on what the status API returns at that exact moment. If the status API returns stale data (the process hasn't fully exited yet), the delete button stays disabled even though the user just stopped the instance.
 
 **Why it happens:**
-- The new feature adds startup notifications for every instance on every application start
-- The existing v0.7 notification system only sends notifications on explicit update triggers (not on every startup)
-- There is no cooldown or deduplication for startup notifications
-- The self-update mechanism (v0.8) can cause restart loops if the new binary keeps crashing
-- Multiple instances = multiple notifications per restart
+The UI has no client-side state model. All state is derived from the server response. The `isRunning` variable on line 842 is a snapshot from the most recent API call. After a stop action, `loadInstances()` fetches fresh data, but the instance process may not have fully terminated by the time the status API responds. The status detection uses PID-based checks (`FindProcessByPID` via `proc.IsRunning()`), which has already caused a regression (see debug file `instance-status-stopped-regression.md` where `proc.Status()` was not implemented on Windows).
 
 **How to avoid:**
-1. Implement a startup notification cooldown: track the last time a startup notification was sent per instance. If the same instance sent a notification less than N minutes ago, suppress the duplicate
-2. The cooldown value should be configurable, with a sensible default (e.g., 5 minutes)
-3. Consider aggregating all instance startup results into a SINGLE notification rather than one per instance
-4. On startup, send one summary notification ("3 instances started, 0 failed") instead of 3 individual notifications
-5. Store the cooldown state in memory (a simple `map[string]time.Time` with mutex) -- no need for persistence since service restart resets the cooldown (which is correct behavior)
+1. **Optimistic UI state**: When the user clicks "Stop", immediately mark the instance as "stopping" locally. After the stop API returns 200, set local state to "stopped" regardless of what the next status poll says. Only revert to "running" if a future status poll explicitly says running.
+2. **Debounce delete button state checks**: After a lifecycle action, add a short delay (500-1000ms) before the first status poll to let the process fully terminate.
+3. **Server-side consistency**: Ensure the DELETE API (line 510 in home.js) returns 409 if the instance is still running, rather than silently proceeding. The frontend currently shows a warning but doesn't enforce the constraint.
 
 **Warning signs:**
-- User reports receiving many notifications in short succession
-- Pushover API returns rate-limit errors (500ms between calls minimum)
-- Log shows notification sent every few seconds during a restart loop
+- User stops an instance, delete button stays disabled until next 5-second poll
+- User sees inconsistent state: "stopped" label but delete is grayed out
+- Status indicator and delete button state disagree for 1-5 seconds after actions
 
 **Phase to address:**
-Phase implementing startup notifications -- the cooldown/aggregation must be designed before writing the first notification send call.
+DEL-01 phase (delete button state protection). Must be designed alongside EDT-01/02 since both modify the card rendering.
 
 ---
 
-### Pitfall 4: Telegram Connection Monitor Activates on Historical Logs
+### Pitfall 4: Real-Time JSON Validation Performance on Every Keystroke
 
 **What goes wrong:**
-The log-pattern scanner subscribes to LogBuffer, and the Subscribe() method replays ALL historical entries first (see `subscriberLoop` in subscriber.go). If the LogBuffer already contains "Starting Telegram bot" from a previous run, the scanner detects it and starts a 30-second timeout monitor for a Telegram connection that is already established (or already failed). This results in a spurious "Telegram connection failed" notification 30 seconds after the auto-updater restarts.
+EDT-02 requires real-time JSON validation on every keystroke. If using a naive approach (`JSON.parse(textarea.value)` on every `input` event), the validation works fine for small configs but causes noticeable lag for large nanobot configs (50+ lines, deeply nested objects). The UI appears to freeze while parsing.
 
 **Why it happens:**
-- LogBuffer.Subscribe() sends history logs before real-time logs (by design, for SSE UI)
-- The subscriber loop iterates `GetHistory()` and sends each entry to the channel
-- The pattern scanner does not distinguish between historical entries and real-time entries
-- On application restart, LogBuffer is cleared (Clear() is called before start), BUT the race window exists: if the instance starts and outputs "Starting Telegram bot" before the scanner subscribes, the entry is already in the buffer and will be replayed
+The current nanobot config has 5 top-level sections (agents, channels, providers, gateway, tools) with nested objects. `JSON.parse()` is O(n) in string length, which is fast, but the problem is the DOM update that follows: after parsing, the code syncs to form fields (5 DOM element updates) and then back to the textarea (stringifying the entire object). This round-trip on every keystroke creates jank.
 
 **How to avoid:**
-1. Add a `timestamp` or `sequence` filter: only process log entries that were written AFTER the scanner was initialized
-2. Store a `startTime time.Time` when the scanner is created, and ignore any LogEntry with `Timestamp.Before(startTime)`
-3. Alternatively, add a LogBuffer method that subscribes WITHOUT history replay (a "real-time only" subscribe)
-4. This is the most robust approach: the pattern scanner only cares about NEW log entries, never historical ones
+1. **Debounce validation**: Only validate after 300ms of inactivity, not on every keystroke. This is the single most impactful change.
+2. **Separate validation from sync**: Parse JSON for validation (syntax check), but only sync to form fields when validation passes. The current code already does this partially (lines 706-708 catch parse errors), but it still attempts `JSON.parse` on every keystroke.
+3. **Editor library validation**: If using Ace Editor with JSON mode, enable the built-in worker-based validation (`editor.session.setMode("ace/mode/json")`) which runs in a Web Worker thread and doesn't block the main thread. This offloads parsing entirely.
+4. **For the form-to-JSON sync direction**: The form fields don't need JSON.parse -- they can directly set values on the JSON object without full serialization.
+
+```javascript
+// Debounced validation (300ms idle)
+var validationTimer = null;
+editor.session.on('change', function() {
+    clearTimeout(validationTimer);
+    validationTimer = setTimeout(function() {
+        validateAndSync(editor.getValue());
+    }, 300);
+});
+```
 
 **Warning signs:**
-- After restarting auto-updater, a spurious "Telegram connection failed" notification arrives 30 seconds later
-- The notification mentions an instance that has been running successfully for hours
-- The 30-second timeout fires for a Telegram connection that is actually working
+- Typing in the editor feels sluggish
+- Browser DevTools Performance tab shows long "Parsing" or "Scripting" blocks on input
+- CPU usage spikes while typing in the JSON editor
 
 **Phase to address:**
-Phase implementing log-pattern scanner -- the history-replay filter must be part of the initial scanner design.
+EDT-02 phase (real-time validation). Must be tested with a realistically large config (100+ lines).
 
 ---
 
-### Pitfall 5: Instance Stop/Restart During Active Telegram Monitor
+### Pitfall 5: Custom Config Directory Path Traversal and ParseConfigPath Conflict
 
 **What goes wrong:**
-The Telegram connection monitor is active (waiting for "connected" pattern within 30 seconds). During this window, the user triggers an update (via API or cron). The update stops the instance, which kills the nanobot process. The log capture goroutine detects EOF and exits. The "connected" pattern never appears. After 30 seconds, the timeout fires and sends a "Telegram connection failed" notification -- but the failure is EXPECTED because the instance was intentionally stopped.
+CFG-02 introduces user-specified config save directories. The existing `ParseConfigPath` function in `config_manager.go` (lines 50-78) uses a regex to extract `--config` from the `start_command` string. If the user specifies a custom directory in the create-instance dialog, there is no field for it in the current API (`POST /api/v1/instance-configs` accepts `name`, `port`, `start_command`, `startup_timeout`, `auto_start` -- no config directory field). Adding a new field means the server must validate that the path is safe (not a path traversal like `../../Windows/System32`) and that it doesn't conflict with the regex-based path resolution.
 
 **Why it happens:**
-- The update trigger (cron or API) does not coordinate with the Telegram connection monitor
-- The monitor has no awareness of instance lifecycle (stop/update/start)
-- The 30-second timeout cannot distinguish between "genuinely failed to connect" and "instance was stopped for update"
-- The stop/start cycle takes ~30-60 seconds, which overlaps perfectly with the 30-second monitor window
+The current architecture ties config path to `start_command` via regex. A custom config directory is orthogonal to `start_command` -- it's a separate piece of metadata. The conflict arises because `ParseConfigPath` has no awareness of a user-specified override. If both a `--config` flag in `start_command` AND a custom directory field are provided, which takes precedence?
 
 **How to avoid:**
-1. The Telegram connection monitor must be notified when an instance is about to be stopped
-2. Implement a cancellation mechanism: when StopForUpdate() is called, cancel any active Telegram monitor for that instance
-3. Use `context.Context` cancellation: pass a cancellable context to the monitor, and cancel it when the instance stops
-4. In the AfterFunc callback, check if the monitor was cancelled before sending the notification
-5. The monitor should also be cancelled when the instance is restarted (a new monitor starts for the new startup)
+1. **Define precedence clearly**: Custom directory field takes precedence over `--config` in start_command. If the user specifies both, the custom directory wins.
+2. **Path validation**: Reject paths that contain `..`, are absolute paths outside the user home directory, or reference Windows reserved device names (NUL, CON, PRN, etc.).
+3. **Extend ParseConfigPath or create a new function**: Add a `ParseConfigPathWithOverride(startCommand, instanceName, customDir string)` function that checks the custom directory first, then falls back to the existing regex logic.
+4. **Server-side validation**: Add the path validation in the `POST /api/v1/instance-configs` handler (Phase 50's `validateInstanceConfig` function).
 
 **Warning signs:**
-- Spurious "Telegram connection failed" notifications arriving ~30 seconds after a cron-triggered update
-- Notifications arrive during the update window (between stop and start)
-- Users confused by failure notifications when the update eventually succeeds
+- User can create config in arbitrary filesystem locations
+- `ParseConfigPath` and custom directory return different paths for the same instance
+- Config file written to one path but nanobot reads from another
 
 **Phase to address:**
-Phase implementing Telegram connection timeout -- the cancellation mechanism must be designed alongside the timeout.
+CFG-02 phase (custom config directory). Must be designed before extending the API schema.
 
 ---
 
-### Pitfall 6: Scanner Goroutine Leak on Instance Restart
+### Pitfall 6: os.MkdirAll Race Condition on Concurrent Instance Creation
 
 **What goes wrong:**
-Each time an instance starts, a new log-pattern scanner goroutine is created. When the instance is stopped and restarted, a NEW scanner is created but the OLD one is never properly cleaned up. Over multiple update cycles, goroutines accumulate. After 100 update cycles, there are 100 idle scanner goroutines per instance, each holding a subscriber channel in the LogBuffer.
+CFG-03 requires auto-creating config directories when instances start. The existing `WriteConfig` function in `config_manager.go` (line 176) already calls `os.MkdirAll` before writing. However, if multiple API requests arrive simultaneously to create instances that share a config directory (e.g., two instances with `--config ~/.nanobot-shared/config.json`), both goroutines call `MkdirAll` concurrently. While `os.MkdirAll` is generally safe for concurrent use in Go, the Go standard library has a known race condition (tracked in [golang/go#1736](https://github.com/golang/go/issues/1736)) where the `stat` -> `mkdir` sequence is not atomic. On Windows, this can produce `"file exists"` errors in edge cases.
 
 **Why it happens:**
-- The existing LogBuffer.Unsubscribe() exists but requires the caller to track the channel and call Unsubscribe
-- If the scanner goroutine is blocked on something (e.g., waiting for the 30-second timeout), it cannot respond to the Unsubscribe cancellation
-- The captureLogs goroutine already uses `detachedCtx` (context.Background()) to survive parent cancellation -- this means the scanner goroutine attached to it may also outlive expectations
-- The existing pattern in InstanceLifecycle.StartAfterUpdate() calls `logBuffer.Clear()` but does NOT unsubscribe existing subscribers
+The `ConfigManager.mu` mutex (line 166-167) serializes writes to the same ConfigManager instance, which protects against this race for writes. But if `CreateDefaultConfig` is called from multiple goroutines through different code paths (e.g., the lazy-creation fallback in `HandleGet` line 74, plus the explicit creation in instance copy), both paths go through `WriteConfig` which is mutex-protected. The real risk is if a new code path calls `os.MkdirAll` directly without going through `WriteConfig`.
 
 **How to avoid:**
-1. Use context.Context for scanner lifecycle management (same pattern as captureLogs)
-2. When creating a scanner, pass a cancellable context. Store the cancel function alongside the scanner
-3. When the instance stops or restarts, cancel the context. The scanner goroutine should check `ctx.Done()` and exit cleanly
-4. In the scanner goroutine, always `defer LogBuffer.Unsubscribe(ch)` to ensure cleanup
-5. Track active scanners per instance in InstanceLifecycle: `scannerCancel context.CancelFunc` field
+1. **Always go through WriteConfig**: Any directory creation must go through `ConfigManager.WriteConfig()` which holds the mutex. Do NOT call `os.MkdirAll` directly from API handlers.
+2. **Handle `os.IsExist` gracefully**: Even though MkdirAll usually returns nil for existing directories, add an `os.IsExist(err)` check as defensive coding.
+3. **Windows reserved names**: Reject config directory names that match Windows reserved device names (NUL, CON, PRN, AUX, COM1-9, LPT1-9). The Go issue [#24556](https://github.com/golang/go/issues/24556) documents `MkdirAll` failures with these names.
 
 **Warning signs:**
-- `runtime.NumGoroutine()` steadily increases after each update cycle
-- LogBuffer WARN logs showing "Subscriber channel full" with increasing channel capacity
-- Memory usage grows over days/weeks of operation
+- `"file exists"` error logged during concurrent instance operations
+- Config file written but directory creation reports error
+- Windows-specific test failures not reproducible on other platforms
 
 **Phase to address:**
-Phase implementing log-pattern scanner -- context lifecycle must be designed in the initial scanner struct.
+CFG-02/CFG-03 phase (config directory creation). Verify that all new directory creation paths go through the mutex-protected `WriteConfig`.
 
 ---
 
 ## Moderate Pitfalls
 
-### Pitfall 7: String Matching Too Narrow or Too Broad
+### Pitfall 7: Ace Editor Container Height Invisible in Modal
 
 **What goes wrong:**
-The scanner looks for the exact string "Starting Telegram bot" but nanobot outputs a slightly different format in a new version (e.g., "Starting telegram bot" with lowercase, or "Telegram bot starting" with different word order). Alternatively, the pattern is too broad (e.g., just "Telegram") and matches log lines that are not the actual startup indicator.
+Ace Editor renders into a container `<div>`, but if the container has no explicit CSS height (e.g., `height: 400px`), the editor is invisible -- it renders with zero height. This is one of the most common Ace Editor integration mistakes. In the existing code, the modal body (`modal-body`) doesn't set an explicit height on the JSON textarea container. When replacing the `<textarea>` with an Ace Editor div, the editor will appear completely blank.
 
 **How to avoid:**
-1. Use `strings.Contains()` with a case-insensitive match for robustness: check for "starting telegram" or "telegram bot" as a substring
-2. Make the trigger pattern configurable in config.yaml so it can be updated without code changes
-3. Log every pattern match at DEBUG level so mismatches can be diagnosed
-4. Test against actual nanobot output -- look at real log lines in the LogBuffer to verify the exact format
-5. Consider matching on multiple patterns: "Starting Telegram bot" to start monitoring, AND a positive pattern like "Telegram bot connected" or "Bot @xxx started" to detect success
+1. Set explicit height on the Ace Editor container: `style="height: 400px; width: 100%"` (or use CSS class).
+2. Call `editor.resize()` after the modal becomes visible -- Ace Editor calculates its layout at creation time, and if the modal is hidden (`display: none`), the layout is wrong.
+3. Test with the modal open on different screen sizes.
 
 **Warning signs:**
-- Telegram monitor never activates even though nanobot starts its Telegram channel
-- False positives from unrelated log lines mentioning "Telegram"
+- Config dialog opens but the editor area is blank/zero-height
+- Editor content only becomes visible after resizing the browser window
 
 **Phase to address:**
-Phase implementing log-pattern scanner -- pattern should be verified against real nanobot output.
+EDT-01 phase.
 
 ---
 
-### Pitfall 8: 30-Second Timeout Too Short or Too Long
+### Pitfall 8: Ace Editor Not Destroyed on Modal Close (Memory Leak)
 
 **What goes wrong:**
-The 30-second timeout for Telegram connection is a fixed guess. Under OpenClash proxy (the known environment), the connection may take longer due to proxy hops. If too short, every startup triggers a false failure notification. If too long, real failures are not detected promptly, and the user is unaware for 30+ seconds.
-
-**How to avoid:**
-1. Make the timeout configurable in config.yaml (e.g., `telegram.monitor_timeout: 30s`)
-2. Start with 30 seconds as default but allow override
-3. Measure actual connection times over a week of operation and tune
-4. Consider a two-phase approach: warn at 15 seconds, fail at 30 seconds
-5. The existing OpenClash proxy environment may cause higher latency -- account for this
-
-**Phase to address:**
-Phase implementing Telegram connection monitor.
-
----
-
-### Pitfall 9: Notification Not Sent on Instance Startup FAILURE
-
-**What goes wrong:**
-The startup notification feature is designed to notify on success AND failure. But the failure path is easy to miss: if `StartNanobotWithCapture()` returns an error (process exits immediately, port verification fails), the notification must still be sent. The error handling in `StartAllInstances()` catches the error but the notification hook may not be wired into the error path.
-
-**How to avoid:**
-1. The notification must be sent from the same location that handles the startup error (in StartAllInstances or InstanceLifecycle)
-2. Do NOT rely on the caller to send the notification -- wire it directly into the start flow
-3. Follow the existing pattern from TriggerHandler: the notification is sent whether the operation succeeds or fails
-4. Test the failure path explicitly: start an instance with an invalid command and verify the failure notification arrives
-
-**Phase to address:**
-Phase implementing startup notifications.
-
----
-
-### Pitfall 10: Pushover Notification Send Blocks Startup Flow
-
-**What goes wrong:**
-The Pushover notification is sent synchronously during instance startup. The HTTP call to Pushover API takes 1-5 seconds. For multiple instances starting sequentially, this adds 1-5 seconds PER INSTANCE to the total startup time. With 3 instances, that is 3-15 seconds of additional delay.
+Each time the user opens the nanobot config dialog, a new Ace Editor instance is created (`ace.edit("container")`). When the user closes the modal, the editor instance is not destroyed -- it remains in memory holding references to DOM elements, event listeners, and Web Workers. After opening/closing the dialog 10+ times, memory usage grows noticeably.
 
 **Why it happens:**
-- The existing pattern in TriggerHandler and NotificationManager already uses async goroutines for notification sends
-- But the NEW startup notification code may be placed in a synchronous path (e.g., inside StartAllInstances loop)
-- The existing pattern has the correct solution: `go func() { defer recover(); notifier.Notify() }()`
+The current modal system (`showModal` / `closeModal` in home.js) uses `innerHTML = ''` to clear the modal body. This removes the DOM elements but does not call Ace Editor's `editor.destroy()` method. The editor instance still holds references to the removed DOM nodes.
 
 **How to avoid:**
-1. ALWAYS send Pushover notifications asynchronously using a goroutine with panic recovery
-2. Follow the exact pattern from `internal/notification/manager.go` sendNotification():
-   ```go
-   go func() {
-       defer func() {
-           if r := recover(); r != nil {
-               logger.Error("notification goroutine panic", "panic", r, "stack", string(debug.Stack()))
-           }
-       }()
-       if err := notifier.Notify(title, message); err != nil {
-           logger.Error("notification failed", "error", err)
-       }
-   }()
-   ```
-3. This is a non-negotiable pattern in this codebase -- violation breaks the "non-blocking" principle
+1. Store the editor instance in a variable accessible from the close handler.
+2. Call `editor.destroy()` in the `closeModal` function (or in a before-close hook).
+3. Alternatively, reuse the same editor instance across dialog opens by updating its value instead of recreating.
+
+```javascript
+var activeEditor = null;
+
+function closeModal() {
+    if (activeEditor) {
+        activeEditor.destroy();
+        activeEditor = null;
+    }
+    document.getElementById('modal-container').style.display = 'none';
+}
+```
 
 **Phase to address:**
-Phase implementing startup notifications -- must be async from the first line of implementation.
+EDT-01 phase.
 
 ---
 
-### Pitfall 11: Multiple Simultaneous Telegram Monitors for Same Instance
+### Pitfall 9: Multiple setInterval Timers Without Coordination
 
 **What goes wrong:**
-Instance starts, scanner detects "Starting Telegram bot", starts a 30-second Telegram connection monitor. Before the 30 seconds expire, the instance crashes and restarts. A NEW "Starting Telegram bot" line is detected. A SECOND monitor is started for the same instance. After 30 seconds, BOTH monitors fire -- the first one sends a "failed" notification (because the original connection attempt died with the crash), and the second one may send another notification.
+The existing code already has `setInterval(loadInstances, 5000)` (line 1108) for instance status polling. Adding a JSON editor with its own interval (e.g., validation polling) creates multiple independent timers that can fire simultaneously, causing DOM thrashing. If the user is typing in the JSON editor when the 5-second poll fires and rebuilds the entire card grid, focus may be lost or the modal may be disrupted.
+
+**Why it happens:**
+The 5-second poll calls `loadInstances()` which sets `instancesGrid.innerHTML = ''` (line 826). This destroys and recreates all card DOM elements. If the nanobot config dialog is open at that moment, the dialog itself is safe (it's a separate modal element), but if the editor is embedded in the card (unlikely for current design) or if any state depends on card DOM elements, the rebuild causes issues.
 
 **How to avoid:**
-1. Track the active monitor per instance using a map: `map[string]context.CancelFunc` (instance name -> cancel function)
-2. When a new "Starting Telegram bot" is detected, cancel the previous monitor for that instance BEFORE starting a new one
-3. The AfterFunc callback should check if it is still the "current" monitor before sending notification
-4. Use a generation counter or unique ID per monitor to detect stale callbacks
+1. Do NOT rebuild the entire card grid on every poll. Use diff-based updates: only update cards whose state has changed.
+2. Cancel or pause the instance poll timer while a modal is open (since the user is focused on the modal, they don't need live card updates).
+3. If keeping the current approach, at minimum ensure the modal is never affected by the poll.
+
+**Warning signs:**
+- Modal flickers or loses focus every 5 seconds
+- Typing in the editor is interrupted by DOM rebuilds
+- DevTools shows rapid DOM mutations from the poll timer
 
 **Phase to address:**
-Phase implementing Telegram connection monitor.
+EDT-01 phase (verify isolation). Consider diff-based card updates as a follow-up improvement.
 
 ---
 
-## Minor Pitfalls
-
-### Pitfall 12: LogBuffer.Clear() Destroys Scanner Context
+### Pitfall 10: Config File Read-After-Write Race
 
 **What goes wrong:**
-InstanceLifecycle.StartAfterUpdate() calls `logBuffer.Clear()` before starting the instance. This resets the buffer but does NOT affect subscribers (subscribers map unchanged per the code comment). However, if the scanner relied on the buffer being non-empty for some initialization logic, Clear() could break assumptions.
+When creating a new instance (CFG-01 integrates config editing into the create dialog), the flow is: (1) user fills form, (2) click create, (3) POST API creates instance in config.yaml, (4) the on-create callback in ConfigManager creates the nanobot config.json, (5) the UI reloads. If the user immediately clicks "Configure" on the newly created instance card, the GET API might read the config file before the on-create callback has finished writing it, returning a "not found" error that triggers the lazy-creation fallback (creating a SECOND default config, potentially overwriting user-specified values from step 2).
 
-**Prevention:**
-- Do not rely on LogBuffer contents for scanner initialization
-- The scanner should use the real-time stream exclusively (or with the timestamp filter described in Pitfall 4)
-- Clear() is fine -- it clears history but subscribers keep receiving new entries
+**Why it happens:**
+The on-create callback is non-blocking (fires in a goroutine, see `callback injection` pattern in Key Decisions). The `loadInstances()` call after POST success triggers a card rebuild, and the user can interact with the new card before the background goroutine finishes.
 
----
+**How to avoid:**
+1. Make the config file creation synchronous with the instance creation API (include it in the POST handler, not as a callback).
+2. OR: If using callbacks, have the POST handler return the config file status in its response so the frontend knows whether the config is ready.
+3. OR: The lazy-creation fallback in HandleGet (line 70-84) should check if the file is "currently being created" (using an in-progress map) to avoid double-creation.
 
-### Pitfall 13: Missing Notifier Nil Check
-
-**What goes wrong:**
-The startup notification code calls `notifier.Notify()` but the notifier may be nil (if Pushover is not configured). The existing notifier handles this internally (`IsEnabled()` check in Notify), but if a DIFFERENT notification interface is used without the nil-check, a nil pointer dereference occurs.
-
-**Prevention:**
-- Follow the existing pattern: check `if notifier != nil` before calling, AND use the Notifier interface that handles IsEnabled() internally
-- See `internal/api/trigger.go` line 77: `if h.notifier != nil { ... }`
-
----
-
-### Pitfall 14: Test-only Notifier Mock Missing New Methods
-
-**What goes wrong:**
-The existing test mock for Notifier (recordingNotifier in trigger_test.go) implements `Notify(title, message) error`. If new notification methods are added to the Notifier interface (e.g., a specialized startup notification method), existing tests break because the mock no longer satisfies the interface.
-
-**Prevention:**
-- Keep the Notifier interface minimal: single method `Notify(title, message) error`
-- Build notification content (title, message formatting) at the caller level, not in the Notifier
-- Do NOT add specialized methods like `NotifyStartup()` or `NotifyTelegramFailure()` to the interface
-- The duck-typing pattern in this codebase explicitly favors minimal single-method interfaces
+**Phase to address:**
+CFG-01 phase (config editing in create dialog).
 
 ---
 
 ## Technical Debt Patterns
 
-Shortcuts that seem reasonable but create long-term problems.
-
-| Shortcut | Immediate Benefit | Long-term Cost | When Acceptable |
+| Shortcut | Immediate Benefit | Long-Term Cost | When Acceptable |
 |----------|-------------------|----------------|-----------------|
-| Fixed 30s timeout hardcoded | Faster to implement | Cannot tune for proxy environments, false alarms | MVP only, then make configurable |
-| Per-instance notification (no aggregation) | Simpler code | 3 instances = 3 notifications, spammy | Never -- always aggregate into single notification |
-| Scanner pattern hardcoded in Go | No config parsing needed | Pattern change requires code rebuild | MVP only, then make configurable |
-| No notification deduplication | Simpler code | Restart loop floods user | Never -- at minimum, track last-sent timestamps |
-| Skip cancel on instance stop | Less wiring | Spurious failure notifications during updates | Never -- must cancel monitors on stop |
+| CDN script tags for JSON editor | No repo size increase, no rebuild needed | Breaks offline deployment, version drift, CDN outages | Never -- violates single-binary constraint |
+| `setInterval` polling instead of state management | Simple to implement, no architecture change | State drift, race conditions, unnecessary DOM churn | Current acceptable, but should be consolidated before adding more timers |
+| String concatenation for HTML templates (current pattern) | No template engine needed | Hard to read, XSS risk if data sneaks in | Acceptable for current scope -- new editor UI should use DOM API exclusively |
+| SyncGuard boolean flag | Simple loop prevention | Fragile with editor libraries that have their own event systems | Replace with proper source-of-truth architecture when adding editor |
+| Full DOM rebuild every 5 seconds | Simplest possible implementation | Flicker, focus loss, cannot scale to complex cards | Short-term acceptable -- must refactor before adding interactive card features |
+| Inline editor styles | Faster to write | Inconsistent theming, hard to maintain | Never -- project already has a CSS architecture in style.css |
 
 ## Integration Gotchas
 
-Common mistakes when connecting to existing components.
-
-| Integration Point | Common Mistake | Correct Approach |
-|-------------------|----------------|------------------|
-| LogBuffer + scanner | Use Subscribe() with history replay | Add timestamp filter or real-time-only subscribe |
-| NotificationManager + startup | Send notification synchronously in start loop | Async goroutine with panic recovery (existing pattern) |
-| InstanceLifecycle + Telegram monitor | No coordination between stop and monitor | Cancel active monitor on StopForUpdate() |
-| Notifier + startup notification | Add new methods to Notifier interface | Keep single Notify(title, message) interface, format at caller |
-| AutoStart + notification | Send one notification per instance | Aggregate all results into single summary notification |
-| time.AfterFunc + state | Access monitor state without mutex | Lock mutex in callback, same as NotificationManager pattern |
-| Config + new features | Add required fields without defaults | All new config fields must have sensible defaults for backward compat |
+| Integration | Common Mistake | Correct Approach |
+|-------------|----------------|------------------|
+| Ace Editor with embed.FS | Using CDN basePath, workers fail to load from embedded path | Download all Ace files to `static/vendor/ace/`, set `ace.config.set("basePath", "/static/vendor/ace/")` |
+| Ace Editor theme/mode loading | Only including `ace.js`, theme/mode scripts silently fail | Include `ace.js`, `mode-json.js`, and chosen `theme-*.js` in the embedded static files |
+| Ace Editor in a modal | Container div has no explicit height, editor is invisible | Set explicit height: `style="height: 400px; width: 100%"`. Call `editor.resize()` after modal visible. |
+| Ace Editor container resize | Editor doesn't resize when modal opens | Call `editor.resize()` after `showModal()` completes |
+| ConfigManager MkdirAll | New code path calls `os.MkdirAll` directly, bypassing mutex | All directory creation MUST go through `ConfigManager.WriteConfig()` |
+| Windows path handling | Using forward slashes or hardcoded `~` without expansion | Always use `filepath.Join()` and `os.UserHomeDir()` (already done in config_manager.go -- maintain this) |
+| ParseConfigPath for custom directories | New CFG-02 feature allows user-specified config directory, but ParseConfigPath still regex-scans start_command | Create `ParseConfigPathWithOverride(startCommand, instanceName, customDir string)` that checks custom dir first |
+| Ace Editor setValue cursor reset | `editor.setValue(str)` moves cursor to position 0 | Use `editor.setValue(str, -1)` to preserve cursor position |
 
 ## Performance Traps
 
-Patterns that work at small scale but fail as usage grows.
-
 | Trap | Symptoms | Prevention | When It Breaks |
 |------|----------|------------|----------------|
-| Per-line string scan on every log entry | CPU spike during verbose nanobot output | Only scan lines written AFTER "Starting Telegram bot" detected -- stop scanning once monitor is active | 10+ instances with verbose logging |
-| Subscriber channel (capacity 100) for pattern scanner | Dropped trigger lines under burst logging | Use dedicated callback or larger channel for scanner | Burst of 100+ lines in <1ms (nanobot startup output) |
-| Unbounded goroutine creation for notification sends | Goroutine leak over weeks of operation | Use sync.WaitGroup or worker pool for notification goroutines | After weeks of continuous operation with frequent restarts |
-| strings.Contains on every log line for all patterns | Linear scan overhead per line | Compile pattern once, short-circuit after trigger found | Minimal impact -- strings.Contains is fast for short patterns |
+| Full DOM rebuild on every 5-second poll | Cards flicker, scroll position resets, input focus lost | Diff-based update: only update changed cards, preserve DOM elements | 5+ instances with different states changing frequently |
+| JSON.stringify + innerHTML on every keystroke | Typing lag, cursor jumps to end of editor | Debounce 300ms, use editor library's internal model | Configs > 50 lines |
+| Multiple setInterval without coordination | Timers pile up, redundant API calls | Single requestAnimationFrame/setTimeout loop, or request-based refresh | User performs rapid actions while polls overlap |
+| Ace Editor with large JSON (> 500KB) | Editor becomes sluggish, scrolling jank | Enable virtual scrolling, limit config size | Unlikely for nanobot configs (typically < 5KB), but possible with large tool configs |
 
 ## Security Mistakes
 
-Domain-specific security issues.
-
 | Mistake | Risk | Prevention |
 |---------|------|------------|
-| Log injection: nanobot output contains crafted "Starting Telegram bot" | False trigger of Telegram monitor, spurious notifications | Trust nanobot output (same machine, no external injection vector). LOW risk. |
-| Pushover token logged | Credential exposure | Never log Pushover tokens; existing codebase handles this correctly |
-| Notification content includes sensitive data | Information leak via Pushover | Keep notification content minimal: instance name, status, no ports/commands |
+| innerHTML with user-supplied JSON in editor | XSS if JSON contains `<script>` or event handlers rendered via innerHTML | Use DOM API exclusively for all dynamic content (established pattern). Ace Editor renders its own content safely. |
+| Allowing arbitrary JSON keys in nanobot config | User could inject keys that nanobot interprets dangerously (e.g., `exec` commands) | Server-side validation whitelist of allowed top-level keys. Current WriteConfig has no validation. |
+| Config file path traversal | User specifies config directory as `../../etc/` or `C:\Windows\System32\` | Validate config path is under user home directory, reject absolute paths outside `~/.nanobot*` |
+| API key exposure in JSON editor | API keys visible in the JSON editor textarea even when the form field is password-masked | Low priority (localhost-only management UI). The hybrid editor already has this issue. Document as known limitation. |
 
 ## UX Pitfalls
 
-Common user experience mistakes in this domain.
-
 | Pitfall | User Impact | Better Approach |
 |---------|-------------|-----------------|
-| Success notification on every startup | Notification fatigue, user ignores notifications | Only notify on failure (existing pattern from v0.5: "conditional notification mode") |
-| No notification when Telegram fails silently | User unaware bot is down for hours | This IS the feature we are building -- ensure it works reliably |
-| Vague notification message: "Telegram connection failed" | User does not know which instance or what to do | Include instance name, port, and hint: "Check proxy/network settings" |
-| Notification arrives 30s after failure (too slow) | User already aware via other means | 30s is acceptable for background monitoring; not a real-time alert system |
+| Editor appears broken with no height | User sees a blank/empty area and thinks the feature doesn't work | Always set explicit height. Test in the modal before considering it done. |
+| JSON validation error appears while user is mid-type | User gets constant red error messages while typing, feels punishing | Debounce validation 300ms. Only show error after user pauses typing. Clear error immediately when fixed. |
+| Delete button enables/disables seemingly randomly | User cannot predict when delete is allowed, creates anxiety | Show tooltip explaining why button is disabled ("Instance is running -- stop it first") |
+| Auto-save without explicit save button | User makes changes and doesn't realize they need to save, changes lost | Keep explicit save button. Consider unsaved changes warning on modal close. |
+| Form and JSON editor show different values | User doesn't know which is authoritative | Current syncGuard approach is correct. Add a visual indicator showing which editor has focus. |
 
 ## "Looks Done But Isn't" Checklist
 
-Things that appear complete but are missing critical pieces.
-
-- [ ] **Startup notification sends on success**: But does it ALSO send on failure? Verify both paths tested
-- [ ] **Telegram monitor detects "Starting Telegram bot"**: But does it handle case sensitivity? Test with actual nanobot output
-- [ ] **30-second timeout fires on failure**: But is it cancelled when instance stops? Verify no spurious notification during update
-- [ ] **Scanner subscribes to LogBuffer**: But does it ignore historical entries? Test after application restart
-- [ ] **Notification is async (goroutine)**: But does it have panic recovery? Every goroutine MUST have `defer recover()`
-- [ ] **Notifier nil check**: But does the new code path check `if notifier != nil`? Follow existing pattern
-- [ ] **Multiple instances**: Does the code handle 2+ instances starting simultaneously? Test with multi-instance config
-- [ ] **Pushover not configured**: Does the feature gracefully degrade when Pushover is disabled? Must not crash or block
+- [ ] **JSON editor renders in modal**: Often missing explicit height on container -- verify editor is visible and correctly sized within the modal. Test by opening the nanobot config dialog and confirming the editor area is not collapsed.
+- [ ] **Syntax highlighting works offline**: Often missing theme/mode JS files in embed.FS -- verify by disconnecting network and checking that JSON still has colored syntax.
+- [ ] **Bidirectional sync survives rapid edits**: Often the syncGuard breaks when a library editor is involved -- verify by typing quickly in the form, then switching to the editor, then back. Values should stay consistent.
+- [ ] **Delete button state correct after stop**: Often the first poll after stop returns stale "running" -- verify by stopping an instance and checking that delete becomes enabled within 2 seconds.
+- [ ] **Custom config directory creates correctly**: Often MkdirAll succeeds but the path doesn't match what nanobot expects -- verify by creating an instance with a custom directory, then checking the filesystem.
+- [ ] **Config validation catches real errors**: Often only checks `JSON.parse` success -- verify by introducing actual invalid structures (e.g., `"port": "not-a-number"`) and checking that the user gets a helpful message.
+- [ ] **Editor resize works on window/modal resize**: Often the editor doesn't resize when the modal is resized or opened on different screen sizes -- call `editor.resize()` on window resize and after modal open.
+- [ ] **No memory leaks from editor instances**: Often editor instances are created each time the modal opens but never destroyed -- verify by opening/closing the config dialog 10 times and checking memory usage in DevTools.
+- [ ] **Delete button disabled for running instances**: Verify that clicking delete on a running instance shows a clear message (tooltip or warning) instead of just being grayed out.
+- [ ] **Save button validates before submit**: Verify that clicking save with invalid JSON shows a clear error message and does NOT send the request to the server.
 
 ## Recovery Strategies
 
-When pitfalls occur despite prevention, how to recover.
-
 | Pitfall | Recovery Cost | Recovery Steps |
 |---------|---------------|----------------|
-| Notification spam (restart loop) | LOW | Add cooldown in next version; user can disable Pushover temporarily |
-| Spurious Telegram failure notification | LOW | Add cancel-on-stop in next version; user can ignore the one-off notification |
-| Scanner goroutine leak | MEDIUM | Fix with proper context cancellation; requires redeployment; leak is slow (does not crash immediately) |
-| Missed Telegram failure (dropped log line) | HIGH | Redesign scanner to use callback instead of subscriber channel; requires code change |
-| False positive from historical logs | LOW | Add timestamp filter; one-time spurious notification, no lasting damage |
-| Multiple monitors for same instance | LOW | Add cancel-previous logic; extra notification in the meantime is the only symptom |
+| CDN dependency in production | LOW | Download the library files, add to embed.FS, update HTML `<script>` tags to local paths, rebuild binary |
+| syncGuard infinite loop | LOW | Add a guard counter (max 10 iterations), or use requestAnimationFrame to break the loop |
+| Delete button stuck disabled | LOW | Add a manual "refresh" button, or increase poll frequency after lifecycle actions |
+| Editor renders blank | LOW | Check container height, check browser console for library load errors, verify basePath configuration |
+| Config directory creation race | MEDIUM | MkdirAll already handles this safely via mutex in WriteConfig. If custom paths bypass it, route through WriteConfig |
+| Path traversal exploit | HIGH | Add server-side path validation before allowing custom directories. Audit all file write paths. |
 
 ## Pitfall-to-Phase Mapping
 
-How roadmap phases should address these pitfalls.
-
 | Pitfall | Prevention Phase | Verification |
 |---------|------------------|--------------|
-| Scanner race with LogBuffer write | Log-pattern scanner phase | `go test -race`; test with burst of log lines exceeding channel capacity |
-| AfterFunc shared state race | Telegram monitor phase | `go test -race`; verify callback acquires mutex |
-| Notification spam on restart | Startup notification phase | Test: restart service 5 times rapidly, count notifications received |
-| Historical log false trigger | Log-pattern scanner phase | Test: start scanner AFTER instance already output trigger line |
-| Instance stop during active monitor | Telegram monitor phase | Test: trigger update while Telegram monitor is active, verify no spurious notification |
-| Scanner goroutine leak | Log-pattern scanner phase | Test: run 100 update cycles, check `runtime.NumGoroutine()` stabilizes |
-| String matching too narrow | Log-pattern scanner phase | Test against actual nanobot output captured in LogBuffer |
-| 30s timeout too short | Telegram monitor phase | Test with configurable timeout; verify under proxy environment |
-| Missing failure notification | Startup notification phase | Test: start instance with invalid command, verify failure notification |
-| Notification blocks startup | Startup notification phase | Benchmark: verify startup time unchanged with Pushover configured vs not |
-| Multiple monitors same instance | Telegram monitor phase | Test: crash and restart instance during 30s window, verify single notification |
-
-## Existing Patterns to Reuse
-
-The project already has patterns that should be extended for these features.
-
-| Existing Pattern | Location | How to Reuse |
-|-----------------|----------|--------------|
-| Async notification with panic recovery | `internal/notification/manager.go:sendNotification()` | Copy exact goroutine pattern for startup and Telegram notifications |
-| `time.AfterFunc` with mutex-protected state | `internal/notification/manager.go:confirmAndNotify()` | Same pattern for Telegram timeout: lock mutex in callback, verify state is current |
-| Notifier nil check | `internal/api/trigger.go:77` | Always check `if notifier != nil` before calling |
-| Notifier interface (single method) | `internal/api/trigger.go:30-32` | Do NOT extend interface -- keep `Notify(title, message) error` |
-| Context cancellation for goroutines | `internal/lifecycle/starter.go:captureLogs()` | Use same pattern for scanner goroutine lifecycle |
-| LogBuffer subscriber pattern | `internal/logbuffer/subscriber.go` | Subscribe/Unsubscribe for real-time log stream; add timestamp filter |
-| Graceful degradation | `internal/notifier/notifier.go:IsEnabled()` | All notification paths must handle disabled Pushover gracefully |
-| Instance error wrapping | `internal/instance/errors.go` | Wrap Telegram monitor errors in InstanceError for consistency |
+| CDN breaks offline deployment | EDT-01 | Load UI with network disabled, verify JSON editor loads and functions |
+| Editor breaks syncGuard | EDT-01 | Open config dialog, edit in form, verify JSON updates. Edit in editor, verify form updates. Repeat 10 times rapidly. |
+| Delete button state drift | DEL-01 | Stop a running instance, verify delete enables within 2s. Start it again, verify delete disables. |
+| Validation performance | EDT-02 | Type rapidly in a 100-line JSON config, verify no perceptible lag (> 100ms per keystroke) |
+| Editor height invisible | EDT-01 | Open config dialog on different screen sizes, verify editor is visible and usable |
+| Editor not destroyed on close | EDT-01 | Open/close config dialog 10 times, check DevTools Memory tab for growing heap |
+| Custom config directory path traversal | CFG-02 | Try creating instance with path `../../Windows/System32`, verify rejection |
+| MkdirAll race on concurrent create | CFG-02 | Send 5 simultaneous POST requests for instances with the same config directory, verify all succeed |
+| Ace Editor worker basePath wrong | EDT-01 | Disconnect network, open config dialog, verify syntax highlighting works (not falling back to plain text) |
+| Multiple timers without coordination | EDT-01 | Open config dialog, wait 10 seconds, verify no flicker or focus loss from instance poll |
+| Config read-after-write race | CFG-01 | Create instance with custom config, immediately click Configure, verify config loads (not "not found") |
 
 ## Sources
 
-**Go Concurrency and Timer Patterns:**
-- [Go Race Detector](https://go.dev/blog/race-detector) -- Official blog on using `-race` flag (HIGH confidence)
-- [time.AfterFunc runs callback in new goroutine](https://www.reddit.com/r/golang/comments/13echul/can_the_timer_returned_by_timeafterfunc_be_safely/) -- AfterFunc behavior documentation (HIGH confidence)
-- [Go Timer Reset race conditions](https://groups.google.com/g/golang-codereviews/c/ky9VwFpPzpg) -- Official Go code review on Reset safety (HIGH confidence)
-- [100 Go Mistakes and How to Avoid Them](https://100go.co/) -- Community compilation of common mistakes (HIGH confidence)
+**Codebase Analysis (HIGH confidence):**
+- `internal/web/static/home.js` -- 1462 lines, syncGuard pattern (lines 663-735), loadInstances polling (line 1108), modal system (lines 42-59)
+- `internal/nanobot/config_manager.go` -- ConfigManager, ParseConfigPath, WriteConfig with MkdirAll (line 176-177)
+- `internal/api/nanobot_config_handler.go` -- HandleGet with lazy-creation fallback (lines 70-84), HandlePut
+- `internal/web/handler.go` -- `//go:embed static/*` (line 14-15)
+- `.planning/debug/instance-buttons-always-disabled.md` -- Historical debug: config API failure causing disabled buttons
+- `.planning/debug/instance-status-stopped-regression.md` -- Historical debug: proc.Status() not implemented on Windows
 
-**Notification Patterns:**
-- [Pushover API rate limits](https://pushover.net/api) -- 7,500 messages/month free, 500ms between calls (HIGH confidence)
-- [Building a queue for Pushover API](https://stackoverflow.com/questions/34246132/building-a-queue-for-sending-notifications-to-the-pushover-api) -- Rate limiting strategy (MEDIUM confidence)
+**Go Standard Library (HIGH confidence):**
+- [os.MkdirAll race condition -- golang/go#1736](https://github.com/golang/go/issues/1736) -- Known race in stat->mkdir sequence
+- [os.MkdirAll "file exists" on concurrent calls -- golang/go#75114](https://github.com/golang/go/issues/75114) -- Recent fix for concurrent directory creation
+- [os.MkdirAll fails with NUL on Windows -- golang/go#24556](https://github.com/golang/go/issues/24556) -- Windows reserved device names
 
-**String Matching:**
-- [Benchmarking: Substrings vs Regex in Go](https://betterprogramming.pub/benchmarking-in-go-substrings-vs-regular-expressions-a84de7f0eb02) -- strings.Contains is the right choice for simple substring matching (HIGH confidence)
-- [strings.Contains wraps strings.Index](http://www.ebmesem.com/2015/06/17/on-go-string-cruise.html) -- No performance difference, Contains is more readable (HIGH confidence)
+**JSON Editor Libraries (MEDIUM confidence -- web search):**
+- [Monaco Editor web workers without bundler -- microsoft/monaco-editor#793](https://github.com/microsoft/monaco-editor/issues/793) -- JSON features require workers, tricky without build tools
+- Ace Editor CDN setup (cdnjs.com/ajax/libs/ace/) -- basePath configuration, container height requirements, worker paths
+- [7 Best JSON Editor Libraries for React in 2025](https://www.merge-json-files.com/blog/best-json-editor-for-react) -- Size comparison: dedicated JSON editors ~50KB vs Monaco ~2-4MB
 
-**Existing Codebase (highest confidence):**
-- `internal/notification/manager.go` -- AfterFunc + mutex pattern, async notification with panic recovery
-- `internal/logbuffer/subscriber.go` -- Subscribe/Unsubscribe pattern with history replay
-- `internal/logbuffer/buffer.go` -- Non-blocking subscriber send (select+default drop pattern)
-- `internal/lifecycle/starter.go` -- Log capture goroutine lifecycle with context cancellation
-- `internal/instance/lifecycle.go` -- Instance start/stop with LogBuffer.Clear() and PID tracking
-- `internal/instance/manager.go` -- StartAllInstances with graceful degradation pattern
-- `internal/notifier/notifier.go` -- IsEnabled() and Notify() with graceful degradation
-- `internal/api/trigger.go` -- Async notification pattern, Notifier interface definition
-- `cmd/nanobot-auto-updater/main.go` -- Auto-start goroutine with panic recovery and context timeout
+**UI State Patterns (MEDIUM confidence -- web search):**
+- [Enable/Disable Delete Button with Javascript -- Stack Overflow](https://stackoverflow.com/questions/38414433/enable-disable-delete-button-with-javascript) -- Button state synchronization issues
+- UI state race conditions with polling: stale state, concurrent updates, missing cancellation -- general vanilla JS pattern
 
-**Context from Project:**
-- `.planning/quick/260406-fge-nanobot-telegram-httpx-connecterror-open/260406-fge-PLAN.md` -- Telegram connection fails under OpenClash proxy due to TLS MITM; relevant for timeout calibration (HIGH confidence)
+**LOW confidence findings (web search only, not verified with official docs):**
+- Specific Ace Editor version numbers and CDN URL patterns -- verify at integration time
+- ESM-only package migration breaking `<script>` tags in 2025 ecosystem -- not relevant if vendoring files
+- CDN outage statistics -- not directly relevant since we won't use CDN
 
 ---
-*Pitfalls research for: Instance Startup Notifications and Telegram Connection Monitoring for nanobot-auto-updater*
-*Researched: 2026-04-06*
+*Pitfalls research for: nanobot-auto-updater v0.18.0 embedded vanilla JS UI enhancements*
+*Researched: 2026-04-13*
