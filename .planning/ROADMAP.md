@@ -130,10 +130,10 @@
   1. 实例处于运行状态时，卡片上的删除按钮显示为灰色且不可点击
   2. 实例停止后，删除按钮恢复为可点击状态
   3. 5 秒状态轮询刷新后，按钮状态与实例当前运行状态一致
-**Plans**: TBD
+**Plans**: 1 plan
 
 Plans:
-- [ ] 54-01: Delete button disabled state for running instances
+- [ ] 54-01-PLAN.md — 运行中实例禁用删除按钮 + 禁用样式
 
 ### Phase 55: JSON Editor Integration
 **Goal**: 用户在配置编辑器中获得 JSON 语法高亮和实时错误提示，提升编辑体验
@@ -144,7 +144,7 @@ Plans:
   2. 编辑器显示行号和括号匹配，用户可清晰定位代码位置
   3. 用户输入非法 JSON（如缺少逗号、引号不匹配）时，编辑器在错误位置标注红色波浪线并显示错误信息
   4. 表单字段与 JSON 编辑器之间的双向同步（syncGuard）在切换到 Ace Editor 后仍然正常工作
-**Plans**: TBD
+**Plans**: 1 plan
 
 Plans:
 - [ ] 55-01: Vendor Ace Editor files and integrate into config dialog
@@ -160,7 +160,7 @@ Plans:
   3. 指定的配置目录不存在时，系统自动创建目录（os.MkdirAll）
   4. 指定的配置目录已存在且包含 config.json 时，创建实例时读取并返回该文件内容
   5. 包含路径遍历字符（..）的目录路径被拒绝，返回验证错误
-**Plans**: TBD
+**Plans**: 1 plan
 
 Plans:
 - [ ] 56-01: Add config_dir field to InstanceConfig and ParseConfigPathWithDir
@@ -175,7 +175,7 @@ Plans:
   2. 创建实例对话框中包含 nanobot 配置编辑区域（复用 Ace Editor 组件），用户可在同一界面填写实例信息和配置
   3. 用户填写已存在配置的目录路径时，编辑器自动加载该目录下的 config.json 内容
   4. 用户创建实例后，配置内容自动保存到指定目录
-**Plans**: TBD
+**Plans**: 1 plan
 **UI hint**: yes
 
 Plans:
