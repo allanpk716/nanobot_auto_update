@@ -53,18 +53,18 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| DEL-01 | — | Pending |
-| EDT-01 | — | Pending |
-| EDT-02 | — | Pending |
-| CFG-01 | — | Pending |
-| CFG-02 | — | Pending |
-| CFG-03 | — | Pending |
+| DEL-01 | Phase 54 | Pending |
+| EDT-01 | Phase 55 | Pending |
+| EDT-02 | Phase 55 | Pending |
+| CFG-02 | Phase 56 | Pending |
+| CFG-03 | Phase 56 | Pending |
+| CFG-01 | Phase 57 | Pending |
 
 **Coverage:**
 - v1 requirements: 6 total
-- Mapped to phases: 0
-- Unmapped: 6 ⚠️
+- Mapped to phases: 6
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-04-14*
-*Last updated: 2026-04-14 after initial definition*
+*Last updated: 2026-04-14 after roadmap creation*
