@@ -810,6 +810,13 @@ async function loadInstances() {
         var statusOk = statusResult.status === 'fulfilled';
         var configOk = configResult.status === 'fulfilled';
 
+        // DEBUG: Log Promise.allSettled results
+        console.log('[DEBUG loadInstances] statusOk=' + statusOk, 'configOk=' + configOk);
+        if (!statusOk) console.log('[DEBUG loadInstances] status rejected:', statusResult.reason);
+        if (!configOk) console.log('[DEBUG loadInstances] config rejected:', configResult.reason);
+        if (statusOk && statusResult.value) console.log('[DEBUG loadInstances] status value keys:', Object.keys(statusResult.value));
+        if (configOk && configResult.value) console.log('[DEBUG loadInstances] config value keys:', Object.keys(configResult.value));
+
         if (statusOk && statusResult.value && statusResult.value.instances) {
             statusResult.value.instances.forEach(function(inst) {
                 statusMap[inst.name] = inst.running;
@@ -1024,6 +1031,7 @@ function createInstanceCard(config, isRunning) {
     var deleteBtn = document.createElement('button');
     deleteBtn.className = 'btn-secondary btn-delete-danger';
     deleteBtn.textContent = '删除';
+    deleteBtn.disabled = isRunning;
     deleteBtn.addEventListener('click', function() { showDeleteDialog(config.name, isRunning); });
     secondaryDiv.appendChild(deleteBtn);
 
