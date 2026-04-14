@@ -292,6 +292,65 @@ func UpdateStartCommandConfig(startCommand, configPath string) string {
 	return startCommand + " --config " + configPath
 }
 
+// UpdateInstanceConfig updates a nanobot config when an instance's port or startCommand changes.
+// If the config path changed (startCommand modified), the old config is read and written to the
+// new location with updated port and workspace. The old config file is preserved (not deleted).
+// If the config path is unchanged, only gateway.port and agents.defaults.workspace are updated.
+func (cm *ConfigManager) UpdateInstanceConfig(instanceName string, oldPort uint32, oldStartCommand string, newPort uint32, newStartCommand string) error {
+	oldPath, err := ParseConfigPath(oldStartCommand, instanceName)
+	if err != nil {
+		return fmt.Errorf("failed to parse old config path: %w", err)
+	}
+
+	newPath, err := ParseConfigPath(newStartCommand, instanceName)
+	if err != nil {
+		return fmt.Errorf("failed to parse new config path: %w", err)
+	}
+
+	// Read existing config from the old path (or the new path if they're the same)
+	readPath := oldPath
+	if oldPath == newPath {
+		readPath = newPath
+	}
+
+	configData, err := cm.ReadConfig(readPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			// No existing config: generate a default at the new path
+			cm.logger.Warn("Nanobot config not found during update, generating default",
+				"instance", instanceName, "path", readPath)
+			workspace := resolveWorkspace(newStartCommand, instanceName)
+			configData = GenerateDefaultConfig(newPort, workspace)
+		} else {
+			return fmt.Errorf("failed to read nanobot config for update: %w", err)
+		}
+	}
+
+	// Update gateway.port
+	if gateway, ok := configData["gateway"].(map[string]interface{}); ok {
+		gateway["port"] = newPort
+	}
+
+	// Update agents.defaults.workspace
+	if agents, ok := configData["agents"].(map[string]interface{}); ok {
+		if defaults, ok := agents["defaults"].(map[string]interface{}); ok {
+			defaults["workspace"] = resolveWorkspace(newStartCommand, instanceName)
+		}
+	}
+
+	if err := cm.WriteConfig(newPath, configData); err != nil {
+		return fmt.Errorf("failed to write updated nanobot config: %w", err)
+	}
+
+	cm.logger.Info("Nanobot config updated for instance",
+		"instance", instanceName,
+		"old_path", oldPath,
+		"new_path", newPath,
+		"new_port", newPort,
+	)
+	return nil
+}
+
 // CleanupConfig removes the nanobot config for an instance.
 // For instance-specific directories (e.g., ~/.nanobot-{name}/), removes the entire directory.
 // For the default ~/.nanobot/ directory, only removes the config.json file to preserve

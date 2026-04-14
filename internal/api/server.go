@@ -151,6 +151,9 @@ func NewServer(cfg *config.APIConfig, im *instance.InstanceManager, fullCfg *con
 	instanceConfigHandler.SetOnDeleteInstance(func(name string, startCommand string) error {
 		return nanobotConfigManager.CleanupConfig(startCommand, name)
 	})
+	instanceConfigHandler.SetOnUpdateInstance(func(name string, oldPort uint32, oldStartCommand string, newPort uint32, newStartCommand string) error {
+		return nanobotConfigManager.UpdateInstanceConfig(name, oldPort, oldStartCommand, newPort, newStartCommand)
+	})
 
 	// Create HTTP server
 	// SSE-07: WriteTimeout=0 to support SSE long connections

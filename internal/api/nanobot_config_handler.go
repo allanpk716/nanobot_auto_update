@@ -122,6 +122,19 @@ func (h *NanobotConfigHandler) HandlePut(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	// Validate minimum required structure to prevent accidental config wipe
+	if _, ok := reqBody["gateway"]; !ok {
+		writeJSONError(w, http.StatusBadRequest, "bad_request", "Config must contain 'gateway' section")
+		return
+	}
+	if gateway, ok := reqBody["gateway"].(map[string]interface{}); ok {
+		port, ok := gateway["port"].(float64)
+		if !ok || port <= 0 || port > 65535 {
+			writeJSONError(w, http.StatusBadRequest, "bad_request", "gateway.port must be a number between 1 and 65535")
+			return
+		}
+	}
+
 	configPath, err := nanobot.ParseConfigPath(ic.StartCommand, ic.Name)
 	if err != nil {
 		h.logger.Error("Failed to parse nanobot config path", "instance", ic.Name, "error", err)

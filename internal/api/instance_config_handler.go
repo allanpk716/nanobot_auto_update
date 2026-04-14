@@ -8,6 +8,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"path/filepath"
 	"time"
 
 	"github.com/HQGroup/nanobot-auto-updater/internal/config"
@@ -94,6 +95,7 @@ type InstanceConfigHandler struct {
 	onCreateInstance func(name string, port uint32, startCommand string) error                                                                                                                                  // Phase 52: nanobot config creation
 	onCopyInstance   func(sourceName string, sourceStartCommand string, targetName string, targetPort uint32, targetStartCommand string) error                                                                  // Phase 52: nanobot config clone
 	onDeleteInstance func(name string, startCommand string) error                                                                                                                                               // Phase 52: nanobot config directory cleanup
+	onUpdateInstance func(name string, oldPort uint32, oldStartCommand string, newPort uint32, newStartCommand string) error                                                                                     // nanobot config sync on update
 	onStopInstance   func(ctx context.Context, name string) error                                                                                                                                                // targeted instance stop by PID
 }
 
@@ -122,6 +124,13 @@ func (h *InstanceConfigHandler) SetOnCopyInstance(fn func(sourceName string, sou
 // The callback receives the instance name and startCommand for path resolution.
 func (h *InstanceConfigHandler) SetOnDeleteInstance(fn func(name string, startCommand string) error) {
 	h.onDeleteInstance = fn
+}
+
+// SetOnUpdateInstance sets the callback invoked after updating an instance.
+// The callback receives the instance name, old port/startCommand, and new port/startCommand
+// so the nanobot config can be synced (port, workspace, config path changes).
+func (h *InstanceConfigHandler) SetOnUpdateInstance(fn func(name string, oldPort uint32, oldStartCommand string, newPort uint32, newStartCommand string) error) {
+	h.onUpdateInstance = fn
 }
 
 // SetOnStopInstance sets the callback invoked to stop a specific instance by PID
@@ -310,9 +319,9 @@ func (h *InstanceConfigHandler) HandleCreate(w http.ResponseWriter, r *http.Requ
 	json.NewEncoder(w).Encode(toResponse(ic))
 }
 
-// HandleUpdate handles PUT /api/v1/instance-configs/{name}
-func (h *InstanceConfigHandler) HandleUpdate(w http.ResponseWriter, r *http.Request) {
-	pathName := r.PathValue("name")
+	// HandleUpdate handles PUT /api/v1/instance-configs/{name}
+	func (h *InstanceConfigHandler) HandleUpdate(w http.ResponseWriter, r *http.Request) {
+		pathName := r.PathValue("name")
 
 	var req instanceConfigRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -332,11 +341,19 @@ func (h *InstanceConfigHandler) HandleUpdate(w http.ResponseWriter, r *http.Requ
 	// If name is empty in body, use the path name
 	ic.Name = pathName
 
+	// Capture old values before update for nanobot config sync
+	var oldPort uint32
+	var oldStartCommand string
+
 	err := config.UpdateConfig(func(cfg *config.Config) error {
-		existingIndex, _ := findInstanceByName(cfg, pathName)
+		existingIndex, existingIC := findInstanceByName(cfg, pathName)
 		if existingIndex == -1 {
 			return &notFoundError{name: pathName}
 		}
+
+		// Capture old values before overwriting
+		oldPort = existingIC.Port
+		oldStartCommand = existingIC.StartCommand
 
 		details := validateInstanceConfig(&ic, cfg.Instances, existingIndex)
 		if len(details) > 0 {
@@ -362,6 +379,15 @@ func (h *InstanceConfigHandler) HandleUpdate(w http.ResponseWriter, r *http.Requ
 	}
 
 	h.logger.Info("Instance config updated", "name", ic.Name)
+
+	// Sync nanobot config when port or startCommand changed
+	if h.onUpdateInstance != nil {
+		if err := h.onUpdateInstance(ic.Name, oldPort, oldStartCommand, ic.Port, ic.StartCommand); err != nil {
+			h.logger.Warn("Failed to sync nanobot config for updated instance",
+				"name", ic.Name, "error", err)
+			// Non-blocking: instance is updated, nanobot config can be synced manually
+		}
+	}
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
@@ -431,9 +457,9 @@ func (h *InstanceConfigHandler) HandleDelete(w http.ResponseWriter, r *http.Requ
 }
 
 // shouldSkipConfigCleanup returns true if other instances in the config share
-// the same nanobot config path as the deleted instance. This prevents deleting
-// a shared config file (e.g., ~/.nanobot/config.json) that other default gateway
-// instances depend on.
+// the same nanobot config path or directory as the deleted instance. This prevents
+// deleting a shared config file (e.g., ~/.nanobot/config.json) or a shared config
+// directory that other instances depend on.
 func (h *InstanceConfigHandler) shouldSkipConfigCleanup(deletedName, deletedStartCommand string) bool {
 	cfg := h.getConfig()
 	if cfg == nil {
@@ -446,7 +472,9 @@ func (h *InstanceConfigHandler) shouldSkipConfigCleanup(deletedName, deletedStar
 		return false
 	}
 
-	// Check if any remaining instance resolves to the same path
+	deletedDir := filepath.Dir(deletedPath)
+
+	// Check if any remaining instance resolves to the same path or shares the same directory
 	for _, ic := range cfg.Instances {
 		otherPath, err := nanobot.ParseConfigPath(ic.StartCommand, ic.Name)
 		if err != nil {
@@ -454,6 +482,9 @@ func (h *InstanceConfigHandler) shouldSkipConfigCleanup(deletedName, deletedStar
 		}
 		if otherPath == deletedPath {
 			return true // Another instance uses the same config file
+		}
+		if filepath.Dir(otherPath) == deletedDir {
+			return true // Another instance shares the same config directory
 		}
 	}
 	return false
